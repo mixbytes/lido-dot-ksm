@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.7.5;
+
+pragma abicoder v2;
+
+interface ILidoOracle {
+    event AllowedBeaconBalanceAnnualRelativeIncreaseSet(uint256 value);
+    event AllowedBeaconBalanceRelativeDecreaseSet(uint256 value);
+    event BeaconReportReceiverSet(address callback);
+    event MemberAdded(address member);
+    event MemberRemoved(address member);
+    event QuorumChanged(uint256 quorum);
+    event ExpectedEraIdUpdated(uint256 epochId);
+    event PostTotalShares(
+        uint256 postTotalPooledEther,
+        uint256 preTotalPooledEther,
+        uint256 timeElapsed,
+        uint256 totalShares
+    );
+
+    event Completed(uint256);
+    event ContractVersionSet(uint256 version);
+
+    enum StakeStatus{
+        Chill,
+        Nominator,
+        Validator
+    }
+
+    struct RelaySpec {
+        uint64 genesisTimestamp;
+        uint64 secondsPerEra;
+    }
+
+    struct Ledger {
+        bytes32 stash;
+        bytes32 controller;
+        StakeStatus stake_status;
+        uint128 active_balance;
+        uint128 total_balance;
+        uint128 withdrawable_balance;
+        uint128 stash_balance;
+        uint64 unbonding_chunks;
+    }
+
+    struct StakeReport {
+        uint128 parachain_balance;
+        Ledger[] stake_ledger;
+    }
+
+    /**
+     * @notice Accept oracle committee member reports from the ETH 2.0 side
+     * @param _eraId relay chain Era index
+     * @param staking relay chain staking balances
+     */
+    function reportRelay(uint64 _eraId, StakeReport calldata staking) external;
+}
