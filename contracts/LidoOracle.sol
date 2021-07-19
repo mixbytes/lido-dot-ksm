@@ -23,7 +23,6 @@ library ReportUtils {
 }
 
 contract LidoOracle is ILidoOracle {
-
     using ReportUtils for uint256;
 
     /// Maximum number of oracle committee members
@@ -33,18 +32,18 @@ contract LidoOracle is ILidoOracle {
 
     // Contract structured storage
     // Oracle members
-    address[] members;
+    address[] private members;
     // Current era report  hashes
     uint256[] private currentReportVariants;
     // Current era reports
-    StakeReport[]  currentReportStake;
+    StakeReport[]  private currentReportStake;
     // Then oracle member push report, its bit is set
     uint256   private currentReportBitmask;
     // Relaychain era timestamp
     RelaySpec private relaySpec;
 
     // todo pack it with eraId as uint8
-    uint256  quorum;
+    uint256  public quorum;
     uint64   public eraId;
 
     // Lido smart contract
@@ -58,27 +57,31 @@ contract LidoOracle is ILidoOracle {
     uint256 private report_balance_bias;
 
     // todo remove
-    constructor(address _lido) {
+    constructor(address _lido) public {
         initialize(_lido, msg.sender, msg.sender, msg.sender);
     }
 
-    // todo remove
-    function _timestamp() view external returns (uint256){
+    // todo remove.
+    function _timestamp() external view returns (uint256){
         return block.timestamp;
     }
 
     // todo remove
-    function _reportVariants() view external returns (uint256[] memory){
+    function _reportVariants() external view returns (uint256[] memory){
         return currentReportVariants;
     }
 
     // todo remove
-    function _stakeReport(uint256 index) view external returns (StakeReport memory staking){
+    function _stakeReport(uint256 index) external view returns (StakeReport memory staking){
         return currentReportStake[index];
     }
 
-
-    function initialize(address _lido, address _member_manager, address _quorum_manager, address _spec_manager) internal {
+    function initialize(
+        address _lido,
+        address _member_manager,
+        address _quorum_manager,
+        address _spec_manager
+    ) internal {
         member_manager = _member_manager;
         quorum_manager = _quorum_manager;
         spec_manager = _spec_manager;
@@ -89,12 +92,14 @@ contract LidoOracle is ILidoOracle {
         _setRelaySpec(0, 0);
     }
     /// convert a report into sha3 hash whose last byte is used to calc votes
-    function getReportVariant(StakeReport calldata report) pure internal returns (uint256){
+    function getReportVariant(StakeReport calldata report) internal pure returns (uint256){
         bytes32 hash = keccak256(abi.encode(report));
         return uint256(hash) & ReportUtils.COUNT_OUTMASK;
     }
 
-    /// advance era
+    /**
+     * @notice advance era
+     */
     function _clearReportingAndAdvanceTo(uint64 _eraId) internal {
         currentReportBitmask = 0;
         eraId = _eraId;
@@ -105,10 +110,9 @@ contract LidoOracle is ILidoOracle {
     }
 
     modifier auth(address manager) {
-        require(msg.sender == manager);
+        require(msg.sender == manager, "FORBIDDEN");
         _;
     }
-
 
     function _getMemberId(address _member) internal view returns (uint256) {
         uint256 length = members.length;
@@ -137,7 +141,6 @@ contract LidoOracle is ILidoOracle {
     * @notice Remove '_member` from the oracle member committee list
     */
     function removeOracleMember(address _member) external auth(member_manager) {
-
         uint256 index = _getMemberId(_member);
         require(index != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
         uint256 last = members.length - 1;
@@ -165,15 +168,9 @@ contract LidoOracle is ILidoOracle {
         // todo emit event
     }
 
-    function setRelaySpec(
-        uint64 _genesisTimestamp,
-        uint64 _secondsPerEra
-    )
-    external auth(spec_manager)
-    {
+    function setRelaySpec(uint64 _genesisTimestamp, uint64 _secondsPerEra) external auth(spec_manager) {
         require(_genesisTimestamp > 0, "BAD_GENESIS_TIMESTAMP");
         require(_secondsPerEra > 0, "BAD_SECONDS_PER_ERA");
-
 
         _setRelaySpec(_genesisTimestamp, _secondsPerEra);
     }
@@ -230,29 +227,32 @@ contract LidoOracle is ILidoOracle {
             }
         }
         return (maxval >= _quorum && repeat == 0, maxind);
-
     }
 
-    function _push(uint64 _eraId, StakeReport memory report, RelaySpec memory _relaySpec) private {
+    function _push(uint64 _eraId, StakeReport memory report, RelaySpec memory /* _relaySpec */) private {
         emit Completed(_eraId);
 
         _clearReportingAndAdvanceTo(_eraId + 1);
 
-        uint256 prevTotalStake = lido.totalSupply();
+        // uint256 prevTotalStake = lido.totalSupply();
         lido.reportRelay(_eraId, report);
-        uint256 postTotalStake = lido.totalSupply();
+        // uint256 postTotalStake = lido.totalSupply();
 
-        // todo sanity check. ensure (prevTotalStake -  postTotalStake) is in report_balance_bias boundaries
+        // todo add sanity check. ensure |prevTotalStake -  postTotalStake| is in report_balance_bias boundaries
     }
 
-    function _getCurrentEraId(RelaySpec memory _relaySpec) internal view returns (uint64) {
-        // todo.
+    function _getCurrentEraId(RelaySpec memory /* _relaySpec */) internal view returns (uint64) {
+        // todo. uncomment and fix the expression
         return 0;
         //return ( uint64(block.timestamp) - _relaySpec.genesisTimestamp )/ _relaySpec.secondsPerEra;
     }
 
+    /**
+     * @notice Accept oracle committee member reports from the relay side
+     * @param _eraId Relaychain era
+     * @param staking Relaychain report
+     */
     function reportRelay(uint64 _eraId, StakeReport calldata staking) external override {
-
         RelaySpec memory _relaySpec = relaySpec;
         require(_eraId >= eraId, "ERA_IS_TOO_OLD");
 
@@ -260,7 +260,7 @@ contract LidoOracle is ILidoOracle {
             require(_eraId >= _getCurrentEraId(_relaySpec), "UNEXPECTED_ERA");
             _clearReportingAndAdvanceTo(_eraId);
         }
-        
+
         uint256 index = _getMemberId(msg.sender);
         require(index != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
 
@@ -276,14 +276,14 @@ contract LidoOracle is ILidoOracle {
         // iterate on all report variants we already have, limited by the oracle members maximum
         while (i < currentReportVariants.length && currentReportVariants[i].isDifferent(variant)) ++i;
         if (i < currentReportVariants.length) {
-            if (currentReportVariants[i].getCount() + 1 >= quorum) {
+            if (currentReportVariants[i].getCount() + 1 >= _quorum) {
                 _push(_eraId, staking, _relaySpec);
             } else {
                 ++currentReportVariants[i];
                 // increment variant counter, see ReportUtils for details
             }
         } else {
-            if (quorum == 1) {
+            if (_quorum == 1) {
                 _push(_eraId, staking, _relaySpec);
             } else {
                 currentReportVariants.push(variant + 1);

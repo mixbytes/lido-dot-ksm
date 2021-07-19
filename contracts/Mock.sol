@@ -8,13 +8,16 @@ import "../interfaces/ILido.sol";
 
 
 contract LidoMock is ILido {
-    uint256 _totalStake;
+    uint256 private _totalStake;
     address private owner;
+    uint64  private eraId;
+
 
     event NewStake(uint256);
 
-    constructor(){
+    constructor() public {
         owner = msg.sender;
+        eraId = 0;
     }
 
     function reportRelay(uint64 _eraId, ILidoOracle.StakeReport memory staking) override external {
@@ -23,6 +26,7 @@ contract LidoMock is ILido {
             total += staking.stake_ledger[i].stash_balance;
         }
         _totalStake = total;
+        eraId = _eraId;
         emit NewStake(total);
     }
 

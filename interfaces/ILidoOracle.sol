@@ -43,15 +43,19 @@ interface ILidoOracle {
         uint64 unbonding_chunks;
     }
 
+    /**
+     * @notice oracle committee member report structure
+     */
     struct StakeReport {
+        // todo. remove in future.
         uint128 parachain_balance;
         Ledger[] stake_ledger;
     }
 
     /**
-     * @notice Accept oracle committee member reports from the ETH 2.0 side
+     * @notice Accept oracle committee member reports from the relay side
      * @param _eraId relay chain Era index
-     * @param staking relay chain staking balances
+     * @param staking relay chain staking balances and other properties
      */
     function reportRelay(uint64 _eraId, StakeReport calldata staking) external;
 }
