@@ -2,9 +2,19 @@ from brownie import *
 import pytest
 
 def get_report(active=[]):
+    # ( address, balance)
     stash = [ (   a[item[0] ].address, item[1] )  for item in enumerate(active) ] 
-    
-    return (10, [ ( item[0], item[0], 1, item[1], item[1], 0,  item[1] + 10_000, 2 )  for item in stash ] )
+
+    return (10, [ (
+        item[0], #stash
+        item[0], #controller
+        1, #status
+        item[1], #active balance
+        item[1], #total balance,
+        [], #unlocking chunks
+        [], #claimed rewards
+        item[1] + 10_000 # stash balance
+    )  for item in stash ] )
 
 
 def main():

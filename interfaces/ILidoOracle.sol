@@ -32,15 +32,21 @@ interface ILidoOracle {
         uint64 secondsPerEra;
     }
 
+    struct UnlockingChunk {
+        uint128 balance;
+        uint32 era;
+    }
+
     struct Ledger {
         bytes32 stash;
         bytes32 controller;
         StakeStatus stake_status;
+
         uint128 active_balance;
         uint128 total_balance;
-        uint128 withdrawable_balance;
+        UnlockingChunk[] unlocking;
+        uint32[] claimed_rewards;
         uint128 stash_balance;
-        uint64 unbonding_chunks;
     }
 
     /**
@@ -49,6 +55,7 @@ interface ILidoOracle {
     struct StakeReport {
         // todo. remove in future.
         uint128 parachain_balance;
+
         Ledger[] stake_ledger;
     }
 
