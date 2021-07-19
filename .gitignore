@@ -4,4 +4,15 @@ __pycache__
 build/
 reports/
 *.cmd
+
+# IDE stuff
 *.idea/**
+
+# Yarn stuff
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+node_modules/**

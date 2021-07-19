@@ -1,0 +1,31 @@
+{
+  "name": "lido_dot_ksm",
+  "version": "0.0.1",
+  "private": true,
+  "workspaces": [
+    "apps/*/app",
+    "lib",
+    "gasprofile"
+  ],
+  "scripts": {
+    "lint": "yarn lint:sol",
+    "lint:sol": "yarn lint:sol:solhint",
+    "lint:sol:solium": "solium --dir ./contracts",
+    "lint:sol:solium:fix": "yarn lint:sol:solium --fix",
+    "lint:sol:solhint": "solhint \"contracts/*.sol\" --ignore-path .soliumignore",
+    "lint:sol:solhint:fix": "yarn lint:sol:solhint --fix"
+  },
+  "author": "Lido <info@mixbytes.io>",
+  "homepage": "https://mixbytes.io/",
+  "license": "MIT",
+  "devDependencies": {
+    "solhint": "^3.2.2",
+    "solidity-coverage": "^0.7.15",
+    "solium": "^1.2.5"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "3.4.0",
+    "openzeppelin-solidity": "2.0.0",
+    "solidity-bytes-utils": "0.0.6"
+  }
+}
