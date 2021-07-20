@@ -22,7 +22,7 @@ interface ILidoOracle {
     event ContractVersionSet(uint256 version);
 
     enum StakeStatus{
-        Chill,
+        Idle,
         Nominator,
         Validator
     }
@@ -62,7 +62,7 @@ interface ILidoOracle {
     /**
      * @notice Accept oracle committee member reports from the relay side
      * @param _eraId relay chain Era index
-     * @param staking relay chain staking balances and other properties
+     * @param staking relay chain stash account balances and other properties
      */
     function reportRelay(uint64 _eraId, StakeReport calldata staking) external;
 }
