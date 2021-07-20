@@ -5,6 +5,7 @@ pragma abicoder v2;
 
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
+import "../interfaces/IRole.sol";
 
 
 library ReportUtils {
@@ -49,16 +50,16 @@ contract LidoOracle is ILidoOracle {
     // Lido smart contract
     ILido    private lido;
 
-    address  private member_manager;
-    address  private quorum_manager;
-    address  private spec_manager;
+    IRole  private memberManager;
+    IRole  private quorumManager;
+    IRole  private specManager;
 
     // APY biases. low 16 bytes - slash (decrease) bias, high 16 bytes - reward (increase) bias
     uint256 private report_balance_bias;
 
     // todo remove
-    constructor(address _lido) public {
-        initialize(_lido, msg.sender, msg.sender, msg.sender);
+    constructor(address _lido, IRole superRole) public {
+        initialize(_lido, superRole, superRole, superRole);
     }
 
     // todo remove.
@@ -78,13 +79,13 @@ contract LidoOracle is ILidoOracle {
 
     function initialize(
         address _lido,
-        address _member_manager,
-        address _quorum_manager,
-        address _spec_manager
+        IRole _memberManager,
+        IRole _quorumManager,
+        IRole _specManager
     ) internal {
-        member_manager = _member_manager;
-        quorum_manager = _quorum_manager;
-        spec_manager = _spec_manager;
+        memberManager = _memberManager;
+        quorumManager = _quorumManager;
+        specManager = _specManager;
 
         lido = ILido(_lido);
         eraId = 0;
@@ -109,8 +110,8 @@ contract LidoOracle is ILidoOracle {
         emit ExpectedEraIdUpdated(_eraId);
     }
 
-    modifier auth(address manager) {
-        require(msg.sender == manager, "FORBIDDEN");
+    modifier auth(IRole manager) {
+        require(manager.has(msg.sender), "FORBIDDEN");
         _;
     }
 
@@ -127,7 +128,7 @@ contract LidoOracle is ILidoOracle {
     /**
     * @notice Add `_member` to the oracle member committee list
     */
-    function addOracleMember(address _member) external auth(member_manager) {
+    function addOracleMember(address _member) external auth(memberManager) {
         require(address(0) != _member, "BAD_ARGUMENT");
         require(MEMBER_NOT_FOUND == _getMemberId(_member), "MEMBER_EXISTS");
         require(members.length < 254, "MEMBERS_TOO_MANY");
@@ -140,7 +141,7 @@ contract LidoOracle is ILidoOracle {
     /**
     * @notice Remove '_member` from the oracle member committee list
     */
-    function removeOracleMember(address _member) external auth(member_manager) {
+    function removeOracleMember(address _member) external auth(memberManager) {
         uint256 index = _getMemberId(_member);
         require(index != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
         uint256 last = members.length - 1;
@@ -168,7 +169,7 @@ contract LidoOracle is ILidoOracle {
         // todo emit event
     }
 
-    function setRelaySpec(uint64 _genesisTimestamp, uint64 _secondsPerEra) external auth(spec_manager) {
+    function setRelaySpec(uint64 _genesisTimestamp, uint64 _secondsPerEra) external auth(specManager) {
         require(_genesisTimestamp > 0, "BAD_GENESIS_TIMESTAMP");
         require(_secondsPerEra > 0, "BAD_SECONDS_PER_ERA");
 
@@ -178,7 +179,7 @@ contract LidoOracle is ILidoOracle {
     /**
     * @notice Set the number of exactly the same reports needed to finalize the epoch to `_quorum`
     */
-    function setQuorum(uint256 _quorum) external auth(quorum_manager) {
+    function setQuorum(uint256 _quorum) external auth(quorumManager) {
         require(0 != _quorum, "QUORUM_WONT_BE_MADE");
         uint256 oldQuorum = quorum;
         quorum = _quorum;

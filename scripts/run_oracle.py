@@ -19,8 +19,8 @@ def get_report(active=[]):
 
 def main():
     lido = LidoMock.deploy({'from': a[0]})
-
-    oracle = LidoOracle.deploy(lido, {'from':a[0]})
+    allInOne = DummyRole.deploy({'from':a[0]})
+    oracle = LidoOracle.deploy(lido, allInOne, {'from':a[0]})
 
     oracle.addOracleMember( a[5].address, {'from':a[0]})
     oracle.addOracleMember( a[6].address, {'from':a[0]})

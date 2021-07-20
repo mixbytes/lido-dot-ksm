@@ -5,6 +5,7 @@ pragma abicoder v2;
 
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
+import "../interfaces/IRole.sol";
 
 
 contract LidoMock is ILido {
@@ -39,3 +40,37 @@ contract LidoMock is ILido {
         emit NewStake(total);
     }
 }
+
+contract DummyRole is IRole {
+    function has(address member) external override view returns (bool){
+        return true;
+    }
+
+    function add(address member) external override {
+        revert("NOT_IMPLEMENTED");
+    }
+
+    function remove(address member) external override {
+        revert("NOT_IMPLEMENTED");
+    }
+}
+
+contract MockRole is IRole {
+    address private owner;
+    constructor() {
+        owner = msg.sender;
+    }
+    function has(address member) external override view returns (bool){
+        return member == owner;
+    }
+
+    function add(address member) external override {
+        revert("NOT_IMPLEMENTED");
+    }
+
+    function remove(address member) external override {
+        revert("NOT_IMPLEMENTED");
+    }
+}
+
+
