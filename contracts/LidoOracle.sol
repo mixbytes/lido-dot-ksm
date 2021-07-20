@@ -26,7 +26,7 @@ contract LidoOracle is ILidoOracle {
     using ReportUtils for uint256;
 
     /// Maximum number of oracle committee members
-    uint256 public constant MAX_MEMBERS = 256;
+    uint256 public constant MAX_MEMBERS = 255;
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = uint256(- 1);
 

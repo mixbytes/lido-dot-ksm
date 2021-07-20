@@ -8,5 +8,5 @@ import "./ILidoOracle.sol";
 interface ILido {
     function reportRelay(uint64 _eraId, ILidoOracle.StakeReport memory staking) external;
 
-    function totalSupply() external returns (uint256);
+    function totalSupply() external view returns (uint256);
 }

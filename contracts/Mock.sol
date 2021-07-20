@@ -30,7 +30,7 @@ contract LidoMock is ILido {
         emit NewStake(total);
     }
 
-    function totalSupply() override external returns (uint256) {
+    function totalSupply() override external view returns (uint256) {
         return _totalStake;
     }
 

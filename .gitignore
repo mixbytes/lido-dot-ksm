@@ -4,6 +4,7 @@ __pycache__
 build/
 reports/
 *.cmd
+.local/**
 
 # IDE stuff
 *.idea/**
