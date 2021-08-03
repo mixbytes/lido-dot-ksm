@@ -1,30 +1,26 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.7.5;
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.0;
 
 pragma abicoder v2;
 
 interface ILidoOracle {
-    event AllowedBeaconBalanceAnnualRelativeIncreaseSet(uint256 value);
-    event AllowedBeaconBalanceRelativeDecreaseSet(uint256 value);
-    event BeaconReportReceiverSet(address callback);
     event MemberAdded(address member);
     event MemberRemoved(address member);
     event QuorumChanged(uint256 quorum);
     event ExpectedEraIdUpdated(uint256 epochId);
-    event PostTotalShares(
-        uint256 postTotalPooledEther,
-        uint256 preTotalPooledEther,
-        uint256 timeElapsed,
-        uint256 totalShares
-    );
-
     event Completed(uint256);
-    event ContractVersionSet(uint256 version);
 
     enum StakeStatus{
+        // bonded but not participate in staking
         Idle,
+        // participate as nominator
         Nominator,
-        Validator
+        // participate as validator
+        Validator,
+        // not bonded not participate in staking
+        None,
+        // marker for exclusion from staking
+        Blocked
     }
 
     struct RelaySpec {
@@ -38,25 +34,25 @@ interface ILidoOracle {
     }
 
     struct Ledger {
-        bytes32 stash;
-        bytes32 controller;
-        StakeStatus stake_status;
+        bytes32 stashAccount;
+        bytes32 controllerAccount;
+        StakeStatus stakeStatus;
 
-        uint128 active_balance;
-        uint128 total_balance;
+        uint128 activeBalance;
+        uint128 totalBalance;
         UnlockingChunk[] unlocking;
-        uint32[] claimed_rewards;
-        uint128 stash_balance;
+        uint32[] claimedRewards;
+        uint128 stashBalance;
     }
 
     /**
-     * @notice oracle committee member report structure
+     * @notice oracle committee member report
      */
     struct StakeReport {
         // todo. remove in future.
-        uint128 parachain_balance;
+        uint128 parachainBalance;
 
-        Ledger[] stake_ledger;
+        Ledger[] stakeLedger;
     }
 
     /**
@@ -65,4 +61,5 @@ interface ILidoOracle {
      * @param staking relay chain stash account balances and other properties
      */
     function reportRelay(uint64 _eraId, StakeReport calldata staking) external;
+    function getStakeAccounts() external view returns(bytes32[] memory);
 }

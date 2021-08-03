@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.7.5;
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.0;
 
 pragma abicoder v2;
 
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
-
+import "../node_modules/@openzeppelin/contracts/security/Pausable.sol";
 
 library ReportUtils {
     // last bytes used to count votes 
@@ -22,13 +22,13 @@ library ReportUtils {
     }
 }
 
-contract LidoOracle is ILidoOracle {
+contract LidoOracle is ILidoOracle, Pausable {
     using ReportUtils for uint256;
 
     /// Maximum number of oracle committee members
     uint256 public constant MAX_MEMBERS = 255;
     // Missing member index
-    uint256 internal constant MEMBER_NOT_FOUND = uint256(- 1);
+    uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
 
     // Contract structured storage
     // Oracle members
@@ -57,8 +57,8 @@ contract LidoOracle is ILidoOracle {
     uint256 private report_balance_bias;
 
     // todo remove
-    constructor(address _lido) public {
-        initialize(_lido, msg.sender, msg.sender, msg.sender);
+    constructor() public {
+        initialize(address(0), msg.sender, msg.sender, msg.sender);
     }
 
     // todo remove.
@@ -91,6 +91,22 @@ contract LidoOracle is ILidoOracle {
 
         _setRelaySpec(0, 0);
     }
+
+    /**
+    *   @notice Stop pool routine operations
+    */
+    function pause() external auth(spec_manager) {
+        _pause();
+    }
+
+    /**
+    * @notice Resume pool routine operations
+    */
+    function resume() external auth(spec_manager) {
+        _unpause();
+    }
+
+
     /// convert a report into sha3 hash whose last byte is used to calc votes
     function getReportVariant(StakeReport calldata report) internal pure returns (uint256){
         bytes32 hash = keccak256(abi.encode(report));
@@ -112,6 +128,10 @@ contract LidoOracle is ILidoOracle {
     modifier auth(address manager) {
         require(msg.sender == manager, "FORBIDDEN");
         _;
+    }
+
+    function setLido(ILido _lido) external auth(spec_manager){
+        lido = _lido;
     }
 
     function _getMemberId(address _member) internal view returns (uint256) {
@@ -252,7 +272,7 @@ contract LidoOracle is ILidoOracle {
      * @param _eraId Relaychain era
      * @param staking Relaychain report
      */
-    function reportRelay(uint64 _eraId, StakeReport calldata staking) external override {
+    function reportRelay(uint64 _eraId, StakeReport calldata staking) external override whenNotPaused {
         RelaySpec memory _relaySpec = relaySpec;
         require(_eraId >= eraId, "ERA_IS_TOO_OLD");
 
@@ -290,5 +310,9 @@ contract LidoOracle is ILidoOracle {
                 currentReportStake.push(staking);
             }
         }
+    }
+
+    function getStakeAccounts() external override view returns(bytes32[] memory){
+        return lido.getStakeAccounts(eraId);
     }
 }
