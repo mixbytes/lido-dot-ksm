@@ -2,9 +2,9 @@
 pragma solidity ^0.7.5;
 
 interface IRole {
-    function has(address member) external view returns (bool);
+    function has(bytes32 role, address member) external view returns (bool);
 
-    function add(address member) external;
+    function add(bytes32 role, address member) external;
 
-    function remove(address member) external;
+    function remove(bytes32 role, address member) external;
 }

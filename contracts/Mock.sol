@@ -42,15 +42,15 @@ contract LidoMock is ILido {
 }
 
 contract DummyRole is IRole {
-    function has(address member) external override view returns (bool){
+    function has(bytes32 role, address member) external override view returns (bool){
         return true;
     }
 
-    function add(address member) external override {
+    function add(bytes32 role, address member) external override {
         revert("NOT_IMPLEMENTED");
     }
 
-    function remove(address member) external override {
+    function remove(bytes32 role, address member) external override {
         revert("NOT_IMPLEMENTED");
     }
 }
@@ -60,15 +60,15 @@ contract MockRole is IRole {
     constructor() {
         owner = msg.sender;
     }
-    function has(address member) external override view returns (bool){
+    function has(bytes32 role, address member) external override view returns (bool){
         return member == owner;
     }
 
-    function add(address member) external override {
+    function add(bytes32 role, address member) external override {
         revert("NOT_IMPLEMENTED");
     }
 
-    function remove(address member) external override {
+    function remove(bytes32 role, address member) external override {
         revert("NOT_IMPLEMENTED");
     }
 }

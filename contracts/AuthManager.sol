@@ -5,54 +5,65 @@ import "../interfaces/IRole.sol";
 
 
 contract AuthManager is IRole {
-    IRole private owner;
-    address[] private members;
-    uint256 internal constant NOTFOUND = uint256(-1);
+    mapping(address => bytes32[])  internal members;
+    uint256 internal constant NOTFOUND = uint256(- 1);
+    bytes32 public constant SUPER_ROLE = keccak256("SUPER_ROLE");
 
     event AddMember(address);
     event RemoveMember(address);
 
     constructor(address superior) public {
         if (superior == address(0)) {
-            owner = IRole(address(this));
-            members.push(msg.sender);
+            members[msg.sender] = [SUPER_ROLE];
         } else {
-            owner = IRole(superior);
+            members[superior] = [SUPER_ROLE];
         }
     }
 
-    function has(address _member) external override view returns (bool){
-        return _find(_member) != NOTFOUND;
+    function roles(address _member) external view returns (bytes32[] memory){
+        return members[_member];
     }
 
-    function _find(address _member) internal view returns (uint256){
-        for (uint256 i = 0; i < members.length; ++i) {
-            if (members[i] == _member) {
+    function has(bytes32 role, address _member) external override view returns (bool){
+        return _find(members[_member], role) != NOTFOUND;
+    }
+
+    function _find(bytes32[] storage _roles, bytes32 _role) internal view returns (uint256){
+        for (uint256 i = 0; i < _roles.length; ++i) {
+            if (_role == _roles[i]) {
                 return i;
             }
         }
         return NOTFOUND;
     }
 
-    function add(address member) external override {
-        require(owner.has(msg.sender), "FORBIDDEN");
-        require(_find(member) == NOTFOUND, "ALREADY_MEMBER");
-        members.push(member);
+    function add(bytes32 role, address member) external override {
+        require(_find(members[msg.sender], SUPER_ROLE) != NOTFOUND, "FORBIDDEN");
+
+        bytes32[] storage _roles = members[member];
+
+        require(_find(_roles, role) == NOTFOUND, "ALREADY_MEMBER");
+        _roles.push(role);
         emit AddMember(member);
     }
 
-    function remove(address member) external override {
-        require(owner.has(msg.sender), "FORBIDDEN");
-        uint256 i = _find(member);
-        require(i != NOTFOUND, "MEMBER_NOT_FOUND");
+    function remove(bytes32 role, address member) external override {
+        require(_find(members[msg.sender], SUPER_ROLE) != NOTFOUND, "FORBIDDEN");
 
-        if (address(owner) == address(this)) {
-            require(members.length > 1, "SELFLOCK_FORBIDDEN");
+        bytes32[] storage _roles = members[member];
+
+        uint256 i = _find(_roles, role);
+        require(i != NOTFOUND, "MEMBER_NOT_FOUND");
+        if( _roles.length == 1 ){
+            require( role!= SUPER_ROLE, "INVALID");
+
+            delete members[member];
+        }else{
+            if (i < _roles.length - 1) {
+                _roles[i] = _roles[_roles.length - 1];
+            }
+            _roles.pop();
         }
-        if (i != members.length - 1) {
-            members[i] = members[members.length - 1];
-        }
-        members.pop();
 
         emit RemoveMember(member);
     }
