@@ -7,8 +7,7 @@ interface ILidoOracle {
     event MemberAdded(address member);
     event MemberRemoved(address member);
     event QuorumChanged(uint256 quorum);
-    event ExpectedEraIdUpdated(uint256 epochId);
-    event Completed(uint256);
+
 
     enum StakeStatus{
         // bonded but not participate in staking
@@ -33,7 +32,7 @@ interface ILidoOracle {
         uint32 era;
     }
 
-    struct Ledger {
+    struct LedgerData {
         bytes32 stashAccount;
         bytes32 controllerAccount;
         StakeStatus stakeStatus;
@@ -48,18 +47,20 @@ interface ILidoOracle {
     /**
      * @notice oracle committee member report
      */
-    struct StakeReport {
-        // todo. remove in future.
-        uint128 parachainBalance;
-
-        Ledger[] stakeLedger;
-    }
+// obsolete
+//    struct StakeReport {
+//        // todo. remove in future.
+//        uint128 parachainBalance;
+//
+//        Ledger[] stakeLedger;
+//    }
 
     /**
      * @notice Accept oracle committee member reports from the relay side
      * @param _eraId relay chain Era index
      * @param staking relay chain stash account balances and other properties
      */
-    function reportRelay(uint64 _eraId, StakeReport calldata staking) external;
-    function getStakeAccounts() external view returns(bytes32[] memory);
+    function reportRelay(uint64 _eraId, LedgerData calldata staking) external;
+    function getStakeAccounts(bytes32 stashAccount) external view returns(bytes32[] memory);
+    function getCurrentEraId() external view returns (uint64);
 }

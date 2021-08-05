@@ -6,25 +6,9 @@ pragma abicoder v2;
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
 import "../node_modules/@openzeppelin/contracts/security/Pausable.sol";
-
-library ReportUtils {
-    // last bytes used to count votes 
-    uint256 constant internal COUNT_OUTMASK = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00;
-
-    /// @notice Check if the given reports are different, not considering the counter of the first
-    function isDifferent(uint256 value, uint256 that) internal pure returns (bool) {
-        return (value & COUNT_OUTMASK) != that;
-    }
-
-    /// @notice Return the total number of votes recorded for the variant
-    function getCount(uint256 value) internal pure returns (uint8) {
-        return uint8(value);
-    }
-}
+import "./Ledger.sol";
 
 contract LidoOracle is ILidoOracle, Pausable {
-    using ReportUtils for uint256;
-
     /// Maximum number of oracle committee members
     uint256 public constant MAX_MEMBERS = 255;
     // Missing member index
@@ -33,18 +17,12 @@ contract LidoOracle is ILidoOracle, Pausable {
     // Contract structured storage
     // Oracle members
     address[] private members;
-    // Current era report  hashes
-    uint256[] private currentReportVariants;
-    // Current era reports
-    StakeReport[]  private currentReportStake;
-    // Then oracle member push report, its bit is set
-    uint256   private currentReportBitmask;
     // Relaychain era timestamp
     RelaySpec private relaySpec;
 
     // todo pack it with eraId as uint8
     uint256  public quorum;
-    uint64   public eraId;
+
 
     // Lido smart contract
     ILido    private lido;
@@ -66,16 +44,6 @@ contract LidoOracle is ILidoOracle, Pausable {
         return block.timestamp;
     }
 
-    // todo remove
-    function _reportVariants() external view returns (uint256[] memory){
-        return currentReportVariants;
-    }
-
-    // todo remove
-    function _stakeReport(uint256 index) external view returns (StakeReport memory staking){
-        return currentReportStake[index];
-    }
-
     function initialize(
         address _lido,
         address _member_manager,
@@ -87,7 +55,6 @@ contract LidoOracle is ILidoOracle, Pausable {
         spec_manager = _spec_manager;
 
         lido = ILido(_lido);
-        eraId = 0;
 
         _setRelaySpec(0, 0);
     }
@@ -104,25 +71,6 @@ contract LidoOracle is ILidoOracle, Pausable {
     */
     function resume() external auth(spec_manager) {
         _unpause();
-    }
-
-
-    /// convert a report into sha3 hash whose last byte is used to calc votes
-    function getReportVariant(StakeReport calldata report) internal pure returns (uint256){
-        bytes32 hash = keccak256(abi.encode(report));
-        return uint256(hash) & ReportUtils.COUNT_OUTMASK;
-    }
-
-    /**
-     * @notice advance era
-     */
-    function _clearReportingAndAdvanceTo(uint64 _eraId) internal {
-        currentReportBitmask = 0;
-        eraId = _eraId;
-
-        delete currentReportVariants;
-        delete currentReportStake;
-        emit ExpectedEraIdUpdated(_eraId);
     }
 
     modifier auth(address manager) {
@@ -169,10 +117,7 @@ contract LidoOracle is ILidoOracle, Pausable {
         emit MemberRemoved(_member);
 
         // delete the data for the last epoch, let remained oracles report it again
-        // todo remove only non-voted member doesn't require flush report
-        currentReportBitmask = 0;
-        delete currentReportVariants;
-        delete currentReportStake;
+        lido.clearReporting();
     }
 
     function _setRelaySpec(
@@ -202,63 +147,12 @@ contract LidoOracle is ILidoOracle, Pausable {
         require(0 != _quorum, "QUORUM_WONT_BE_MADE");
         uint256 oldQuorum = quorum;
         quorum = _quorum;
-        emit QuorumChanged(_quorum);
 
         // If the quorum value lowered, check existing reports whether it is time to push
         if (oldQuorum > _quorum) {
-            (bool isQuorum, uint256 reportIndex) = _getQuorumReport(_quorum);
-            if (isQuorum) {
-                _push(
-                    eraId,
-                    currentReportStake[reportIndex],
-                    relaySpec
-                );
-            }
+            lido.setQuorum( _quorum );
         }
-        // todo emit event?
-    }
-
-    /**
-    * @notice Return whether the `_quorum` is reached and the final report
-    */
-    function _getQuorumReport(uint256 _quorum) internal view returns (bool isQuorum, uint256 reportIndex) {
-        // check most frequent cases first: all reports are the same or no reports yet
-        if (currentReportVariants.length == 1) {
-            return (currentReportVariants[0].getCount() >= _quorum, 0);
-        } else if (currentReportVariants.length == 0) {
-            return (false, MEMBER_NOT_FOUND);
-        }
-
-        // if more than 2 kind of reports exist, choose the most frequent
-        uint256 maxind = 0;
-        uint256 repeat = 0;
-        uint16 maxval = 0;
-        uint16 cur = 0;
-        for (uint256 i = 0; i < currentReportVariants.length; ++i) {
-            cur = currentReportVariants[i].getCount();
-            if (cur >= maxval) {
-                if (cur == maxval) {
-                    ++repeat;
-                } else {
-                    maxind = i;
-                    maxval = cur;
-                    repeat = 0;
-                }
-            }
-        }
-        return (maxval >= _quorum && repeat == 0, maxind);
-    }
-
-    function _push(uint64 _eraId, StakeReport memory report, RelaySpec memory /* _relaySpec */) private {
-        emit Completed(_eraId);
-
-        _clearReportingAndAdvanceTo(_eraId + 1);
-
-        // uint256 prevTotalStake = lido.totalSupply();
-        lido.reportRelay(_eraId, report);
-        // uint256 postTotalStake = lido.totalSupply();
-
-        // todo add sanity check. ensure |prevTotalStake -  postTotalStake| is in report_balance_bias boundaries
+        emit QuorumChanged(_quorum);
     }
 
     function _getCurrentEraId(RelaySpec memory /* _relaySpec */) internal view returns (uint64) {
@@ -267,52 +161,31 @@ contract LidoOracle is ILidoOracle, Pausable {
         //return ( uint64(block.timestamp) - _relaySpec.genesisTimestamp )/ _relaySpec.secondsPerEra;
     }
 
+    function getCurrentEraId() external view override returns (uint64){
+        RelaySpec memory _relayspec = relaySpec;
+        return _getCurrentEraId(_relayspec);
+    }
+
     /**
      * @notice Accept oracle committee member reports from the relay side
      * @param _eraId Relaychain era
      * @param staking Relaychain report
      */
-    function reportRelay(uint64 _eraId, StakeReport calldata staking) external override whenNotPaused {
-        RelaySpec memory _relaySpec = relaySpec;
-        require(_eraId >= eraId, "ERA_IS_TOO_OLD");
+    function reportRelay(uint64 _eraId, LedgerData calldata staking) external override whenNotPaused {
+        Ledger stash = Ledger(lido.findLedger(staking.stashAccount));
 
-        if (_eraId > eraId) {
-            require(_eraId >= _getCurrentEraId(_relaySpec), "UNEXPECTED_ERA");
-            _clearReportingAndAdvanceTo(_eraId);
+        if (_eraId > stash.getEraId() ) {
+            require(_eraId >= _getCurrentEraId(relaySpec), "UNEXPECTED_ERA");
         }
-
         uint256 index = _getMemberId(msg.sender);
         require(index != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
 
-        uint256 mask = 1 << index;
-        uint256 reportBitmask = currentReportBitmask;
-        require(reportBitmask & mask == 0, "ALREADY_SUBMITTED");
-        currentReportBitmask = (reportBitmask | mask);
-
-        uint256 variant = getReportVariant(staking);
-        uint256 _quorum = quorum;
-        uint256 i = 0;
-
-        // iterate on all report variants we already have, limited by the oracle members maximum
-        while (i < currentReportVariants.length && currentReportVariants[i].isDifferent(variant)) ++i;
-        if (i < currentReportVariants.length) {
-            if (currentReportVariants[i].getCount() + 1 >= _quorum) {
-                _push(_eraId, staking, _relaySpec);
-            } else {
-                ++currentReportVariants[i];
-                // increment variant counter, see ReportUtils for details
-            }
-        } else {
-            if (_quorum == 1) {
-                _push(_eraId, staking, _relaySpec);
-            } else {
-                currentReportVariants.push(variant + 1);
-                currentReportStake.push(staking);
-            }
-        }
+        stash.reportRelay(index, quorum, _eraId, staking);
     }
 
-    function getStakeAccounts() external override view returns(bytes32[] memory){
-        return lido.getStakeAccounts(eraId);
+    function getStakeAccounts(bytes32 stashAccount) external override view returns(bytes32[] memory){
+        Ledger stash = Ledger(lido.findLedger(stashAccount));
+
+        return lido.getStakeAccounts(stash.getEraId());
     }
 }
