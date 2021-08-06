@@ -14,10 +14,13 @@ import "./Ledger.sol";
 import "../node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../node_modules/@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "../node_modules/@openzeppelin/contracts/proxy/Clones.sol";
+import "../node_modules/@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
 contract Lido is ILido, LKSM {
     using SafeMath for uint256;
     using Clones for address;
+    using EnumerableMap for EnumerableMap.UintToAddressMap;
+
     // Maximum number of oracle committee members
     uint256 private constant MAX_STASH_ACCOUNTS = 200;
 
@@ -80,18 +83,13 @@ contract Lido is ILido, LKSM {
     bytes32 internal constant GARANTOR = 0x00;
 
     // Ledger accounts (start eraId + Ledger contract address)
-    uint256[] private members;
-    bytes32[] private stashMembers;
-
-    // current era
-    uint64  eraId;
+    EnumerableMap.UintToAddressMap private members;
 
     constructor() {
         initialize();
     }
 
     function initialize() internal {
-        eraId = 0;
         feeBP = DEFAULT_FEE;
 
         _bufferedBalance = 0;
@@ -136,82 +134,74 @@ contract Lido is ILido, LKSM {
 
     function addStash(bytes32 _stashAccount, bytes32 _controllerAccount) external auth(spec_manager) {
         require(ledgerMaster != address(0), 'UNSPECIFIED_LEDGER');
-        require(members.length < MAX_STASH_ACCOUNTS, 'STASH_POOL_LIMIT');
+        require(members.length() < MAX_STASH_ACCOUNTS, 'STASH_POOL_LIMIT');
         // we don't have to worry about that, because
         // require(_findStash(_stashAccount) == MEMBER_NOT_FOUND, 'STASH_ALREADY_EXISTS');
         // added stash will be used after the next era
 
-        Ledger member = Ledger( ledgerMaster.cloneDeterministic(_stashAccount) );
-
-        member.initialize(_stashAccount, _controllerAccount);
+        address ledger = ledgerMaster.cloneDeterministic(_stashAccount);
         // skip one era before commissioning
-        uint256 item = ( ILidoOracle(oracle).getCurrentEraId()+2 ) << 20 | uint256(uint160(address(member)));
-        members.push(item);
-
-        stashMembers.push(  _stashAccount );
+        Ledger(ledger).initialize(_stashAccount, _controllerAccount, ILidoOracle(oracle).getCurrentEraId() + 2);
+        members.set(uint256(_stashAccount), ledger);
     }
 
     function enableStash(bytes32 _stashAccount) external auth(spec_manager) {
-        uint256 _index = _findStash(_stashAccount);
-        require(_index != MEMBER_NOT_FOUND, 'UNKNOWN_STASH_ACCOUNT');
+        (bool _found, address ledger) = _findStash(_stashAccount);
+        require(_found, 'UNKNOWN_STASH_ACCOUNT');
 
-        Ledger stash =  Ledger( address( uint160( members[_index] )) );
-        require(stash.getStatus() == ILidoOracle.StakeStatus.Blocked, 'STASH_ALREADY_STARTED');
-
-        stash.setStatus( ILidoOracle.StakeStatus.Idle );
+        require(Ledger(ledger).getStatus() == ILidoOracle.StakeStatus.Blocked, 'STASH_ALREADY_STARTED');
+        Ledger(ledger).setStatus(ILidoOracle.StakeStatus.Idle);
     }
 
     function disableStash(bytes32 _stashAccount) external auth(spec_manager) {
-        uint256 _index = _findStash(_stashAccount);
-        require(_index != MEMBER_NOT_FOUND, 'UNKNOWN_STASH_ACCOUNT');
-        Ledger stash =  Ledger( address( uint160( members[_index] )) );
-        stash.setStatus( ILidoOracle.StakeStatus.Blocked );
+        (bool _found, address ledger) = _findStash(_stashAccount);
+        require(_found, 'UNKNOWN_STASH_ACCOUNT');
+
+        Ledger(ledger).setStatus(ILidoOracle.StakeStatus.Blocked);
         // todo immediate send Chill + Unbond
     }
 
     function setQuorum(uint256 _quorum) external override onlyOracle {
-        for (uint256 i = 0; i < members.length; i++) {
-
-            Ledger stash =  Ledger( address( uint160( members[i] )) );
-            stash.softenQuorum(_quorum);
+        for (uint256 i = 0; i < members.length(); i++) {
+            (uint256 key, address ledger) = members.at(i);
+            Ledger(ledger).softenQuorum(_quorum);
         }
     }
 
     function clearReporting() external override onlyOracle {
-        for (uint256 i = 0; i < members.length; i++) {
-            Ledger stash =  Ledger( address( uint160( members[i] )) );
-            stash.clearReporting();
+        for (uint256 i = 0; i < members.length(); i++) {
+            (uint256 key, address ledger) = members.at(i);
+            Ledger(ledger).clearReporting();
         }
     }
 
-//    function reportRelay(address stash,
-//        uint256 index,
-//        uint256 _quorum,
-//        uint64 _eraId,
-//        ILidoOracle.LedgerData calldata staking
-//    ) external override onlyOracle {
-//        Ledger(stash).reportRelay(index, _eraId, _quorum, staking);
-//    }
+    //    function reportRelay(address stash,
+    //        uint256 index,
+    //        uint256 _quorum,
+    //        uint64 _eraId,
+    //        ILidoOracle.LedgerData calldata staking
+    //    ) external override onlyOracle {
+    //        Ledger(stash).reportRelay(index, _eraId, _quorum, staking);
+    //    }
 
     /**
     * @dev invoke pallet_stake::nominate on the relay side
     */
     function nominate(bytes32 _stashAccount, bytes32[] calldata validators) external auth(stake_manager) {
-        uint256 _index = _findStash(_stashAccount);
-        require(_index != MEMBER_NOT_FOUND, 'UNKNOWN_STASH_ACCOUNT');
+        (bool _found, address ledger) = _findStash(_stashAccount);
+        require(_found, 'UNKNOWN_STASH_ACCOUNT');
 
-        Ledger stash =  Ledger( address( uint160( members[_index] )) );
-        ILidoOracle.StakeStatus _status = stash.getStatus();
+        ILidoOracle.StakeStatus _status = Ledger(ledger).getStatus();
         require(_status == ILidoOracle.StakeStatus.Nominator || _status == ILidoOracle.StakeStatus.Idle || _status == ILidoOracle.StakeStatus.None, 'STASH_WRONG_STATUS');
 
         bytes[] memory call = new bytes[](1);
 
         if (_status == ILidoOracle.StakeStatus.None) {
-            uint128 freeBalance = stash.getFreeStashBalance();
-            require( freeBalance >= minStashBalance, 'STASH_INSUFFICIENT_BALANCE');
-            call[0] = AUX.buildBond(stash.controllerAccount(), validators, freeBalance);
+            uint128 freeBalance = Ledger(ledger).getFreeStashBalance();
+            require(freeBalance >= minStashBalance, 'STASH_INSUFFICIENT_BALANCE');
+            call[0] = AUX.buildBond(Ledger(ledger).controllerAccount(), validators, freeBalance);
         } else {
-            require(stash.getLockedStashBalance() >= minStashBalance, 'STASH_INSUFFICIENT_BALANCE');
+            require(Ledger(ledger).getLockedStashBalance() >= minStashBalance, 'STASH_INSUFFICIENT_BALANCE');
             call[0] = AUX.buildNominate(validators);
         }
         // todo pore over that
@@ -280,23 +270,18 @@ contract Lido is ILido, LKSM {
     /**
     * @dev Find ledger contract address associated with the stash account
     */
-    function findLedger(bytes32 _stash) external view override returns (address) {
-        uint256 index = _findStash(_stash);
-        require(index!=MEMBER_NOT_FOUND, 'UNKNOWN_STASH_ACCOUNT');
-        return address(uint160(members[index]));
+    function findLedger(bytes32 _stashAccount) external view override returns (address) {
+        (bool _found, address ledger) = members.tryGet(uint256(_stashAccount));
+        require(_found, 'UNKNOWN_STASH_ACCOUNT');
+        return ledger;
     }
 
     /**
     * @dev Find stash account and return its index in the register
     */
-    function _findStash(bytes32 _stash) internal view returns (uint256){
+    function _findStash(bytes32 _stashAccount) internal view returns (bool, address){
         // todo compare with Clones::predictDeterministicAddress + isContract.
-        for (uint256 i = 0; i < stashMembers.length; i++) {
-            if (stashMembers[i] == _stash) {
-                return i;
-            }
-        }
-        return MEMBER_NOT_FOUND;
+        return members.tryGet(uint256(_stashAccount));
     }
 
     /**
@@ -317,7 +302,7 @@ contract Lido is ILido, LKSM {
     * @dev Update ledger master contract address
     */
     function setLedgerMaster(address _ledgerMaster) external auth(spec_manager) {
-        require( members.length==0, 'ONLY_ONCE');
+        require(members.length() == 0, 'ONLY_ONCE');
         ledgerMaster = _ledgerMaster;
     }
 
@@ -325,11 +310,12 @@ contract Lido is ILido, LKSM {
     * @dev Return relay chain stash account addresses
     */
     function getStakeAccounts(uint64 _eraId) public override view returns (bytes32[] memory){
-        bytes32[] memory _stake = new bytes32[](members.length);
+        bytes32[] memory _stake = new bytes32[](members.length());
         uint j = 0;
-        for (uint i = 0; i < members.length; i++) {
-            if ((members[i] >> 20)  <= _eraId) {
-                _stake[j] = stashMembers[i];
+        for (uint i = 0; i < members.length(); i++) {
+            (uint256 key, address ledger) = members.at(i);
+            if (Ledger(ledger).startEra() <= _eraId) {
+                _stake[j] = bytes32(key);
                 j += 1;
             }
         }
@@ -384,9 +370,9 @@ contract Lido is ILido, LKSM {
 
     function _getStashBalance() internal view returns (uint256){
         uint256 total = 0;
-        for (uint i = 0; i < members.length; i++) {
-            Ledger stash =  Ledger( address( uint160( members[i] )) );
-            total += stash.getLockedStashBalance() + stash.getFreeStashBalance();
+        for (uint i = 0; i < members.length(); i++) {
+            (uint256 key, address ledger) = members.at(i);
+            total += Ledger(ledger).getTotalBalance();
         }
         return total;
     }

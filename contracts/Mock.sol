@@ -18,15 +18,6 @@ contract LidoMock is ILido {
         eraId = 0;
     }
 
-    function reportRelay(uint64 _eraId, ILidoOracle.StakeReport memory staking) override external {
-        uint256 total = 0;
-        for (uint i = 0; i < staking.stakeLedger.length; i++) {
-            total += staking.stakeLedger[i].stashBalance;
-        }
-        _totalStake = total;
-        eraId = _eraId;
-        emit NewStake(_eraId, total);
-    }
     function getStakeAccounts(uint64 _eraId) override public view returns(bytes32[] memory){
         bytes32[] memory stake = new bytes32[](2);
         // Ferdie DE14BzQ1bDXWPKeLoAqdLAm1GpyAWaWF1knF74cEZeomTBM
@@ -60,5 +51,20 @@ contract LidoMock is ILido {
         return 540;
     }
 
+    function setQuorum(uint256 _quorum) external override {
+        revert("NOT_IMPLEMENTED");
+    }
+
+    function clearReporting() external override {
+        revert("NOT_IMPLEMENTED");
+    }
+
+    function findLedger(bytes32 _stashAccount) external view override returns (address){
+        revert("NOT_IMPLEMENTED");
+    }
+
+    function getOracle() external view override returns (address){
+        return address(0);
+    }
 }
 

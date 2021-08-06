@@ -136,10 +136,10 @@ abstract contract Consensus {
     }
 }
 
-contract Ledger is Consensus{
+contract Ledger is Consensus {
     address private lido;
     ILidoOracle.StakeStatus internal stakeStatus;
-    // uint64  public startEra;
+    uint64  public startEra;
     bytes32 public stashAccount;
     bytes32 public controllerAccount;
     // free disposal balance
@@ -157,10 +157,12 @@ contract Ledger is Consensus{
         _;
     }
 
-    function initialize(bytes32 _stashAccount, bytes32 _controllerAccount) external {
+    function initialize(bytes32 _stashAccount, bytes32 _controllerAccount, uint64 _startEraId) external {
         stashAccount = _stashAccount;
         controllerAccount = _controllerAccount;
         stakeStatus = ILidoOracle.StakeStatus.None;
+
+        startEra = _startEraId;
 
         lido = msg.sender;
     }
@@ -177,6 +179,10 @@ contract Ledger is Consensus{
         return stakeStatus;
     }
 
+    function getTotalBalance() external view returns (uint128){
+        return freeStashBalance + lockedStashBalance;
+    }
+
     function getFreeStashBalance() external view returns (uint128){
         return freeStashBalance;
     }
@@ -185,11 +191,11 @@ contract Ledger is Consensus{
         return lockedStashBalance;
     }
 
-    function clearReporting() external onlyLido{
+    function clearReporting() external onlyLido {
         _clearReportingAndAdvanceTo(eraId);
     }
 
-    function _push(uint64 _eraId, ILidoOracle.LedgerData memory report) internal override{
+    function _push(uint64 _eraId, ILidoOracle.LedgerData memory report) internal override {
         emit Completed(_eraId);
 
         _clearReportingAndAdvanceTo(_eraId + 1);
@@ -202,8 +208,8 @@ contract Ledger is Consensus{
         // todo add sanity check. ensure |prevTotalStake -  postTotalStake| is in report_balance_bias boundaries
     }
 
-    function reportRelay(uint256 index, uint256 quorum, uint64 _eraId,  ILidoOracle.LedgerData calldata staking) external {
-        if(_eraId > eraId){
+    function reportRelay(uint256 index, uint256 quorum, uint64 _eraId, ILidoOracle.LedgerData calldata staking) external {
+        if (_eraId > eraId) {
             _clearReportingAndAdvanceTo(_eraId);
         }
         require(ILido(lido).getOracle() == msg.sender, 'RESTRICTED_TO_ORACLE');
