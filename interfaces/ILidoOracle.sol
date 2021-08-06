@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
-
 pragma abicoder v2;
 
 interface ILidoOracle {
     event MemberAdded(address member);
     event MemberRemoved(address member);
     event QuorumChanged(uint256 quorum);
-
 
     enum StakeStatus{
         // bonded but not participate in staking
@@ -29,7 +27,7 @@ interface ILidoOracle {
 
     struct UnlockingChunk {
         uint128 balance;
-        uint32 era;
+        uint64 era;
     }
 
     struct LedgerData {
@@ -43,17 +41,6 @@ interface ILidoOracle {
         uint32[] claimedRewards;
         uint128 stashBalance;
     }
-
-    /**
-     * @notice oracle committee member report
-     */
-// obsolete
-//    struct StakeReport {
-//        // todo. remove in future.
-//        uint128 parachainBalance;
-//
-//        Ledger[] stakeLedger;
-//    }
 
     /**
      * @notice Accept oracle committee member reports from the relay side

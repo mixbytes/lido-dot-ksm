@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
-
 pragma abicoder v2;
 
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
-import "../node_modules/@openzeppelin/contracts/security/Pausable.sol";
+import "zeppelin/security/Pausable.sol";
 import "./Ledger.sol";
 
 contract LidoOracle is ILidoOracle, Pausable {
@@ -22,7 +21,6 @@ contract LidoOracle is ILidoOracle, Pausable {
 
     // todo pack it with eraId as uint8
     uint256  public quorum;
-
 
     // Lido smart contract
     ILido    private lido;
@@ -185,7 +183,6 @@ contract LidoOracle is ILidoOracle, Pausable {
 
     function getStakeAccounts(bytes32 stashAccount) external override view returns(bytes32[] memory){
         Ledger stash = Ledger(lido.findLedger(stashAccount));
-
         return lido.getStakeAccounts(stash.getEraId());
     }
 }

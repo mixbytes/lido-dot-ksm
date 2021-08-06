@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
-
 pragma abicoder v2;
 
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
-import "../node_modules/@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "zeppelin/utils/math/SafeMath.sol";
 
 library ReportUtils {
     // last bytes used to count votes

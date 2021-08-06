@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
-
 pragma abicoder v2;
 
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
+import "zeppelin/token/ERC20/ERC20.sol";
 
-contract LidoMock is ILido {
-    uint256 private _totalStake;
+contract LidoMock is ILido, ERC20 {
     address private owner;
     uint64  private eraId;
 
     event NewStake(uint64, uint256);
 
-    constructor() public {
+    constructor() ERC20("KSM liquid token", "LKSM") {
         owner = msg.sender;
         eraId = 0;
     }
@@ -25,10 +24,6 @@ contract LidoMock is ILido {
         // Charlie Fr4NzY1udSFFLzb2R3qxVQkwz9cZraWkyfH4h3mVVk7BK7P
         stake[1] = 0x90b5ab205c6974c9ea841be688864633dc9ca8a357843eeacf2314649965fe22;
         return stake;
-    }
-
-    function totalSupply() external view returns (uint256) {
-        return _totalStake;
     }
 
     function deposit(uint256 amount) external override{

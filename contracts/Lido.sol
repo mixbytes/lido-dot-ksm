@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
-
 pragma abicoder v2;
 
 import "../interfaces/ILidoOracle.sol";
@@ -11,10 +10,10 @@ import "../interfaces/IvAccounts.sol";
 import "./LKSM.sol";
 import "./Ledger.sol";
 
-import "../node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../node_modules/@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "../node_modules/@openzeppelin/contracts/proxy/Clones.sol";
-import "../node_modules/@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
+import "zeppelin/token/ERC20/IERC20.sol";
+import "zeppelin/utils/math/SafeMath.sol";
+import "zeppelin/proxy/Clones.sol";
+import "zeppelin/utils/structs/EnumerableMap.sol";
 
 contract Lido is ILido, LKSM {
     using SafeMath for uint256;
