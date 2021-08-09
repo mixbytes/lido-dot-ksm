@@ -20,7 +20,7 @@ contract LidoOracle is ILidoOracle, Pausable {
     RelaySpec private relaySpec;
 
     // todo pack it with eraId as uint8
-    uint256  public quorum;
+    uint8  public quorum;
 
     // Lido smart contract
     ILido    private lido;
@@ -33,7 +33,7 @@ contract LidoOracle is ILidoOracle, Pausable {
     uint256 private report_balance_bias;
 
     // todo remove
-    constructor() public {
+    constructor() {
         initialize(address(0), msg.sender, msg.sender, msg.sender);
     }
 
@@ -141,9 +141,9 @@ contract LidoOracle is ILidoOracle, Pausable {
     /**
     * @notice Set the number of exactly the same reports needed to finalize the epoch to `_quorum`
     */
-    function setQuorum(uint256 _quorum) external auth(quorum_manager) {
+    function setQuorum(uint8 _quorum) external auth(quorum_manager) {
         require(0 != _quorum, "QUORUM_WONT_BE_MADE");
-        uint256 oldQuorum = quorum;
+        uint8 oldQuorum = quorum;
         quorum = _quorum;
 
         // If the quorum value lowered, check existing reports whether it is time to push
@@ -167,18 +167,23 @@ contract LidoOracle is ILidoOracle, Pausable {
     /**
      * @notice Accept oracle committee member reports from the relay side
      * @param _eraId Relaychain era
-     * @param staking Relaychain report
+     * @param report Relaychain report
      */
-    function reportRelay(uint64 _eraId, LedgerData calldata staking) external override whenNotPaused {
-        Ledger stash = Ledger(lido.findLedger(staking.stashAccount));
+    function reportRelay(uint64 _eraId, LedgerData calldata report) external override whenNotPaused {
+        Ledger ledger = Ledger(lido.findLedger(report.stashAccount));
 
-        if (_eraId > stash.getEraId() ) {
+        uint64 _ledgerEraId = ledger.getEraId();
+        require( _eraId >= _ledgerEraId, 'FAR_TOO_LATE');
+
+        if (_eraId > _ledgerEraId) {
             require(_eraId >= _getCurrentEraId(relaySpec), "UNEXPECTED_ERA");
         }
         uint256 index = _getMemberId(msg.sender);
         require(index != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
+        require(report.totalBalance>=report.activeBalance && report.stashBalance>=report.totalBalance, 'INCORRECT_REPORT');
+        require(report.controllerAccount == ledger.controllerAccount(), 'INCORRECT_REPORT');
 
-        stash.reportRelay(index, quorum, _eraId, staking);
+        ledger.reportRelay(index, quorum, _eraId, report);
     }
 
     function getStakeAccounts(bytes32 stashAccount) external override view returns(bytes32[] memory){

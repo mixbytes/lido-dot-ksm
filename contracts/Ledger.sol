@@ -4,7 +4,9 @@ pragma abicoder v2;
 
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
-import "zeppelin/utils/math/SafeMath.sol";
+import "../interfaces/IAUX.sol";
+import "../interfaces/IvKSM.sol";
+import "../interfaces/IvAccounts.sol";
 
 library ReportUtils {
     // last bytes used to count votes
@@ -21,10 +23,8 @@ library ReportUtils {
     }
 }
 
-
 abstract contract Consensus {
     using ReportUtils for uint256;
-    using SafeMath for uint256;
 
     event ExpectedEraIdUpdated(uint256 epochId);
     event Completed(uint256);
@@ -47,7 +47,6 @@ abstract contract Consensus {
     * @notice advance era
     */
     function _clearReportingAndAdvanceTo(uint64 _eraId) internal {
-
         currentReportBitmask = 0;
         eraId = _eraId;
 
@@ -89,15 +88,15 @@ abstract contract Consensus {
         return (maxval >= _quorum && repeat == 0, maxind);
     }
 
-    function getWithdrawableBalance(ILidoOracle.LedgerData memory ledger, uint64 _eraId) internal pure returns (uint128){
-        uint256 _balance = 0;
-        for (uint i = 0; i < ledger.unlocking.length; i++) {
-            if (ledger.unlocking[i].era >= _eraId) {
-                _balance = _balance.add(ledger.unlocking[i].balance);
-            }
-        }
-        return uint128(_balance);
-    }
+    //    function getWithdrawableBalance(ILidoOracle.LedgerData memory ledger, uint64 _eraId) internal pure returns (uint128){
+    //        uint256 _balance = 0;
+    //        for (uint i = 0; i < ledger.unlocking.length; i++) {
+    //            if (ledger.unlocking[i].era >= _eraId) {
+    //                _balance = _balance.add(ledger.unlocking[i].balance);
+    //            }
+    //        }
+    //        return uint128(_balance);
+    //    }
 
     /**
      * @notice Accept oracle report data
@@ -136,34 +135,51 @@ abstract contract Consensus {
 }
 
 contract Ledger is Consensus {
-    address private lido;
+    ILido private lido;
     ILidoOracle.StakeStatus internal stakeStatus;
-    uint64  public startEra;
+    uint64  private counter;
+    uint8   private unlockingChunk;
+
+    //uint64  public startEra;
     bytes32 public stashAccount;
     bytes32 public controllerAccount;
-    // free disposal balance
-    uint128 internal freeStashBalance;
-    // bonded balance
+    // stash balance that includes locked (bounded in stake) and free to transfer balance
+    uint128 internal totalStashBalance;
+    // locked, or bonded in stake module, balance
     uint128 internal lockedStashBalance;
+    // part of the bounded balance that can be released as free
+    uint128 internal withdrawableBalace;
     // active part of the bonded balance
     uint128 internal activeBalance;
+
+    // cached stash balance. It's the same as totalStashBalance but it's updated
+    // only when rewards are distributed
+    uint128 internal cachedStashBalance;
+
     // pending transfers
-    uint128 internal tranferUpwardBalance;
-    uint128 internal tranferDownwardBalance;
+    uint128 internal transferUpwardBalance;
+    uint128 internal transferDownwardBalance;
+
+    // AUX call builder precompile
+    IAUX internal constant AUX = IAUX(0x0000000000000000000000000000000000000801);
+    // Virtual accounts precompile
+    IvAccounts internal constant vAccounts = IvAccounts(0x0000000000000000000000000000000000000801);
 
     modifier onlyLido() {
-        require(msg.sender == lido, 'PRIVILEGED_LIDO');
+        require(msg.sender == address(lido), 'PRIVILEGED_LIDO');
         _;
     }
 
     function initialize(bytes32 _stashAccount, bytes32 _controllerAccount, uint64 _startEraId) external {
+        // the owner of the funds
         stashAccount = _stashAccount;
+        // the account which handle bounded part of stash funds
         controllerAccount = _controllerAccount;
         stakeStatus = ILidoOracle.StakeStatus.None;
+        // skip one era before start
+        eraId = _startEraId + 1;
 
-        startEra = _startEraId;
-
-        lido = msg.sender;
+        lido = ILido(msg.sender);
     }
 
     function getEraId() external view returns (uint64){
@@ -179,11 +195,11 @@ contract Ledger is Consensus {
     }
 
     function getTotalBalance() external view returns (uint128){
-        return freeStashBalance + lockedStashBalance;
+        return totalStashBalance;
     }
 
     function getFreeStashBalance() external view returns (uint128){
-        return freeStashBalance;
+        return totalStashBalance - lockedStashBalance;
     }
 
     function getLockedStashBalance() external view returns (uint128){
@@ -198,11 +214,74 @@ contract Ledger is Consensus {
         emit Completed(_eraId);
 
         _clearReportingAndAdvanceTo(_eraId + 1);
+        // wait for downward transfer to complete
+        if (transferDownwardBalance > 0) {
+            uint128 _totalDownwardTransferred = lido.transferredBalance();
 
-        // uint256 prevTotalStake = lido.totalSupply();
-        //TODO!   inform lido
-        //lido.reportRelay(_eraId, report);
-        // uint256 postTotalStake = lido.totalSupply();
+            uint128 reportFreeBalance = (report.stashBalance - report.totalBalance);
+            uint128 ledgerFreeBalance = (totalStashBalance - lockedStashBalance);
+            // ensure that stash total balance has gone down.
+            // note: external inflows into stash balance can break that condition and block subsequent operations
+            if (_totalDownwardTransferred >= transferDownwardBalance && ledgerFreeBalance > reportFreeBalance) {
+                // take transferred funds into buffered balance
+                lido.increaseBufferedBalance(transferDownwardBalance, report.stashAccount);
+
+                // exclude transferred amount from slashes
+                cachedStashBalance -= transferDownwardBalance;
+
+                // clear transfer flag
+                transferDownwardBalance = 0;
+            }
+        }
+
+        // wait for upward transfer to complete
+        if (transferUpwardBalance > 0) {
+            uint128 reportFreeBalance = (report.stashBalance - report.totalBalance);
+            uint128 ledgerFreeBalance = (totalStashBalance - lockedStashBalance);
+
+            if (reportFreeBalance > ledgerFreeBalance) {
+
+                reportFreeBalance -= ledgerFreeBalance;
+                // clear or decrease transfer flag
+                uint128 _amount = (transferUpwardBalance <= reportFreeBalance) ?
+                    transferUpwardBalance : reportFreeBalance;
+
+                transferUpwardBalance -= _amount;
+                // exclude transferred amount from rewards
+                cachedStashBalance+= _amount;
+            }
+        }
+
+        if (transferDownwardBalance == 0 && transferUpwardBalance == 0 && report.stashBalance > cachedStashBalance) {
+            lido.distributeRewards(report.stashBalance - cachedStashBalance, report.stashAccount);
+            // sync cached balance
+            cachedStashBalance = report.stashBalance;
+            counter = 0;
+            // todo start transfer and other action
+        } else {
+            counter += 1;
+        }
+
+        if (transferDownwardBalance == 0) {
+            // update ledger data from oracle report
+            totalStashBalance = report.stashBalance;
+            lockedStashBalance = report.totalBalance;
+            activeBalance = report.activeBalance;
+        }
+        {
+            // update withdrawable part of the unbonding chunks
+            uint128 _withdrawableBalance = 0;
+            for (uint i = 0; i < report.unlocking.length; i++) {
+                if (report.unlocking[i].era >= _eraId) {
+                    _withdrawableBalance += report.unlocking[i].balance;
+                }
+            }
+            withdrawableBalace = _withdrawableBalance;
+            unlockingChunk = uint8(report.unlocking.length);
+
+            // todo None and Blocked status handle
+            stakeStatus = report.stakeStatus;
+        }
 
         // todo add sanity check. ensure |prevTotalStake -  postTotalStake| is in report_balance_bias boundaries
     }
@@ -211,12 +290,12 @@ contract Ledger is Consensus {
         if (_eraId > eraId) {
             _clearReportingAndAdvanceTo(_eraId);
         }
-        require(ILido(lido).getOracle() == msg.sender, 'RESTRICTED_TO_ORACLE');
 
+        require(lido.getOracle() == msg.sender, 'RESTRICTED_TO_ORACLE');
         _reportRelay(index, quorum, staking);
     }
 
-    function softenQuorum(uint256 _quorum) external onlyLido {
+    function softenQuorum(uint8 _quorum) external onlyLido {
         (bool isQuorum, uint256 reportIndex) = _getQuorumReport(_quorum);
         if (isQuorum) {
             _push(

@@ -10,4 +10,3 @@ interface IAUX {
     function buildNominate(bytes32[] memory validators) external view returns (bytes memory);
     function buildChill() external view returns (bytes memory);
 }
-

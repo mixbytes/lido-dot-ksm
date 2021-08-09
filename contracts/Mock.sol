@@ -8,13 +8,16 @@ import "zeppelin/token/ERC20/ERC20.sol";
 
 contract LidoMock is ILido, ERC20 {
     address private owner;
-    uint64  private eraId;
 
     event NewStake(uint64, uint256);
 
     constructor() ERC20("KSM liquid token", "LKSM") {
         owner = msg.sender;
-        eraId = 0;
+    }
+
+    modifier notImplemented(){
+        revert("NOT_IMPLEMENTED");
+        _;
     }
 
     function getStakeAccounts(uint64 _eraId) override public view returns(bytes32[] memory){
@@ -26,40 +29,55 @@ contract LidoMock is ILido, ERC20 {
         return stake;
     }
 
-    function deposit(uint256 amount) external override{
-        revert("NOT_IMPLEMENTED");
+    function deposit(uint256 amount) external override notImplemented{
+
     }
 
-    function redeem(uint256 amount) external override{
-        revert("NOT_IMPLEMENTED");
+    function redeem(uint256 amount) external override notImplemented{
+
     }
 
-    function getUnbonded() external override returns (uint256,uint256){
-        revert("NOT_IMPLEMENTED");
+    function getUnbonded() external override notImplemented returns (uint256,uint256) {
+
     }
 
-    function claimUnbonded() external override{
-        revert("NOT_IMPLEMENTED");
+    function claimUnbonded() external override notImplemented{
+
     }
 
     function getCurrentAPY() external override view returns (uint256){
         return 540;
     }
 
-    function setQuorum(uint256 _quorum) external override {
-        revert("NOT_IMPLEMENTED");
+    function setQuorum(uint8 _quorum) external override notImplemented{
+
     }
 
-    function clearReporting() external override {
-        revert("NOT_IMPLEMENTED");
+    function clearReporting() external override notImplemented{
+
     }
 
-    function findLedger(bytes32 _stashAccount) external view override returns (address){
-        revert("NOT_IMPLEMENTED");
+    function findLedger(bytes32 _stashAccount) external view override notImplemented returns (address){
+
     }
 
     function getOracle() external view override returns (address){
         return address(0);
     }
-}
 
+    function distributeRewards(uint128 _totalRewards, bytes32 _stashAccount) external override {
+        _mint(address(this), _totalRewards);
+    }
+
+    function getBufferedBalance() external view override returns (uint128){
+        return 0;
+    }
+
+    function transferredBalance() external view override returns (uint128){
+        return 0;
+    }
+
+    function increaseBufferedBalance(uint128 amount, bytes32 _stashAccount) external override notImplemented{
+
+    }
+}

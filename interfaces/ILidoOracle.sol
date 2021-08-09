@@ -5,7 +5,7 @@ pragma abicoder v2;
 interface ILidoOracle {
     event MemberAdded(address member);
     event MemberRemoved(address member);
-    event QuorumChanged(uint256 quorum);
+    event QuorumChanged(uint8 quorum);
 
     enum StakeStatus{
         // bonded but not participate in staking
