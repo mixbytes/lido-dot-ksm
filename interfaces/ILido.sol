@@ -22,6 +22,7 @@ interface ILido is IERC20 {
     function clearReporting() external;
     function setQuorum(uint8 _quorum) external;
     function findLedger(bytes32 _stash) external view returns (address);
+    function getMinStashBalance() external view returns (uint128);
     function getBufferedBalance() external view returns (uint128);
     function transferredBalance() external view returns (uint128);
     function increaseBufferedBalance(uint128 amount, bytes32 _stashAccount) external;

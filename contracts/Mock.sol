@@ -61,6 +61,10 @@ contract LidoMock is ILido, ERC20 {
 
     }
 
+    function getMinStashBalance() external view override returns (uint128){
+        return 0;
+    }
+
     function getOracle() external view override returns (address){
         return address(0);
     }

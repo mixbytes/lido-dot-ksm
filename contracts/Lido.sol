@@ -26,12 +26,8 @@ contract Lido is ILido, LKSM {
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
 
-    // existential deposit value for relay-chain currency.
-    // Polkadot has 100 CENTS = 1 DOT where DOT = 10_000_000_000;
-    // Kusama has 1 CENTS. CENTS = KSM / 30_000 where KSM = 1_000_000_000_000
-    // todo move initializations into initialize() functions
-    uint128 internal minStashBalance = 33333334;
-    uint8   internal constant MAX_UNLOCKING_CHUNKS = 32;
+
+
     // 7 + 2 days = 777600 sec for Kusama, 28 + 2 days= 2592000 sec for Polkadot
     uint32  internal unbondingPeriod = 777600;
 
@@ -81,6 +77,11 @@ contract Lido is ILido, LKSM {
 
     // Ledger accounts (start eraId + Ledger contract address)
     EnumerableMap.UintToAddressMap private members;
+    // existential deposit value for relay-chain currency.
+    // Polkadot has 100 CENTS = 1 DOT where DOT = 10_000_000_000;
+    // Kusama has 1 CENTS. CENTS = KSM / 30_000 where KSM = 1_000_000_000_000
+    // todo move initializations into initialize() functions
+    uint128 internal minStashBalance;
 
     constructor() {
         initialize();
@@ -88,6 +89,7 @@ contract Lido is ILido, LKSM {
 
     function initialize() internal {
         feeBP = DEFAULT_FEE;
+        minStashBalance = 33333334;
     }
 
     modifier auth(address manager) {
@@ -122,6 +124,10 @@ contract Lido is ILido, LKSM {
 
     fallback() external payable {
         revert("FORBIDDEN");
+    }
+
+    function getMinStashBalance() external view override returns (uint128){
+        return minStashBalance;
     }
 
     function addStash(bytes32 _stashAccount, bytes32 _controllerAccount) external auth(spec_manager) {
@@ -211,6 +217,8 @@ contract Lido is ILido, LKSM {
 
         fundRaisedBalance += uint128(amount);
         _submit(address(0), amount);
+
+        _assign();
     }
 
     /**
@@ -229,6 +237,7 @@ contract Lido is ILido, LKSM {
         _claim.timeout = uint128(block.timestamp) + unbondingPeriod;
 
         claimOrders[msg.sender] = _claim;
+        _assign();
     }
     /**
     * @dev Return caller unbonding balance and balance that is ready for claim
@@ -332,6 +341,40 @@ contract Lido is ILido, LKSM {
 
         assembly {mstore(_stake, j)}
         return _stake;
+    }
+
+    function _assign() internal {
+        uint128 _balance = uint128(vKSM.balanceOf(address(this)));
+        uint128 _dept = claimDebt;
+
+        uint128 _count = uint128(members.length());
+        uint128 _upwardDefer = 0;
+        uint128 _downwardDefer = 0;
+
+        if (_count > 0 && _balance > _dept) {
+            _upwardDefer = (_balance - _dept) / _count;
+        } else if (_count > 0) {
+            _downwardDefer = (_dept - _balance) / _count;
+        }
+
+        _count = 0;
+        _balance = 0;
+
+        for (uint i = 0; i < members.length(); i++) {
+            (uint256 _key, address ledger) = members.at(i);
+            // todo drain ledgers that have Blocked status and skip that have None
+            //            ILidoOracle.StakeStatus _status = Ledger(ledger).getStatus();
+            //            if(_status == ILidoOracle.StakeStatus.None){
+            //                // none
+            //            }else if (_status == ILidoOracle.StakeStatus.Blocked) {
+            //                _balance += Ledger(ledger).getTotalBalance();
+            //            }else{
+            //                _count += 1;
+            //            }
+
+            Ledger(ledger).deferStake(_upwardDefer, _downwardDefer);
+        }
+
     }
 
     /**
