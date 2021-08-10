@@ -38,7 +38,7 @@ abstract contract Consensus {
     // Current era Id
     uint64  internal eraId;
 
-    function getStakeReport(uint256 index) internal view returns (ILidoOracle.LedgerData memory staking){
+    function getStakeReport(uint256 index) internal view returns (ILidoOracle.LedgerData storage staking){
         assert(index < currentReports.length);
         return currentReports[index];
     }
@@ -55,7 +55,7 @@ abstract contract Consensus {
         emit ExpectedEraIdUpdated(_eraId);
     }
 
-    function _push(uint64 _eraId, ILidoOracle.LedgerData memory report) virtual internal;
+    function _push(uint64 _eraId, ILidoOracle.LedgerData calldata report) virtual internal;
 
     /**
     * @notice Return whether the `_quorum` is reached and the final report can be pushed
@@ -229,7 +229,7 @@ contract Ledger is Consensus {
         _clearReportingAndAdvanceTo(eraId);
     }
 
-    // todo put into a separate library
+    // todo put LedgerData methods into a separate library
     function getTotalUnlocking(ILidoOracle.LedgerData memory report, uint64 _eraId) internal view returns (uint128, uint128){
         uint128 _total = 0;
         uint128 _withdrawble = 0;
@@ -262,25 +262,25 @@ contract Ledger is Consensus {
                 // exclude transferred amount from slashes
                 cachedStashBalance -= transferDownwardBalance;
 
-                // clear transfer flag
+                // Clear transfer flag
                 transferDownwardBalance = 0;
             }
         }
 
-        // wait for the upward transfer to complete
+        // Wait for the upward transfer to complete
         if (transferUpwardBalance > 0) {
-
             uint128 ledgerFreeBalance = (totalStashBalance - lockedStashBalance);
 
             if (reportFreeBalance > ledgerFreeBalance) {
 
                 reportFreeBalance -= ledgerFreeBalance;
-                // clear or decrease transfer flag
+
                 uint128 _amount = (transferUpwardBalance <= reportFreeBalance) ?
                 transferUpwardBalance : reportFreeBalance;
-
+                // Clear the transfer flag or decrease expected transfer value.
+                // Note: Partial transfer cannot take place, but the stash can get funds from other accounts.
                 transferUpwardBalance -= _amount;
-                // exclude transferred amount from rewards
+                // Exclude transferred amount from rewards increasing cached value.
                 cachedStashBalance += _amount;
             }
         }
@@ -288,17 +288,17 @@ contract Ledger is Consensus {
         (uint128 _unlockingBalance, uint128 _withdrawableBalance) = getTotalUnlocking(report, _eraId);
 
         if (transferDownwardBalance == 0 && transferUpwardBalance == 0) {
-            // now all pending transfers have completed and a difference between stash balances
-            // shows us rewards (or looses ).
+            // Now all pending transfers have completed and a difference between stash balances
+            // gives us accrued rewards (or looses ).
             if (report.stashBalance > cachedStashBalance) {
                 lido.distributeRewards(report.stashBalance - cachedStashBalance, report.stashAccount);
 
                 // sync cached balance with reported one
                 cachedStashBalance = report.stashBalance;
             } else {
-                // todo add losses handling. At present just delay the report
+                // todo add losses handling. Now just delay the report
             }
-
+            // todo add sanity check. Ensure |report.stashBalance - cachedStashBalance| is in report_balance_bias boundaries
             counter = 0;
 
             if (deferDownwardBalance > 0) {// rightside balance
@@ -307,9 +307,10 @@ contract Ledger is Consensus {
 
                 bytes[] memory _calls = new bytes[](1);
                 // withdraw_unbonded action and transfers are mutually exclusive,
-                // so choose withdraw_unbonded if it's accessible
+                // so choose withdraw_unbonded if the stash has available.
                 if (_withdrawableBalance > 0) {
-                    // todo thin out withdraw request queue
+                    // todo thin out withdraw request queue using odd-even strategy or any other
+                    // todo add Rebond when free balance is enough to pay off.
                     _calls[0] = AUX.buildWithdraw();
                     vAccounts.relayTransactCall(report.controllerAccount, GARANTOR, 0, _calls);
                 } else if (_defer > 0) {
@@ -328,11 +329,16 @@ contract Ledger is Consensus {
                     );
                     vAccounts.relayTransactCall(report.controllerAccount, GARANTOR, 0, _calls);
                 } else {
-                    // todo if unlocking chunks length exceeds MAX_UNLOCKING_CHUNKS rebond last chunk and unbond again
+                    // todo if unlocking chunk's length exceeds MAX_UNLOCKING_CHUNKS, rebond last chunk and unbond again
 
-                    // todo bond_extra, if transferDownwardBalance eq zero and there are some free balance
+                    // todo bond_extra, if transferDownwardBalance eq zero and the stash has some free balance
                 }
             } else if (deferUpwardBalance >= 0) {// leftside balance
+                // It should not have happened. Ignore this case.
+                if (stakeStatus == ILidoOracle.StakeStatus.Blocked) {
+                    return;
+                }
+
                 uint128 _defer = deferUpwardBalance;
                 bytes[] memory _calls = new bytes[](1);
                 // bond_extra and transfer are mutually exclusive, so if
@@ -342,16 +348,24 @@ contract Ledger is Consensus {
                     vKSM.relayTransferTo(report.stashAccount, _defer);
                     transferUpwardBalance += _defer;
                     _defer = 0;
+
                 } else {
                     // prefer stake over transfer
 
-                    _calls[0] = AUX.buildBondExtra(reportFreeBalance);
-                    vAccounts.relayTransactCall(report.stashAccount, GARANTOR, 0, _calls);
+                    if(report.stakeStatus == ILidoOracle.StakeStatus.Nominator ){
+                        // todo. Handle Idle, Nominator and Validator statuses separately
+                        // because it makes no sense to bond for Validator,
+                        // and bonding extra funds for Idle doesn't give us a profit.
+                        // Idle status used to withdraw funds as a rule.
+                        // We could bond funds for None status, but we leave it for {nominator} method.
+                        _calls[0] = AUX.buildBondExtra(reportFreeBalance);
+                        vAccounts.relayTransactCall(report.stashAccount, GARANTOR, 0, _calls);
+                    }
                 }
 
                 if (_unlockingBalance > 0) {
-                    // rebond unlocking tokens, if any.
-                    // Thus, we flush limited unbonding queue and increase active balance.
+                    // Always rebond unlocking tokens, if any.
+                    // Thus, we flush a quite limited unbonding queue and increase active balance.
                     _calls[0] = AUX.buildReBond(_unlockingBalance);
                     vAccounts.relayTransactCall(report.controllerAccount, GARANTOR, 0, _calls);
                 }
@@ -377,7 +391,7 @@ contract Ledger is Consensus {
                 stakeStatus = report.stakeStatus;
             }
         }
-        // todo add sanity check. ensure |prevTotalStake -  postTotalStake| is in report_balance_bias boundaries
+
     }
 
     function reportRelay(uint256 index, uint256 quorum, uint64 _eraId, ILidoOracle.LedgerData calldata staking) external {
@@ -392,8 +406,9 @@ contract Ledger is Consensus {
     function softenQuorum(uint8 _quorum) external onlyLido {
         (bool isQuorum, uint256 reportIndex) = _getQuorumReport(_quorum);
         if (isQuorum) {
+            ILidoOracle.LedgerData memory report = getStakeReport(reportIndex);
             _push(
-                eraId, getStakeReport(reportIndex)
+                eraId, report
             );
         }
     }

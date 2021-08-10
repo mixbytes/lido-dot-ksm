@@ -213,11 +213,12 @@ contract Lido is ILido, LKSM {
     */
     function deposit(uint256 amount) external override whenNotPaused {
         vKSM.transferFrom(msg.sender, address(this), amount);
-        bufferedBalance += uint128(amount);
 
-        fundRaisedBalance += uint128(amount);
+
         _submit(address(0), amount);
 
+        fundRaisedBalance += uint128(amount);
+        bufferedBalance += uint128(amount);
         _assign();
     }
 
@@ -291,7 +292,7 @@ contract Lido is ILido, LKSM {
     */
     function findLedger(bytes32 _stashAccount) external view override returns (address) {
         (bool _found, address ledger) = members.tryGet(uint256(_stashAccount));
-        require(_found, 'UNKNOWN_STASH_ACCOUNT');
+        //require(_found, 'UNKNOWN_STASH_ACCOUNT');
         return ledger;
     }
 
@@ -389,8 +390,8 @@ contract Lido is ILido, LKSM {
 
         uint256 sharesAmount = getSharesByPooledKSM(_deposit);
         if (sharesAmount == 0) {
-            // totalControlledEther is 0: either the first-ever deposit or complete slashing
-            // assume that shares correspond to Ether 1-to-1
+            // totalPooledKSM is 0: either the first-ever deposit or complete slashing
+            // assume that shares correspond to KSM as 1-to-1
             sharesAmount = _deposit;
         }
 

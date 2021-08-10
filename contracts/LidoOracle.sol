@@ -76,7 +76,7 @@ contract LidoOracle is ILidoOracle, Pausable {
         _;
     }
 
-    function setLido(ILido _lido) external auth(spec_manager){
+    function setLido(ILido _lido) external auth(spec_manager) {
         lido = _lido;
     }
 
@@ -148,7 +148,7 @@ contract LidoOracle is ILidoOracle, Pausable {
 
         // If the quorum value lowered, check existing reports whether it is time to push
         if (oldQuorum > _quorum) {
-            lido.setQuorum( _quorum );
+            lido.setQuorum(_quorum);
         }
         emit QuorumChanged(_quorum);
     }
@@ -170,23 +170,30 @@ contract LidoOracle is ILidoOracle, Pausable {
      * @param report Relaychain report
      */
     function reportRelay(uint64 _eraId, LedgerData calldata report) external override whenNotPaused {
+        require(
+            report.unlocking.length < type(uint8).max
+            && report.totalBalance >= report.activeBalance
+            && report.stashBalance >= report.totalBalance,
+            'INCORRECT_REPORT'
+        );
+
         Ledger ledger = Ledger(lido.findLedger(report.stashAccount));
 
         uint64 _ledgerEraId = ledger.getEraId();
-        require( _eraId >= _ledgerEraId, 'FAR_TOO_LATE');
+        require(_eraId >= _ledgerEraId, 'FAR_TOO_LATE');
 
         if (_eraId > _ledgerEraId) {
             require(_eraId >= _getCurrentEraId(relaySpec), "UNEXPECTED_ERA");
         }
         uint256 index = _getMemberId(msg.sender);
         require(index != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
-        require(report.totalBalance>=report.activeBalance && report.stashBalance>=report.totalBalance, 'INCORRECT_REPORT');
+
         require(report.controllerAccount == ledger.controllerAccount(), 'INCORRECT_REPORT');
 
         ledger.reportRelay(index, quorum, _eraId, report);
     }
 
-    function getStakeAccounts(bytes32 stashAccount) external override view returns(bytes32[] memory){
+    function getStakeAccounts(bytes32 stashAccount) external override view returns (bytes32[] memory){
         Ledger stash = Ledger(lido.findLedger(stashAccount));
         return lido.getStakeAccounts(stash.getEraId());
     }

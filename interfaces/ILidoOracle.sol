@@ -34,11 +34,14 @@ interface ILidoOracle {
         bytes32 stashAccount;
         bytes32 controllerAccount;
         StakeStatus stakeStatus;
-
+        // active part of stash balance
         uint128 activeBalance;
+        // total amount locked
         uint128 totalBalance;
         UnlockingChunk[] unlocking;
         uint32[] claimedRewards;
+        // stash account balance. It includes locked (totalBalance) balance assigned
+        // to a controller.
         uint128 stashBalance;
     }
 
@@ -48,6 +51,8 @@ interface ILidoOracle {
      * @param staking relay chain stash account balances and other properties
      */
     function reportRelay(uint64 _eraId, LedgerData calldata staking) external;
-    function getStakeAccounts(bytes32 stashAccount) external view returns(bytes32[] memory);
+
+    function getStakeAccounts(bytes32 stashAccount) external view returns (bytes32[] memory);
+
     function getCurrentEraId() external view returns (uint64);
 }
