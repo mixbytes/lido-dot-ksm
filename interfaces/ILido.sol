@@ -13,19 +13,22 @@ interface ILido is IERC20 {
     // Fee was updated
     event FeeSet(uint16 feeBasisPoints);
 
+    // Test todo remove
+    // event Test(bytes32 stash, address ledger);
+
     function distributeRewards(uint128 _totalRewards, bytes32 _stashAccount) external;
     // Return oracle address assigned to lido
     function getOracle() external view returns (address);
     // Return the list of Polkadot/Kusama STASH accounts used for staking
-    function getStakeAccounts(uint64 eraId) external view returns(bytes32[] memory);
+    function getStakeAccounts(address oracle) external view returns (Stash[] memory);
 
     function clearReporting() external;
     function setQuorum(uint8 _quorum) external;
     function findLedger(bytes32 _stash) external view returns (address);
     function getMinStashBalance() external view returns (uint128);
-    function getBufferedBalance() external view returns (uint128);
-    function transferredBalance() external view returns (uint128);
-    function increaseBufferedBalance(uint128 amount, bytes32 _stashAccount) external;
+    //function getBufferedBalance() external view returns (uint128);
+    //function transferredBalance() external view returns (uint128);
+    //function increaseBufferedBalance(uint128 amount, bytes32 _stashAccount) external;
 
     // Return average APY
     function getCurrentAPY() external view returns (uint256);
@@ -34,7 +37,14 @@ interface ILido is IERC20 {
     // Redeem LKSM in exchange for vKSM. Put LKSM in unbonding queue
     function redeem(uint256 amount) external;
     // Return the number of LKSM as (total LKSM awaiting unbonding period, available for claim )
-    function getUnbonded() external returns (uint256, uint256);
+    function getUnbonded(address holder) external returns (uint256, uint256);
     // Claim unbonded LKSM . Top up the caller vKSM balance burning LKSM
     function claimUnbonded() external;
+
+
+
+    struct Stash {
+        bytes32 stashAccount;
+        uint64  eraId;
+    }
 }

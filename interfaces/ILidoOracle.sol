@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
+import "./ILido.sol";
 interface ILidoOracle {
     event MemberAdded(address member);
     event MemberRemoved(address member);
@@ -16,7 +17,7 @@ interface ILidoOracle {
         Validator,
         // not bonded not participate in staking
         None,
-        // marker for exclusion from staking
+        // marker. It's used for exclusion from staking
         Blocked
     }
 
@@ -36,14 +37,17 @@ interface ILidoOracle {
         StakeStatus stakeStatus;
         // active part of stash balance
         uint128 activeBalance;
-        // total amount locked
+        // locked for stake stash balance.
         uint128 totalBalance;
+        // totalBalance = activeBalance + sum(unlocked.balance)
         UnlockingChunk[] unlocking;
         uint32[] claimedRewards;
         // stash account balance. It includes locked (totalBalance) balance assigned
         // to a controller.
         uint128 stashBalance;
     }
+
+
 
     /**
      * @notice Accept oracle committee member reports from the relay side
@@ -52,7 +56,7 @@ interface ILidoOracle {
      */
     function reportRelay(uint64 _eraId, LedgerData calldata staking) external;
 
-    function getStakeAccounts(bytes32 stashAccount) external view returns (bytes32[] memory);
+    function getStakeAccounts(address oracle) external view returns (ILido.Stash[] memory);
 
     function getCurrentEraId() external view returns (uint64);
 }

@@ -55,6 +55,7 @@ contract LidoOracle is ILidoOracle, Pausable {
         lido = ILido(_lido);
 
         _setRelaySpec(0, 0);
+        quorum = 1;
     }
 
     /**
@@ -185,16 +186,16 @@ contract LidoOracle is ILidoOracle, Pausable {
         if (_eraId > _ledgerEraId) {
             require(_eraId >= _getCurrentEraId(relaySpec), "UNEXPECTED_ERA");
         }
+
         uint256 index = _getMemberId(msg.sender);
         require(index != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
 
-        require(report.controllerAccount == ledger.controllerAccount(), 'INCORRECT_REPORT');
+        require(report.controllerAccount == ledger.controllerAccount(), 'UNKNOWN_CONTROLLER');
 
         ledger.reportRelay(index, quorum, _eraId, report);
     }
 
-    function getStakeAccounts(bytes32 stashAccount) external override view returns (bytes32[] memory){
-        Ledger stash = Ledger(lido.findLedger(stashAccount));
-        return lido.getStakeAccounts(stash.getEraId());
+    function getStakeAccounts(address oracle) external override view returns (ILido.Stash[] memory){
+        return lido.getStakeAccounts(oracle);
     }
 }

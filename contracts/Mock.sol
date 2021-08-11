@@ -20,12 +20,12 @@ contract LidoMock is ILido, ERC20 {
         _;
     }
 
-    function getStakeAccounts(uint64 _eraId) override public view returns(bytes32[] memory){
-        bytes32[] memory stake = new bytes32[](2);
+    function getStakeAccounts(address oracle) override public view returns(ILido.Stash[] memory){
+        ILido.Stash[] memory stake = new ILido.Stash[](2);
         // Ferdie DE14BzQ1bDXWPKeLoAqdLAm1GpyAWaWF1knF74cEZeomTBM
-        stake[0] = 0x1cbd2d43530a44705ad088af313e18f80b53ef16b36177cd4b77b846f2a5f07c;
+        stake[0].stashAccount = 0x1cbd2d43530a44705ad088af313e18f80b53ef16b36177cd4b77b846f2a5f07c;
         // Charlie Fr4NzY1udSFFLzb2R3qxVQkwz9cZraWkyfH4h3mVVk7BK7P
-        stake[1] = 0x90b5ab205c6974c9ea841be688864633dc9ca8a357843eeacf2314649965fe22;
+        stake[1].stashAccount = 0x90b5ab205c6974c9ea841be688864633dc9ca8a357843eeacf2314649965fe22;
         return stake;
     }
 
@@ -82,6 +82,10 @@ contract LidoMock is ILido, ERC20 {
     }
 
     function increaseBufferedBalance(uint128 amount, bytes32 _stashAccount) external override notImplemented{
+
+    }
+
+    function _testLedger(bytes32 _stashAccount) override external{
 
     }
 }

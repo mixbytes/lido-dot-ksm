@@ -1,0 +1,2 @@
+substrate-interface==0.13.12
+brownie==0.5
