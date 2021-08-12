@@ -37,8 +37,8 @@ contract LidoMock is ILido, ERC20 {
 
     }
 
-    function getUnbonded() external override notImplemented returns (uint256,uint256) {
-
+    function getUnbonded(address holder) external override returns (uint256,uint256) {
+        return (0,0);
     }
 
     function claimUnbonded() external override notImplemented{
@@ -71,21 +71,5 @@ contract LidoMock is ILido, ERC20 {
 
     function distributeRewards(uint128 _totalRewards, bytes32 _stashAccount) external override {
         _mint(address(this), _totalRewards);
-    }
-
-    function getBufferedBalance() external view override returns (uint128){
-        return 0;
-    }
-
-    function transferredBalance() external view override returns (uint128){
-        return 0;
-    }
-
-    function increaseBufferedBalance(uint128 amount, bytes32 _stashAccount) external override notImplemented{
-
-    }
-
-    function _testLedger(bytes32 _stashAccount) override external{
-
     }
 }

@@ -4,8 +4,8 @@ from substrateinterface import Keypair
 from substrateinterface import SubstrateInterface
 
 # set you own proxy accounts
-STASH2='FckKSg4QxKQ8FDDo9XjAr2EN1ywPJro7XVLS1L6aDQZVQR9'
-STASH1='Ggoi56efpR5oeTsLCE9bCkhZB4AqpP8aEGMUS8FxuEjaPVk'
+STASH2='H8ST31GnWD6AaGchQMDnqvMgZz6Nb9HGREA1R8XbRH3dkW5'
+STASH1='HGcoj2TGFpVHjtbkaXfn9Zen4SB3cY7t7Pez7s72AYNRLbo'
 
 # charlie
 STASH10='Fr4NzY1udSFFLzb2R3qxVQkwz9cZraWkyfH4h3mVVk7BK7P'
@@ -30,8 +30,8 @@ x = interface.XcmPrecompile('0x0000000000000000000000000000000000000801')
 vKSM = interface.IvKSM('0x0000000000000000000000000000000000000801')
 
 # set after deployment
-lido = Lido.at('0x263E845eD8536782b1FFDe3908ad36d4d023b139')
-lidoOracle = LidoOracle.at('0xDa98d56F3357422ba9397F102E8C311Fd3fE004A')
+lido = None #Lido.at('0x263E845eD8536782b1FFDe3908ad36d4d023b139')
+lidoOracle = None # LidoOracle.at('0xDa98d56F3357422ba9397F102E8C311Fd3fE004A')
 
 UNIT = 1_000_000_000_000
 
@@ -54,7 +54,6 @@ def config(_lido=None):
     
     _lido = _lido or lido
 
-    
     ledger = Ledger.deploy({'from': alith, 'required_confs': 2})
     
     print(f"set ledger {ledger.address} for lido {_lido.address}" )
@@ -226,10 +225,12 @@ def createReport(url, stashAddress):
             free
         ]        
           
-    
+def nominate():
+    lido.nominate(stash, [ss58decode(item) for item in VALIDATORS], {'from': alith})
+
 def report():    
     report = createReport(RELAY_URL, STASH1)
-    
     print(report)
     
-    lidoOracle.reportRelay( report[0], report[1:], {'from': baltathar} ) 
+    t= lidoOracle.reportRelay( report[0], report[1:], {'from': baltathar} ) 
+    print( t.info() )

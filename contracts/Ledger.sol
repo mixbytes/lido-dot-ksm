@@ -65,6 +65,8 @@ abstract contract Consensus {
     event DownwardComplete(uint128);
     event UpwardComplete(uint128);
 
+    event Sentinel(uint256 index, uint256 amount);
+
     // Current era report  hashes
     uint256[] internal currentReportVariants;
     // Current era reports
@@ -124,16 +126,6 @@ abstract contract Consensus {
         return (maxval >= _quorum && repeat == 0, maxind);
     }
 
-    //    function getWithdrawableBalance(ILidoOracle.LedgerData memory ledger, uint64 _eraId) internal pure returns (uint128){
-    //        uint256 _balance = 0;
-    //        for (uint i = 0; i < ledger.unlocking.length; i++) {
-    //            if (ledger.unlocking[i].era >= _eraId) {
-    //                _balance = _balance.add(ledger.unlocking[i].balance);
-    //            }
-    //        }
-    //        return uint128(_balance);
-    //    }
-
     /**
      * @notice Accept oracle report data
      * @param index oracle member index
@@ -176,7 +168,7 @@ contract Ledger is Consensus {
 
     ILido private lido;
     ILidoOracle.StakeStatus internal stakeStatus;
-    // todo take it into account when lido distributes stake payments
+    // todo take it into account
     uint64  private counter;
     // The total number of unlocking chunks
     uint8   private unlockingChunk;
@@ -216,7 +208,7 @@ contract Ledger is Consensus {
     bytes32 internal constant GARANTOR = 0x00;
 
     modifier onlyLido() {
-        require(msg.sender == address(lido), 'PRIVILEGED_LIDO');
+        require(msg.sender == address(lido), 'NOT_LIDO');
         _;
     }
 
@@ -311,10 +303,10 @@ contract Ledger is Consensus {
         if (transferDownwardBalance > 0) {
             uint128 _totalDownwardTransferred = uint128(vKSM.balanceOf(address(this)));
 
-            uint128 ledgerFreeBalance = (totalStashBalance - lockedStashBalance);
+            // todo remove uint128 ledgerFreeBalance = (totalStashBalance - lockedStashBalance);
             // ensure that stash total balance has gone down.
             // note: external inflows into stash balance can break that condition and block subsequent operations
-            if (_totalDownwardTransferred >= transferDownwardBalance && ledgerFreeBalance > reportFreeBalance) {
+            if (_totalDownwardTransferred >= transferDownwardBalance ) {
                 // take transferred funds into buffered balance
                 vKSM.transfer(address(lido), transferDownwardBalance);
                 //lido.increaseBufferedBalance(transferDownwardBalance, report.stashAccount);
@@ -368,7 +360,7 @@ contract Ledger is Consensus {
             if (deferDownwardBalance > 0) {// rightside balance
                 // to downward transfer
                 uint128 _defer = (deferDownwardBalance <= reportFreeBalance) ? deferDownwardBalance : reportFreeBalance;
-
+                emit Sentinel(0, _defer);
                 bytes[] memory _calls = new bytes[](1);
                 // withdraw_unbonded action and transfers are mutually exclusive,
                 // so choose withdraw_unbonded if the stash has available.
@@ -389,18 +381,17 @@ contract Ledger is Consensus {
 
                     emit DownwardTransfer(_defer);
                 }
+
                 // to unlock
                 _defer = deferDownwardBalance - _defer;
                 // to unbond
                 _defer -= (_defer <= _unlockingBalance) ? _defer : _unlockingBalance;
-
                 // unbond extra
-                if (_defer > 0 && _defer >= report.activeBalance && report.unlocking.length < MAX_UNLOCKING_CHUNKS) {
-                    //                    _calls[0] = AUX.buildUnBond(
-                    //                        ((report.activeBalance - _defer) < lido.getMinStashBalance()) ? report.activeBalance : _defer
-                    //                    );
-                    //                    vAccounts.relayTransactCall(report.controllerAccount, GARANTOR, 0, _calls);
-
+                if (_defer > 0 && _defer <= report.activeBalance && report.unlocking.length < MAX_UNLOCKING_CHUNKS) {
+                    _calls[0] = AUX.buildUnBond(
+                        ((report.activeBalance - _defer) < lido.getMinStashBalance()) ? report.activeBalance : _defer
+                    );
+                    vAccounts.relayTransactCall(report.controllerAccount, GARANTOR, 0, _calls);
                     emit Unbond(_defer);
                 } else {
                     // todo if unlocking chunk's length exceeds MAX_UNLOCKING_CHUNKS, rebond last chunk and unbond again
@@ -463,7 +454,6 @@ contract Ledger is Consensus {
             // update ledger data from oracle report
             totalStashBalance = report.stashBalance;
             lockedStashBalance = report.totalBalance;
-            //activeBalance = report.activeBalance;
         }
         {
             // update withdrawableBalance  adding up all unlocked chunks whose era's greater than current
@@ -482,9 +472,9 @@ contract Ledger is Consensus {
         if (_eraId > eraId) {
             _clearReportingAndAdvanceTo(_eraId);
         }
-        //require(stashAccount == staking.stashAccount, 'STASH_ACCOUNT_MISMATCH');
-        // todo restore before release
-        //require(lido.getOracle() == msg.sender, 'RESTRICTED_TO_ORACLE');
+        require(stashAccount == staking.stashAccount, 'STASH_ACCOUNT_MISMATCH');
+
+        require(lido.getOracle() == msg.sender, 'RESTRICTED_TO_ORACLE');
         _reportRelay(index, quorum, staking);
     }
 

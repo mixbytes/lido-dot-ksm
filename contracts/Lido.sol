@@ -49,7 +49,7 @@ contract Lido is ILido, LKSM {
     uint128 private accruedRewardBalance;
     uint128 private lossBalance;
     uint128 private fundRaisedBalance;
-    uint128 private claimDebt;
+    // uint128 private claimDebt;
 
     struct Claim {
         uint128 balance;
@@ -59,7 +59,7 @@ contract Lido is ILido, LKSM {
     mapping(address => Claim) private claimOrders;
     // vKSM precompile
     IvKSM internal constant vKSM = IvKSM(0x0000000000000000000000000000000000000801);
-    // AUX call builder precompile
+    // AUX relay call builder precompile
     IAUX internal constant AUX = IAUX(0x0000000000000000000000000000000000000801);
     // Virtual accounts precompile
     IvAccounts internal constant vAccounts = IvAccounts(0x0000000000000000000000000000000000000801);
@@ -95,7 +95,7 @@ contract Lido is ILido, LKSM {
     modifier isLedger(bytes32 _stashAccount) {
         (bool _found, address ledger) = _findStash(_stashAccount);
         // todo uncomment
-        //require(_found && ledger == msg.sender, 'NOT_LEDGER');
+        require(_found && ledger == msg.sender, 'NOT_LEDGER');
         _;
     }
 
@@ -125,9 +125,8 @@ contract Lido is ILido, LKSM {
         require(ledgerMaster != address(0), 'UNSPECIFIED_LEDGER');
         require(oracle != address(0), 'NO_ORACLE');
         require(members.length() < MAX_STASH_ACCOUNTS, 'STASH_POOL_LIMIT');
-        // we don't have to worry about that, because
+        // don't care about that, because clone method reverts if stash ledger already exists
         // require(_findStash(_stashAccount) == MEMBER_NOT_FOUND, 'STASH_ALREADY_EXISTS');
-        // added stash will be used after the next era
 
         address ledger = ledgerMaster.cloneDeterministic(_stashAccount);
         // skip one era before commissioning
@@ -165,15 +164,6 @@ contract Lido is ILido, LKSM {
         }
     }
 
-    //    function reportRelay(address stash,
-    //        uint256 index,
-    //        uint256 _quorum,
-    //        uint64 _eraId,
-    //        ILidoOracle.LedgerData calldata staking
-    //    ) external override onlyOracle {
-    //        Ledger(stash).reportRelay(index, _eraId, _quorum, staking);
-    //    }
-
     /**
     * @dev invoke pallet_stake::nominate on the relay side
     */
@@ -194,9 +184,6 @@ contract Lido is ILido, LKSM {
             require(Ledger(ledger).getLockedStashBalance() >= minStashBalance, 'STASH_INSUFFICIENT_BALANCE');
             call[0] = AUX.buildNominate(validators);
         }
-        // todo pore over that
-        //members[_index].pendingNominate = true;
-
         vAccounts.relayTransactCall(_stashAccount, GARANTOR, DEFAULT_FEE, call);
     }
 
@@ -204,6 +191,7 @@ contract Lido is ILido, LKSM {
     * @dev Deposit LKSM returning LKSM
     */
     function deposit(uint256 amount) external override whenNotPaused {
+        assert( amount< type(uint128).max );
         vKSM.transferFrom(msg.sender, address(this), amount);
 
         _submit(address(0), amount);
@@ -211,7 +199,7 @@ contract Lido is ILido, LKSM {
         uint128 _amount = uint128(amount);
 
         fundRaisedBalance += _amount;
-        //bufferedBalance += _amount;
+
         _increaseDefer(_amount);
     }
 
@@ -219,16 +207,16 @@ contract Lido is ILido, LKSM {
     * @dev Redeem LKSM in exchange for vKSM. LKSM will be locked until unbonded term ends
     */
     function redeem(uint256 amount) external override whenNotPaused {
-        uint256 _shares = _sharesOf(msg.sender);
-        uint256 pooledKSM = getPooledKSMByShares(_shares);
-        require(amount <= pooledKSM, 'REDEEM_AMOUNT_EXCEEDS_BALANCE');
+        assert( amount< type(uint128).max );
+        uint256 _shares = getSharesByPooledKSM(amount);
+        require(_shares <= _sharesOf(msg.sender), 'REDEEM_AMOUNT_EXCEEDS_BALANCE');
 
         _transferShares(msg.sender, address(this), _shares);
 
         Claim memory _claim = claimOrders[msg.sender];
         uint128 _amount = uint128(amount);
         _claim.balance += _amount;
-        claimDebt += _amount;
+       // claimDebt += _amount;
         _claim.timeout = uint128(block.timestamp) + unbondingPeriod;
 
         claimOrders[msg.sender] = _claim;
@@ -261,25 +249,12 @@ contract Lido is ILido, LKSM {
             vKSM.transfer(msg.sender, amount);
 
             _burnShares(address(this), sharesAmount);
-            claimDebt -= amount;
+            // claimDebt -= amount;
 
-            //bufferedBalance -= amount;
             accruedRewardBalance -= amount;
             fundRaisedBalance -= amount;
         }
     }
-
-    //    function getBufferedBalance() external view override returns (uint128){
-    //        return bufferedBalance;
-    //    }
-
-    //    function transferredBalance() external view override returns (uint128){
-    //        return uint128(vKSM.balanceOf(address(this)) - uint256(bufferedBalance));
-    //    }
-    //
-    //    function increaseBufferedBalance(uint128 amount, bytes32 _stashAccount) external override isLedger(_stashAccount) {
-    //        bufferedBalance += amount;
-    //    }
 
     /**
     * @dev Find ledger contract address associated with the stash account
@@ -294,7 +269,7 @@ contract Lido is ILido, LKSM {
     * @dev Find stash account and return its index in the register
     */
     function _findStash(bytes32 _stashAccount) internal view returns (bool, address){
-        // todo compare with Clones::predictDeterministicAddress + isContract.
+        // todo compare performance with Clones::predictDeterministicAddress + isContract.
         return members.tryGet(uint256(_stashAccount));
     }
 
@@ -371,39 +346,6 @@ contract Lido is ILido, LKSM {
         }
     }
 
-    //    function _assign() internal {
-    //        uint128 _balance = uint128(vKSM.balanceOf(address(this)));
-    //        uint128 _dept = claimDebt;
-    //
-    //        uint128 _count = uint128(members.length());
-    //        uint128 _upwardDefer = 0;
-    //        uint128 _downwardDefer = 0;
-    //
-    //        if (_count > 0 && _balance > _dept) {
-    //            _upwardDefer = (_balance - _dept) / _count;
-    //        } else if (_count > 0) {
-    //            _downwardDefer = (_dept - _balance) / _count;
-    //        }
-    //
-    //        _count = 0;
-    //        _balance = 0;
-    //
-    //        for (uint i = 0; i < members.length(); i++) {
-    //            (uint256 _key, address ledger) = members.at(i);
-    //
-    //            //            ILidoOracle.StakeStatus _status = Ledger(ledger).getStatus();
-    //            //            if(_status == ILidoOracle.StakeStatus.None){
-    //            //                // none
-    //            //            }else if (_status == ILidoOracle.StakeStatus.Blocked) {
-    //            //                _balance += Ledger(ledger).getTotalBalance();
-    //            //            }else{
-    //            //                _count += 1;
-    //            //            }
-    //            vKSM.approve(ledger, _upwardDefer);
-    //            Ledger(ledger).deferStake(_upwardDefer, _downwardDefer);
-    //        }
-    //    }
-
     /**
     * @dev Process user deposit, mints LKSM and increase the pool buffer
     * @param _referral address of referral.
@@ -448,18 +390,7 @@ contract Lido is ILido, LKSM {
         return 540;
     }
 
-    //    function _getStashBalance() internal view returns (uint256){
-    //        uint256 total = 0;
-    //        for (uint i = 0; i < members.length(); i++) {
-    //            (uint256 key, address ledger) = members.at(i);
-    //            total += Ledger(ledger).getTotalBalance();
-    //        }
-    //        return total;
-    //    }
-
     function _getTotalPooledKSM() internal view override returns (uint256) {
-        // todo cache _getStashBalance value
-        //return bufferedBalance.add(_getStashBalance());
         return fundRaisedBalance + accruedRewardBalance - lossBalance;
     }
 
