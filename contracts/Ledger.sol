@@ -57,6 +57,7 @@ abstract contract Consensus {
     event UpwardTransfer(uint128);
     event DownwardTransfer(uint128);
     event Rewards(uint128);
+    event Slash(uint128);
     event BondExtra(uint128);
     event Unbond(uint128);
     event Rebond(uint128);
@@ -164,46 +165,33 @@ abstract contract Consensus {
 
 contract Ledger is Consensus {
     using LedgerUtils for ILidoOracle.LedgerData;
-    uint8   internal constant MAX_UNLOCKING_CHUNKS = 32;
 
     ILido private lido;
     ILidoOracle.StakeStatus internal stakeStatus;
-    // todo take it into account
-    uint64  private counter;
-    // The total number of unlocking chunks
-    uint8   private unlockingChunk;
 
     bytes32 public stashAccount;
     bytes32 public controllerAccount;
     // Stash balance that includes locked (bounded in stake) and free to transfer balance
-    uint128 internal totalStashBalance;
+    uint128 public totalStashBalance;
     // Locked, or bonded in stake module, balance
-    uint128 internal lockedStashBalance;
-    // It's part of the bounded balance that can be released as free. todo remove from the contract
-    // uint128 internal withdrawableBalance;
-    // Active part of the bonded balance. todo remove from the contract
-    // uint128 internal activeBalance;
+    uint128 public lockedStashBalance;
 
-    // Cached stash balance. It's the same as totalStashBalance but it's updated
-    // only when rewards are distributed
-    uint128 internal cachedStashBalance;
+    // Cached stash balance. Need to calculate rewards between successfull up/down transfers
+    uint128 public cachedStashBalance;
 
     // Pending transfers
     uint128 internal transferUpwardBalance;
     uint128 internal transferDownwardBalance;
 
-    // Assign next transfer, withdraw, bond_extra or unbond.
-    // If nonzero, it's extra balance that can be sent to parachain and deposited into stake
-    uint128 internal deferUpwardBalance;
-    // if nonzero it's demand to take back from stake
-    uint128 internal deferDownwardBalance;
+    // total users deposits + rewards - slashes (so just actual target stake amount)
+    uint128 public targetStashStake;
 
     // vKSM precompile
-    IvKSM internal constant vKSM = IvKSM(0x0000000000000000000000000000000000000801);
+    IvKSM internal vKSM;
     // AUX call builder precompile
-    IAUX internal constant AUX = IAUX(0x0000000000000000000000000000000000000801);
+    IAUX internal AUX;
     // Virtual accounts precompile
-    IvAccounts internal constant vAccounts = IvAccounts(0x0000000000000000000000000000000000000801);
+    IvAccounts internal vAccounts;
     // Who pay off relay chain transaction fees
     bytes32 internal constant GARANTOR = 0x00;
 
@@ -212,7 +200,14 @@ contract Ledger is Consensus {
         _;
     }
 
-    function initialize(bytes32 _stashAccount, bytes32 _controllerAccount, uint64 _startEraId) external {
+    function initialize(
+        bytes32 _stashAccount,
+        bytes32 _controllerAccount,
+        uint64 _startEraId,
+        address _vKSM,
+        address _AUX,
+        address _vAccounts
+    ) external {
         // The owner of the funds
         stashAccount = _stashAccount;
         // The account which handles bounded part of stash funds (unbond, rebond, withdraw, nominate)
@@ -222,42 +217,22 @@ contract Ledger is Consensus {
         eraId = _startEraId + 1;
 
         lido = ILido(msg.sender);
+
+        vKSM = IvKSM(_vKSM);
+        AUX = IAUX(_AUX);
+        vAccounts = IvAccounts(_vAccounts);
     }
 
     function getEraId() external view returns (uint64){
         return eraId;
     }
 
-    function deferStake(uint128 _upwardAmount, uint128 _downwardAmount) external onlyLido {
-        require(_upwardAmount == 0 || _downwardAmount == 0);
-        deferUpwardBalance = _upwardAmount;
-        deferDownwardBalance = _downwardAmount;
+    function stake(uint128 _amount) external onlyLido {
+        targetStashStake += _amount;
     }
 
-    function increaseDefer(uint128 _amount) external onlyLido {
-        _increaseDefer(_amount);
-    }
-
-    function _increaseDefer(uint128 _amount) internal {
-        if (deferDownwardBalance >= _amount) {
-            deferDownwardBalance -= _amount;
-        } else {
-            deferUpwardBalance += (_amount - deferDownwardBalance);
-            deferDownwardBalance = 0;
-        }
-    }
-
-    function decreaseDefer(uint128 _amount) external onlyLido {
-        _decreaseDefer(_amount);
-    }
-
-    function _decreaseDefer(uint128 _amount) internal {
-        if (deferUpwardBalance >= _amount) {
-            deferUpwardBalance -= _amount;
-        } else {
-            deferDownwardBalance += (_amount - deferUpwardBalance);
-            deferUpwardBalance = 0;
-        }
+    function unstake(uint128 _amount) external onlyLido {
+        targetStashStake -= _amount;
     }
 
     function setStatus(ILidoOracle.StakeStatus _status) external onlyLido {
@@ -268,203 +243,155 @@ contract Ledger is Consensus {
         return stakeStatus;
     }
 
-    function getTotalBalance() external view returns (uint128){
-        return totalStashBalance;
-    }
-
     function getFreeStashBalance() external view returns (uint128){
         return totalStashBalance - lockedStashBalance;
-    }
-
-    function getLockedStashBalance() external view returns (uint128){
-        return lockedStashBalance;
-    }
-
-    function getPendingTransfer() external view returns (uint128, uint128){
-        return (transferUpwardBalance, transferDownwardBalance);
-    }
-
-    function getDeferBalance() external view returns (uint128, uint128){
-        return (deferUpwardBalance, deferDownwardBalance);
     }
 
     function clearReporting() external onlyLido {
         _clearReportingAndAdvanceTo(eraId);
     }
 
+    function _processRelayTransfers(ILidoOracle.LedgerData memory report) internal returns(bool) {
+        // wait for the downward transfer to complete
+        if (transferDownwardBalance > 0) {
+            uint128 totalDownwardTransferred = uint128(vKSM.balanceOf(address(this)));
+
+            if (totalDownwardTransferred >= transferDownwardBalance ) {
+                // take transferred funds into buffered balance
+                vKSM.transfer(address(lido), transferDownwardBalance);
+
+                // Clear transfer flag
+                cachedStashBalance -= transferDownwardBalance;
+                transferDownwardBalance = 0;
+
+                emit DownwardComplete(transferDownwardBalance);
+            }
+        }
+
+        // wait for the upward transfer to complete
+        if (transferUpwardBalance > 0) {
+            uint128 ledgerFreeBalance = (totalStashBalance - lockedStashBalance);
+            uint128 freeBalanceIncrement = report.getFreeBalance() - ledgerFreeBalance;
+
+            if (freeBalanceIncrement >= transferUpwardBalance) {
+                cachedStashBalance += transferUpwardBalance;
+                transferUpwardBalance = 0;
+
+                emit UpwardComplete(transferUpwardBalance);
+            }
+        }
+
+        if (transferDownwardBalance == 0 && transferUpwardBalance == 0) {
+            // update ledger data from oracle report
+            totalStashBalance = report.stashBalance;
+            lockedStashBalance = report.totalBalance;
+            return true;
+        }
+
+        return false;
+    }
+
     function _push(uint64 _eraId, ILidoOracle.LedgerData memory report) internal override {
         require(stashAccount == report.stashAccount, 'STASH_ACCOUNT_MISMATCH');
 
         _clearReportingAndAdvanceTo(_eraId + 1);
-        uint128 reportFreeBalance = report.getFreeBalance();
-        //require(address(lido) != address(0),'NOT_A_LIDO');
+        
+        (uint128 unlockingBalance, uint128 withdrawableBalance) = report.getTotalUnlocking(_eraId);
+        uint128 nonWithdrawableBalance = unlockingBalance - withdrawableBalance;
 
-        // wait for the downward transfer to complete
-        if (transferDownwardBalance > 0) {
-            uint128 _totalDownwardTransferred = uint128(vKSM.balanceOf(address(this)));
+        if (!_processRelayTransfers(report)) {
+            return;
+        }
 
-            // todo remove uint128 ledgerFreeBalance = (totalStashBalance - lockedStashBalance);
-            // ensure that stash total balance has gone down.
-            // note: external inflows into stash balance can break that condition and block subsequent operations
-            if (_totalDownwardTransferred >= transferDownwardBalance ) {
-                // take transferred funds into buffered balance
-                vKSM.transfer(address(lido), transferDownwardBalance);
-                //lido.increaseBufferedBalance(transferDownwardBalance, report.stashAccount);
+        if (cachedStashBalance < report.stashBalance) { // if cached balance > real => we have reward
+            uint128 reward = report.stashBalance - cachedStashBalance;
+            lido.distributeRewards(reward, report.stashAccount);
+            targetStashStake += reward;
+            emit Rewards(reward);
+        }
+        else if (cachedStashBalance > report.stashBalance) {
+            //TODO handle losses
+            uint128 slash = cachedStashBalance - report.stashBalance;
+            emit Slash(slash);
+            targetStashStake -= slash;
+        }
 
-                // exclude transferred amount from slashes
-                // note!: transferDownwardBalance can be greater than cachedStashBalance
-                cachedStashBalance -= transferDownwardBalance;
+        bytes[] memory calls = new bytes[](5);
+        uint16 calls_counter = 0;
+            
+        // relay deficit or bonding
+        if (report.stashBalance <= targetStashStake) {
+            //    Staking strategy:
+            //     - upward transfer deficit tokens
+            //     - rebond all unlocking tokens
+            //     - bond_extra all free balance
 
-                emit DownwardComplete(transferDownwardBalance);
-                // Clear transfer flag
-                transferDownwardBalance = 0;
+            uint128 deficit = targetStashStake - report.stashBalance;
+
+            // just upward transfer if we have deficit
+            if (deficit > 0) {
+                vKSM.transferFrom(address(lido), address(this), deficit);
+                vKSM.relayTransferTo(report.stashAccount, deficit);
+                transferUpwardBalance += deficit;
+            }
+
+            // rebond all always
+            if (unlockingBalance > 0) {
+                calls[calls_counter++] = AUX.buildReBond(unlockingBalance);
+            }
+
+            // bond extra all free balance always
+            if (report.getFreeBalance() > 0) {
+                calls[calls_counter++] = AUX.buildBondExtra(report.getFreeBalance());
+            }
+        }
+        else if (report.stashBalance > targetStashStake) { // parachain deficit
+            //    Unstaking strategy:
+            //     - try to downward transfer already free balance
+            //     - if we still have deficit try to withdraw already unlocked tokens
+            //     - if we still have deficit initiate unbond for remain deficit
+
+            uint128 deficit = report.stashBalance - targetStashStake;
+            uint128 relayFreeBalance = report.getFreeBalance();
+
+            // need to downward transfer if we have some free
+            if (relayFreeBalance > 0) {
+                uint128 forTransfer = relayFreeBalance > deficit ? deficit : relayFreeBalance;
+                vAccounts.relayTransferFrom(stashAccount, forTransfer);
+                transferDownwardBalance += forTransfer;
+                deficit -= forTransfer;
+                relayFreeBalance -= forTransfer;
+            }
+            
+            // withdraw if we have some unlocked
+            if (deficit > 0 && withdrawableBalance > 0) { 
+                calls[calls_counter++] = AUX.buildWithdraw();
+                deficit -= withdrawableBalance > deficit ? deficit : withdrawableBalance;
+            }
+
+            // need to unbond if we still have deficit
+            if (deficit > 0 && nonWithdrawableBalance < deficit) {
+                uint128 forUnbond = deficit - nonWithdrawableBalance;
+                calls[calls_counter++] = AUX.buildUnBond(deficit - nonWithdrawableBalance);
+                deficit -= forUnbond;
+            }
+
+            // bond all remain free balance
+            if (relayFreeBalance > 0) {
+                calls[calls_counter++] = AUX.buildBondExtra(relayFreeBalance);
             }
         }
 
-        // Wait for the upward transfer to complete
-        if (transferUpwardBalance > 0) {
-            uint128 ledgerFreeBalance = (totalStashBalance - lockedStashBalance);
-
-            if (reportFreeBalance > ledgerFreeBalance) {
-                // get transfer revenue
-                reportFreeBalance -= ledgerFreeBalance;
-
-                uint128 _amount = (transferUpwardBalance <= reportFreeBalance) ?
-                transferUpwardBalance : reportFreeBalance;
-                // Clear the transfer flag or decrease expected transfer value.
-                // Note: Partial transfer cannot take place, but the stash can get funds from other accounts.
-                transferUpwardBalance -= _amount;
-                // Exclude transferred amount from rewards increasing cached value.
-                cachedStashBalance += _amount;
-
-                emit UpwardComplete(_amount);
+        if (calls_counter > 0) {
+            bytes[] memory calls_trimmed = new bytes[](calls_counter);
+            for (uint16 i = 0; i < calls_counter; ++i) {
+                calls_trimmed[i] = calls[i];
             }
+            vAccounts.relayTransactCallAll(report.controllerAccount, GARANTOR, 0, calls_trimmed);
         }
 
-        (uint128 _unlockingBalance, uint128 _withdrawableBalance) = report.getTotalUnlocking(_eraId);
-
-        if (transferDownwardBalance == 0 && transferUpwardBalance == 0) {
-            // Now all pending transfers have completed and a difference between stash balances
-            // gives us accrued rewards (or looses ).
-            if (report.stashBalance > cachedStashBalance) {
-                lido.distributeRewards(report.stashBalance - cachedStashBalance, report.stashAccount);
-                emit Rewards(report.stashBalance - cachedStashBalance);
-                // sync cached balance with reported one
-                cachedStashBalance = report.stashBalance;
-            } else {
-                // todo add losses handling. Now just delay the report
-            }
-            // todo add sanity check. Ensure |report.stashBalance - cachedStashBalance| is in report_balance_bias boundaries
-            counter = 0;
-
-            if (deferDownwardBalance > 0) {// rightside balance
-                // to downward transfer
-                uint128 _defer = (deferDownwardBalance <= reportFreeBalance) ? deferDownwardBalance : reportFreeBalance;
-                emit Sentinel(0, _defer);
-                bytes[] memory _calls = new bytes[](1);
-                // withdraw_unbonded action and transfers are mutually exclusive,
-                // so choose withdraw_unbonded if the stash has available.
-                if (_withdrawableBalance > 0) {
-                    // todo thin out withdraw request queue using odd-even or any other strategy
-                    // todo add Rebond when free balance is enough to pay off redeem orders.
-                    _calls[0] = AUX.buildWithdraw();
-                    vAccounts.relayTransactCall(report.controllerAccount, GARANTOR, 0, _calls);
-                    // todo Chill if active balance less then getMinStashBalance
-                    emit Withdraw(_withdrawableBalance);
-                } else if (_defer > 0) {
-                    // todo! relayTransferFrom increase ledger not lido balance!
-                    // todo! handle the case when _defer > cachedStashBalance
-                    vAccounts.relayTransferFrom(report.stashAccount, _defer);
-                    transferDownwardBalance += _defer;
-
-                    _increaseDefer(_defer);
-
-                    emit DownwardTransfer(_defer);
-                }
-
-                // to unlock
-                _defer = deferDownwardBalance - _defer;
-                // to unbond
-                _defer -= (_defer <= _unlockingBalance) ? _defer : _unlockingBalance;
-                // unbond extra
-                if (_defer > 0 && _defer <= report.activeBalance && report.unlocking.length < MAX_UNLOCKING_CHUNKS) {
-                    _calls[0] = AUX.buildUnBond(
-                        ((report.activeBalance - _defer) < lido.getMinStashBalance()) ? report.activeBalance : _defer
-                    );
-                    vAccounts.relayTransactCall(report.controllerAccount, GARANTOR, 0, _calls);
-                    emit Unbond(_defer);
-                } else {
-                    // todo if unlocking chunk's length exceeds MAX_UNLOCKING_CHUNKS, rebond last chunk and unbond again
-                    // todo bond_extra, if transferDownwardBalance eq zero and the stash has some free balance
-                }
-
-            } else if (deferUpwardBalance >= 0) {// leftside balance
-                // It should not have happened. Ignore this case.
-                if (stakeStatus == ILidoOracle.StakeStatus.Blocked) {
-                    return;
-                }
-
-                uint128 _defer = deferUpwardBalance;
-                bytes[] memory _calls = new bytes[](1);
-                // bond_extra and transfer are mutually exclusive, so if
-                if (_defer > 0 && (_defer > reportFreeBalance || report.stakeStatus == ILidoOracle.StakeStatus.None)) {
-                    // prefer transfer over stake
-
-                    vKSM.transferFrom(address(lido), address(this), _defer);
-                    vKSM.relayTransferTo(report.stashAccount, _defer);
-                    transferUpwardBalance += _defer;
-
-                    _decreaseDefer(_defer);
-
-                    emit UpwardTransfer(_defer);
-                    _defer = 0;
-
-                } else {
-                    // prefer stake over transfer
-
-                    if (report.stakeStatus == ILidoOracle.StakeStatus.Nominator && reportFreeBalance > 0) {
-                        // todo. Handle Idle,Blocked, Nominator and Validator statuses separately
-                        // because it makes no sense to bond for Validator,
-                        // and bonding extra funds for Idle doesn't give us a profit.
-                        // Blocked status used to withdraw funds as a rule.
-                        // Idle and None are for accumulation.
-                        // We could bond funds for None status, but we leave this for {nominator} method.
-                        _calls[0] = AUX.buildBondExtra(reportFreeBalance);
-                        vAccounts.relayTransactCall(report.stashAccount, GARANTOR, 0, _calls);
-
-                        emit BondExtra(reportFreeBalance);
-                    }
-                }
-
-                if (_unlockingBalance > 0) {
-                    // Always rebond unlocking tokens, if any.
-                    // Thus, we flush a quite limited unbonding queue and increase active balance.
-                    _calls[0] = AUX.buildReBond(_unlockingBalance);
-                    vAccounts.relayTransactCall(report.controllerAccount, GARANTOR, 0, _calls);
-
-                    emit Rebond(_unlockingBalance);
-                }
-            }
-        } else {
-            // increase error counter. todo stop ledger if counter exceeds the limit
-            counter += 1;
-        }
-
-        if (transferDownwardBalance == 0) {
-            // update ledger data from oracle report
-            totalStashBalance = report.stashBalance;
-            lockedStashBalance = report.totalBalance;
-        }
-        {
-            // update withdrawableBalance  adding up all unlocked chunks whose era's greater than current
-            // withdrawableBalance = _withdrawableBalance;
-            unlockingChunk = uint8(report.unlocking.length);
-
-            // skip blocked status as it serves as a marker of an unused ledger
-            if (stakeStatus != ILidoOracle.StakeStatus.Blocked) {
-                stakeStatus = report.stakeStatus;
-            }
-        }
+        cachedStashBalance = report.stashBalance;
+        
         emit Completed(_eraId);
     }
 
