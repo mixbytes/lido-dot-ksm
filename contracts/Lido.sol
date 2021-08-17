@@ -27,7 +27,7 @@ contract Lido is ILido, LKSM {
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
 
     // 7 + 2 days = 777600 sec for Kusama, 28 + 2 days= 2592000 sec for Polkadot
-    uint32  internal unbondingPeriod = 777600;
+    uint32 internal unbondingPeriod = 777600;
     // default interest value in base points
     uint16 internal constant DEFAULT_FEE = 1000;
 
@@ -58,11 +58,11 @@ contract Lido is ILido, LKSM {
     // one claim for account
     mapping(address => Claim) private claimOrders;
     // vKSM precompile
-    IvKSM internal constant vKSM = IvKSM(0x0000000000000000000000000000000000000801);
+    IvKSM internal vKSM = IvKSM(0x0000000000000000000000000000000000000801);
     // AUX relay call builder precompile
-    IAUX internal constant AUX = IAUX(0x0000000000000000000000000000000000000801);
+    IAUX internal AUX = IAUX(0x0000000000000000000000000000000000000801);
     // Virtual accounts precompile
-    IvAccounts internal constant vAccounts = IvAccounts(0x0000000000000000000000000000000000000801);
+    IvAccounts internal vAccounts = IvAccounts(0x0000000000000000000000000000000000000801);
     // Who pay off relay chain transaction fees
     bytes32 internal constant GARANTOR = 0x00;
 
@@ -73,7 +73,13 @@ contract Lido is ILido, LKSM {
     // Kusama has 1 CENTS. CENTS = KSM / 30_000 where KSM = 1_000_000_000_000
     uint128 internal minStashBalance;
 
-    constructor() {
+    constructor(address _vKSM, address _AUX, address _vAccounts) {
+        if (_vKSM != address(0x0)) { //TODO remove after tests
+            vKSM = IvKSM(_vKSM);
+            AUX = IAUX(_AUX);
+            vAccounts = IvAccounts(_vAccounts);
+        }
+
         initialize();
     }
 
@@ -113,7 +119,7 @@ contract Lido is ILido, LKSM {
         _unpause();
     }
 
-    fallback() external payable {
+    fallback() external {
         revert("FORBIDDEN");
     }
 
@@ -130,7 +136,14 @@ contract Lido is ILido, LKSM {
 
         address ledger = ledgerMaster.cloneDeterministic(_stashAccount);
         // skip one era before commissioning
-        Ledger(ledger).initialize(_stashAccount, _controllerAccount, ILidoOracle(oracle).getCurrentEraId() + 1);
+        Ledger(ledger).initialize(
+            _stashAccount, 
+            _controllerAccount, 
+            ILidoOracle(oracle).getCurrentEraId() + 1,
+            address(vKSM),
+            address(AUX),
+            address(vAccounts)
+        );
         members.set(uint256(_stashAccount), ledger);
     }
 
@@ -181,7 +194,7 @@ contract Lido is ILido, LKSM {
             require(freeBalance >= minStashBalance, 'STASH_INSUFFICIENT_BALANCE');
             call[0] = AUX.buildBond(Ledger(ledger).controllerAccount(), validators, freeBalance);
         } else {
-            require(Ledger(ledger).getLockedStashBalance() >= minStashBalance, 'STASH_INSUFFICIENT_BALANCE');
+            require(Ledger(ledger).lockedStashBalance() >= minStashBalance, 'STASH_INSUFFICIENT_BALANCE');
             call[0] = AUX.buildNominate(validators);
         }
         vAccounts.relayTransactCall(_stashAccount, GARANTOR, DEFAULT_FEE, call);
@@ -325,7 +338,7 @@ contract Lido is ILido, LKSM {
             //vKSM.increaseAllowance(ledger, uint256(_chunk));
             vKSM.approve(ledger, vKSM.allowance(address(this), ledger) + uint256(_chunk));
 
-            Ledger(ledger).increaseDefer(_chunk);
+            Ledger(ledger).stake(_chunk);
         }
     }
 
@@ -342,7 +355,7 @@ contract Lido is ILido, LKSM {
             // todo drain ledgers that have Blocked status
             // todo safe decreaseAllowance
             // vKSM.decreaseAllowance(ledger, uint256(_chunk));
-            Ledger(ledger).decreaseDefer(_chunk);
+            Ledger(ledger).unstake(_chunk);
         }
     }
 
