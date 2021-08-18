@@ -13,8 +13,6 @@ interface ILido is IERC20 {
     // Fee was updated
     event FeeSet(uint16 feeBasisPoints);
 
-    // Test todo remove
-    // event Test(bytes32 stash, address ledger);
 
     function distributeRewards(uint128 _totalRewards, bytes32 _stashAccount) external;
     // Return oracle address assigned to lido
@@ -37,7 +35,7 @@ interface ILido is IERC20 {
     // Redeem LKSM in exchange for vKSM. Put LKSM in unbonding queue
     function redeem(uint256 amount) external;
     // Return the number of LKSM as (total LKSM awaiting unbonding period, available for claim )
-    function getUnbonded(address holder) external returns (uint256, uint256);
+    function getUnbonded(address holder) external returns (uint256);
     // Claim unbonded LKSM . Top up the caller vKSM balance burning LKSM
     function claimUnbonded() external;
 

@@ -19,6 +19,13 @@ contract Lido is ILido, LKSM {
     using Clones for address;
     using EnumerableMap for EnumerableMap.UintToAddressMap;
 
+    event LegderAdded(
+        address addr,
+        bytes32 stashAccount,
+        bytes32 controllerAccount,
+        uint256 era
+    );
+
     // Maximum number of oracle committee members
     uint256 private constant MAX_STASH_ACCOUNTS = 200;
 
@@ -41,12 +48,11 @@ contract Lido is ILido, LKSM {
     // ledger master contract
     address private ledgerMaster;
     // oracle contract
-    address private  oracle;
+    address public  oracle;
     // fee interest in basis points
     uint16  public  feeBP;
     // difference between vKSM.balanceOf(this) and bufferedBalance comes from downward transfer
-    // uint128 private bufferedBalance;
-    uint128 private accruedRewardBalance;
+
     uint128 private lossBalance;
     uint128 private fundRaisedBalance;
     // uint128 private claimDebt;
@@ -145,6 +151,8 @@ contract Lido is ILido, LKSM {
             address(vAccounts)
         );
         members.set(uint256(_stashAccount), ledger);
+
+        emit LegderAdded(ledger, _stashAccount, _controllerAccount, ILidoOracle(oracle).getCurrentEraId() + 1);
     }
 
     function enableStash(bytes32 _stashAccount) external auth(spec_manager) {
@@ -213,7 +221,7 @@ contract Lido is ILido, LKSM {
 
         fundRaisedBalance += _amount;
 
-        _increaseDefer(_amount);
+        _stake(_amount);
     }
 
     /**
@@ -229,21 +237,20 @@ contract Lido is ILido, LKSM {
         Claim memory _claim = claimOrders[msg.sender];
         uint128 _amount = uint128(amount);
         _claim.balance += _amount;
-       // claimDebt += _amount;
         _claim.timeout = uint128(block.timestamp) + unbondingPeriod;
 
         claimOrders[msg.sender] = _claim;
-        _decreaseDefer(_amount);
+        _unstake(_amount);
     }
     /**
     * @dev Return caller unbonding balance and balance that is ready for claim
     */
-    function getUnbonded(address holder) external override view returns (uint256, uint256){
+    function getUnbonded(address holder) external override view returns (uint256){
         uint256 _balance = claimOrders[holder].balance;
         if (claimOrders[holder].timeout < block.timestamp) {
-            return (_balance, _balance);
+            return (_balance);
         }
-        return (_balance, 0);
+        return (0);
     }
 
     /**
@@ -264,7 +271,6 @@ contract Lido is ILido, LKSM {
             _burnShares(address(this), sharesAmount);
             // claimDebt -= amount;
 
-            accruedRewardBalance -= amount;
             fundRaisedBalance -= amount;
         }
     }
@@ -323,13 +329,13 @@ contract Lido is ILido, LKSM {
         return _stake;
     }
 
-    function _increaseDefer(uint128 _amount) internal {
+    function _stake(uint128 _amount) internal {
         if (_amount == 0) {
             return;
         }
+
         uint128 _length = uint128(members.length());
         uint128 _chunk = (_amount) / _length;
-
 
         for (uint i = 0; i < _length; i++) {
             (uint256 _key, address ledger) = members.at(i);
@@ -342,7 +348,7 @@ contract Lido is ILido, LKSM {
         }
     }
 
-    function _decreaseDefer(uint128 _amount) internal {
+    function _unstake(uint128 _amount) internal {
         if (_amount == 0) {
             return;
         }
@@ -404,17 +410,18 @@ contract Lido is ILido, LKSM {
     }
 
     function _getTotalPooledKSM() internal view override returns (uint256) {
-        return fundRaisedBalance + accruedRewardBalance - lossBalance;
+        return fundRaisedBalance - lossBalance;
     }
 
     function distributeRewards(uint128 _totalRewards, bytes32 _stashAccount) external override isLedger(_stashAccount) {
         uint256 feeBasis = uint256(feeBP);
 
-        accruedRewardBalance += _totalRewards;
+        fundRaisedBalance += _totalRewards;
 
         uint256 shares2mint = (
-        uint256(_totalRewards) * feeBasis * _getTotalShares()
-        / (_getTotalPooledKSM() * 10000 - (feeBasis * uint256(_totalRewards)))
+            uint256(_totalRewards) * feeBasis * _getTotalShares()
+                / 
+            (_getTotalPooledKSM() * 10000 - (feeBasis * uint256(_totalRewards)))
         );
 
         _mintShares(address(this), shares2mint);
