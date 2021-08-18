@@ -5,65 +5,72 @@ import "../../interfaces/IAUX.sol";
 
 contract AUX_mock is IAUX {
     event Bond (
+        address caller,
         bytes32 controller,
         bytes32[] validators,
         uint256 amount
     );
 
     event BondExtra (
+        address caller,
         uint256 amount
     );
 
     event Unbond (
+        address caller,
         uint256 amount
     );
 
     event Rebond (
+        address caller,
         uint256 amount
     );
 
     event Withdraw (
+        address caller
     );
 
     event Nominate (
+        address caller,
         bytes32[] validators
     );
 
     event Chill (
+        address caller
     );
 
     function buildBond(bytes32 controller, bytes32[] memory validators, uint256 amount) override external returns (bytes memory) {
-        emit Bond(controller, validators, amount);
+        emit Bond(msg.sender, controller, validators, amount);
         return toBytes(0x00);
     }
 
     function buildBondExtra(uint256 amount) override external returns (bytes memory) {
-        emit BondExtra(amount);
+        emit BondExtra(msg.sender, amount);
         return toBytes(0x01);
     }
 
     function buildUnBond(uint256 amount) override external returns (bytes memory) {
-        emit Unbond(amount);
+        emit Unbond(msg.sender, amount);
         return toBytes(0x02);
     }
 
     function buildReBond(uint256 amount) override external returns (bytes memory) {
-        emit Rebond(amount);
+        emit Rebond(msg.sender, amount);
         return toBytes(0x03);
     }
 
     function buildWithdraw() override external returns (bytes memory) {
-        emit Withdraw();
+        emit Withdraw(msg.sender);
         return toBytes(0x04);
     }
 
     function buildNominate(bytes32[] memory validators) override external returns (bytes memory) {
-        emit Nominate(validators);
+        emit Nominate(msg.sender, validators);
         return toBytes(0x05);
     }
 
     function buildChill() override external returns (bytes memory) {
-        emit Chill();
+        emit Chill(msg.sender);
         return toBytes(0x06);
     }
 

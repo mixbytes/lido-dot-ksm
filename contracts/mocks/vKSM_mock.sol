@@ -12,7 +12,7 @@ contract vKSM_mock is ERC20("vKSM", "vKSM"), IvKSM {
     );
 
     constructor() {
-        _mint(msg.sender, 10**6 * 10**18);
+        _mint(msg.sender, 10**9 * 10**18);
     }
     
     function relayTransferTo(bytes32 relayChainAccount, uint256 amount) override external {

@@ -30,7 +30,7 @@ library LedgerUtils {
         uint128 _withdrawble = 0;
         for (uint i = 0; i < report.unlocking.length; i++) {
             _total += report.unlocking[i].balance;
-            if (report.unlocking[i].era >= _eraId) {
+            if (report.unlocking[i].era <= _eraId) {
                 _withdrawble += report.unlocking[i].balance;
             }
         }
