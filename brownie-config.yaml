@@ -12,4 +12,4 @@ compiler:
             enabled: true
             runs: 200
         remappings:
-            - zeppelin=./node_modules/@openzeppelin/contracts
+            - "@openzeppelin=./node_modules/@openzeppelin/contracts"

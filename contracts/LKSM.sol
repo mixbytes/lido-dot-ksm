@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
 
-import "zeppelin/token/ERC20/IERC20.sol";
-import "zeppelin/utils/math/SafeMath.sol";
-import "zeppelin/security/Pausable.sol";
+import "@openzeppelin/token/ERC20/IERC20.sol";
+import "@openzeppelin/utils/math/SafeMath.sol";
+import "@openzeppelin/security/Pausable.sol";
 
 abstract contract LKSM is IERC20, Pausable {
     using SafeMath for uint256;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
 
-import "zeppelin/token/ERC20/ERC20.sol";
+import "@openzeppelin/token/ERC20/ERC20.sol";
 import "../../interfaces/IvKSM.sol";
 
 contract vKSM_mock is ERC20("vKSM", "vKSM"), IvKSM {
