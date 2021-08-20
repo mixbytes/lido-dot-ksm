@@ -14,11 +14,11 @@ interface ILido is IERC20 {
     event FeeSet(uint16 feeBasisPoints);
 
 
-    function distributeRewards(uint128 _totalRewards, bytes32 _stashAccount) external;
+    function distributeRewards(uint128 _totalRewards) external;
     // Return oracle address assigned to lido
     function getOracle() external view returns (address);
     // Return the list of Polkadot/Kusama STASH accounts used for staking
-    function getStakeAccounts(address oracle) external view returns (Stash[] memory);
+    function getStashAccounts() external view returns (Stash[] memory);
 
     function clearReporting() external;
     function setQuorum(uint8 _quorum) external;
@@ -38,7 +38,6 @@ interface ILido is IERC20 {
     function getUnbonded(address holder) external returns (uint256);
     // Claim unbonded LKSM . Top up the caller vKSM balance burning LKSM
     function claimUnbonded() external;
-
 
 
     struct Stash {

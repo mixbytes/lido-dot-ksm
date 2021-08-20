@@ -4,6 +4,7 @@ pragma abicoder v2;
 
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
+import "../interfaces/ILedger.sol";
 import "../interfaces/IAUX.sol";
 import "../interfaces/IvKSM.sol";
 import "../interfaces/IvAccounts.sol";
@@ -25,7 +26,7 @@ library ReportUtils {
 
 library LedgerUtils {
     /// @notice Return unlocking and withdrawable balances
-    function getTotalUnlocking(ILidoOracle.LedgerData memory report, uint64 _eraId) internal pure returns (uint128, uint128){
+    function getTotalUnlocking(ILedger.LedgerData memory report, uint64 _eraId) internal pure returns (uint128, uint128){
         uint128 _total = 0;
         uint128 _withdrawble = 0;
         for (uint i = 0; i < report.unlocking.length; i++) {
@@ -37,12 +38,12 @@ library LedgerUtils {
         return (_total, _withdrawble);
     }
     /// @notice Return stash balance that can be freely transfer or allocated for stake
-    function getFreeBalance(ILidoOracle.LedgerData memory report) internal pure returns (uint128){
+    function getFreeBalance(ILedger.LedgerData memory report) internal pure returns (uint128){
         return report.stashBalance - report.totalBalance;
     }
 
     /// @notice Return true if report is consistent
-    function isConsistent(ILidoOracle.LedgerData memory report) internal pure returns (bool){
+    function isConsistent(ILedger.LedgerData memory report) internal pure returns (bool){
         (uint128 _total, uint128 _withdrawable) = getTotalUnlocking(report, 0);
         return report.unlocking.length < type(uint8).max && report.totalBalance == (report.activeBalance + _total);
     }
@@ -71,13 +72,13 @@ abstract contract Consensus {
     // Current era report  hashes
     uint256[] internal currentReportVariants;
     // Current era reports
-    ILidoOracle.LedgerData[]  private currentReports;
+    ILedger.LedgerData[]  private currentReports;
     // Then oracle member push report, its bit is set
     uint256   internal currentReportBitmask;
     // Current era Id
     uint64  internal eraId;
 
-    function getStakeReport(uint256 index) internal view returns (ILidoOracle.LedgerData storage staking){
+    function getStakeReport(uint256 index) internal view returns (ILedger.LedgerData storage staking){
         assert(index < currentReports.length);
         return currentReports[index];
     }
@@ -94,7 +95,7 @@ abstract contract Consensus {
         emit ExpectedEraIdUpdated(_eraId);
     }
 
-    function _push(uint64 _eraId, ILidoOracle.LedgerData memory report) virtual internal;
+    function _push(uint64 _eraId, ILedger.LedgerData memory report) virtual internal;
 
     /**
     * @notice Return whether the `_quorum` is reached and the final report can be pushed
@@ -132,7 +133,7 @@ abstract contract Consensus {
      * @param index oracle member index
      * @param quorum the minimum number of voted oracle members to accept a variant
      */
-    function _reportRelay(uint256 index, uint256 quorum, ILidoOracle.LedgerData calldata staking) internal {
+    function _reportRelay(uint256 index, uint256 quorum, ILedger.LedgerData calldata staking) internal {
         uint256 mask = 1 << index;
         uint256 reportBitmask = currentReportBitmask;
         require(reportBitmask & mask == 0, "ALREADY_SUBMITTED");
@@ -163,11 +164,11 @@ abstract contract Consensus {
     }
 }
 
-contract Ledger is Consensus {
-    using LedgerUtils for ILidoOracle.LedgerData;
+contract Ledger is Consensus, ILedger {
+    using LedgerUtils for LedgerData;
 
     ILido private lido;
-    ILidoOracle.StakeStatus internal stakeStatus;
+    Status internal stakeStatus;
 
     bytes32 public stashAccount;
     bytes32 public controllerAccount;
@@ -176,15 +177,18 @@ contract Ledger is Consensus {
     // Locked, or bonded in stake module, balance
     uint128 public lockedStashBalance;
 
+    uint128 public activeStashBalance;
+
     // Cached stash balance. Need to calculate rewards between successfull up/down transfers
     uint128 public cachedStashBalance;
+
+    // total users deposits + rewards - slashes (so just actual target stake amount)
+    uint128 public targetStashStake;
 
     // Pending transfers
     uint128 internal transferUpwardBalance;
     uint128 internal transferDownwardBalance;
 
-    // total users deposits + rewards - slashes (so just actual target stake amount)
-    uint128 public targetStashStake;
 
     // vKSM precompile
     IvKSM internal vKSM;
@@ -212,7 +216,8 @@ contract Ledger is Consensus {
         stashAccount = _stashAccount;
         // The account which handles bounded part of stash funds (unbond, rebond, withdraw, nominate)
         controllerAccount = _controllerAccount;
-        stakeStatus = ILidoOracle.StakeStatus.None;
+
+        stakeStatus = Status.None;
         // skip one era before start
         eraId = _startEraId + 1;
 
@@ -227,6 +232,10 @@ contract Ledger is Consensus {
         return eraId;
     }
 
+    function exactStake(uint128 _amount) external onlyLido {
+        targetStashStake = _amount;
+    }
+
     function stake(uint128 _amount) external onlyLido {
         targetStashStake += _amount;
     }
@@ -235,11 +244,14 @@ contract Ledger is Consensus {
         targetStashStake -= _amount;
     }
 
-    function setStatus(ILidoOracle.StakeStatus _status) external onlyLido {
-        stakeStatus = _status;
+    function nominate(bytes32[] calldata validators) external onlyLido {
+        require(activeStashBalance >= lido.getMinStashBalance(), 'NOT_ENOUGH_STAKE');
+        bytes[] memory calls = new bytes[](1);
+        calls[0] = AUX.buildNominate(validators);
+        vAccounts.relayTransactCallAll(controllerAccount, GARANTOR, 0, calls);
     }
 
-    function getStatus() external view returns (ILidoOracle.StakeStatus){
+    function getStatus() external view returns (Status) {
         return stakeStatus;
     }
 
@@ -251,7 +263,7 @@ contract Ledger is Consensus {
         _clearReportingAndAdvanceTo(eraId);
     }
 
-    function _processRelayTransfers(ILidoOracle.LedgerData memory report) internal returns(bool) {
+    function _processRelayTransfers(LedgerData memory report) internal returns(bool) {
         // wait for the downward transfer to complete
         if (transferDownwardBalance > 0) {
             uint128 totalDownwardTransferred = uint128(vKSM.balanceOf(address(this)));
@@ -291,9 +303,12 @@ contract Ledger is Consensus {
         return false;
     }
 
-    function _push(uint64 _eraId, ILidoOracle.LedgerData memory report) internal override {
+    function _push(uint64 _eraId, LedgerData memory report) internal override {
         require(stashAccount == report.stashAccount, 'STASH_ACCOUNT_MISMATCH');
 
+        stakeStatus = report.stakeStatus;
+        activeStashBalance = report.activeBalance;
+        
         _clearReportingAndAdvanceTo(_eraId + 1);
         
         (uint128 unlockingBalance, uint128 withdrawableBalance) = report.getTotalUnlocking(_eraId);
@@ -305,7 +320,7 @@ contract Ledger is Consensus {
 
         if (cachedStashBalance < report.stashBalance) { // if cached balance > real => we have reward
             uint128 reward = report.stashBalance - cachedStashBalance;
-            lido.distributeRewards(reward, report.stashAccount);
+            lido.distributeRewards(reward);
             targetStashStake += reward;
             emit Rewards(reward);
         }
@@ -330,9 +345,13 @@ contract Ledger is Consensus {
 
             // just upward transfer if we have deficit
             if (deficit > 0) {
-                vKSM.transferFrom(address(lido), address(this), deficit);
-                vKSM.relayTransferTo(report.stashAccount, deficit);
-                transferUpwardBalance += deficit;
+                uint128 lidoBalance = uint128(vKSM.balanceOf(address(lido)));
+                uint128 forTransfer = lidoBalance > deficit ? deficit : lidoBalance;
+
+                vKSM.transferFrom(address(lido), address(this), forTransfer);
+                vKSM.relayTransferTo(report.stashAccount, forTransfer);
+                transferUpwardBalance += forTransfer;
+                deficit -= forTransfer;
             }
 
             // rebond all always
@@ -350,6 +369,11 @@ contract Ledger is Consensus {
             //     - try to downward transfer already free balance
             //     - if we still have deficit try to withdraw already unlocked tokens
             //     - if we still have deficit initiate unbond for remain deficit
+
+            // if ledger in the deadpool we need to put it to chill 
+            if (targetStashStake < lido.getMinStashBalance()) {
+                calls[calls_counter++] = AUX.buildChill();
+            }
 
             uint128 deficit = report.stashBalance - targetStashStake;
             uint128 relayFreeBalance = report.getFreeBalance();
@@ -395,7 +419,7 @@ contract Ledger is Consensus {
         emit Completed(_eraId);
     }
 
-    function reportRelay(uint256 index, uint256 quorum, uint64 _eraId, ILidoOracle.LedgerData calldata staking) external {
+    function reportRelay(uint256 index, uint256 quorum, uint64 _eraId, LedgerData calldata staking) external {
         if (_eraId > eraId) {
             _clearReportingAndAdvanceTo(_eraId);
         }
@@ -408,7 +432,7 @@ contract Ledger is Consensus {
     function softenQuorum(uint8 _quorum) external onlyLido {
         (bool isQuorum, uint256 reportIndex) = _getQuorumReport(_quorum);
         if (isQuorum) {
-            ILidoOracle.LedgerData memory report = getStakeReport(reportIndex);
+            LedgerData memory report = getStakeReport(reportIndex);
             _push(
                 eraId, report
             );

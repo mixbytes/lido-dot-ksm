@@ -3,8 +3,6 @@ from brownie import chain
 from helpers import RelayChain, distribute_initial_tokens
 
 
-
-
 def test_upward_transfer_mock(vKSM, accounts):
     before = vKSM.balanceOf(accounts[0])
 
@@ -32,7 +30,7 @@ def test_downward_transfer_mock(vKSM, vAccounts, accounts):
 
 
 def test_add_stash(lido, oracle, vKSM, Ledger, accounts):
-    lido.addStash("0x10", "0x20", {'from': accounts[0]})
+    lido.addLedger("0x10", "0x20", 100, {'from': accounts[0]})
 
     legder = Ledger.at(lido.findLedger("0x10"))
     assert legder.stashAccount() == "0x10"
@@ -43,7 +41,7 @@ def test_single_deposit(lido, oracle, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle, accounts)
-    relay.new_ledger("0x10", "0x11")
+    relay.new_ledger("0x10", "0x11", 100)
   
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
@@ -63,7 +61,7 @@ def test_multi_deposit(lido, oracle, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle, accounts)
-    relay.new_ledger("0x10", "0x11")
+    relay.new_ledger("0x10", "0x11", 100)
   
     deposit1 = 20 * 10**18
     deposit2 = 5 * 10**18
@@ -94,7 +92,7 @@ def test_redeem(lido, oracle, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle, accounts)
-    relay.new_ledger("0x10", "0x11")
+    relay.new_ledger("0x10", "0x11", 100)
 
     deposit1 = 20 * 10**18
     deposit2 = 5 * 10**18
@@ -110,7 +108,8 @@ def test_redeem(lido, oracle, vKSM, accounts):
     assert relay.ledgers[0].active_balance == deposit1 + deposit2 + deposit3 + reward
     assert lido.getTotalPooledKSM() == deposit1 + deposit2 + deposit3 + reward
 
-    lido.redeem(lido.balanceOf(accounts[1]), {'from': accounts[1]})
+    balance_for_redeem = lido.balanceOf(accounts[1])
+    lido.redeem(balance_for_redeem, {'from': accounts[1]})
     relay.new_era([reward])
     
     # travel for 29 eras
@@ -121,4 +120,8 @@ def test_redeem(lido, oracle, vKSM, accounts):
     relay.new_era([reward]) # should downward transfer
     relay.new_era([reward]) # should downward transfer got completed
 
+    balance_before_claim = vKSM.balanceOf(accounts[1])
     lido.claimUnbonded({'from': accounts[1]})
+
+    assert vKSM.balanceOf(accounts[1]) == balance_for_redeem + balance_before_claim
+    assert lido.getTotalPooledKSM() == deposit1 + deposit2 + deposit3 + 5*reward - balance_for_redeem 
