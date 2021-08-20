@@ -7,6 +7,7 @@ import "../interfaces/ILido.sol";
 import "../interfaces/IAUX.sol";
 import "../interfaces/IvKSM.sol";
 import "../interfaces/IvAccounts.sol";
+import "../interfaces/ILedger.sol";
 import "./LKSM.sol";
 import "./Ledger.sol";
 
@@ -74,6 +75,16 @@ contract Lido is ILido, LKSM {
 
     // Ledger accounts (start eraId + Ledger contract address)
     EnumerableMap.UintToAddressMap private members;
+
+    // Map to check ledger existence by address
+    mapping(address => bool) private ledgers;
+
+    // Ledger shares map
+    mapping(address => uint128) public ledgerShares;
+
+    // Sum of all shares
+    uint128 public legderSharesTotal;
+
     // existential deposit value for relay-chain currency.
     // Polkadot has 100 CENTS = 1 DOT where DOT = 10_000_000_000;
     // Kusama has 1 CENTS. CENTS = KSM / 30_000 where KSM = 1_000_000_000_000
@@ -104,13 +115,6 @@ contract Lido is ILido, LKSM {
         _;
     }
 
-    modifier isLedger(bytes32 _stashAccount) {
-        (bool _found, address ledger) = _findStash(_stashAccount);
-        // todo uncomment
-        require(_found && ledger == msg.sender, 'NOT_LEDGER');
-        _;
-    }
-
     /**
     *   @notice Stop pool routine operations
     */
@@ -129,16 +133,24 @@ contract Lido is ILido, LKSM {
         revert("FORBIDDEN");
     }
 
+    /**
+    * @dev API in base points 0 - 100000.
+    */
+    function getCurrentAPY() external override view returns (uint256){
+        // todo. now 5.4%
+        return 540;
+    }
+
+
     function getMinStashBalance() external view override returns (uint128){
         return minStashBalance;
     }
 
-    function addStash(bytes32 _stashAccount, bytes32 _controllerAccount) external auth(spec_manager) {
+    function addLedger(bytes32 _stashAccount, bytes32 _controllerAccount, uint128 share) external auth(spec_manager) returns(address) {
         require(ledgerMaster != address(0), 'UNSPECIFIED_LEDGER');
         require(oracle != address(0), 'NO_ORACLE');
         require(members.length() < MAX_STASH_ACCOUNTS, 'STASH_POOL_LIMIT');
-        // don't care about that, because clone method reverts if stash ledger already exists
-        // require(_findStash(_stashAccount) == MEMBER_NOT_FOUND, 'STASH_ALREADY_EXISTS');
+        require(!members.contains(uint256(_stashAccount)), 'STASH_ALREADY_EXISTS');
 
         address ledger = ledgerMaster.cloneDeterministic(_stashAccount);
         // skip one era before commissioning
@@ -151,24 +163,38 @@ contract Lido is ILido, LKSM {
             address(vAccounts)
         );
         members.set(uint256(_stashAccount), ledger);
+        ledgers[ledger] = true;
+        ledgerShares[ledger] = share;
+        legderSharesTotal += share;
+
+        _rebalanceStakes();
 
         emit LegderAdded(ledger, _stashAccount, _controllerAccount, ILidoOracle(oracle).getCurrentEraId() + 1);
+        return ledger;
     }
 
-    function enableStash(bytes32 _stashAccount) external auth(spec_manager) {
-        (bool _found, address ledger) = _findStash(_stashAccount);
-        require(_found, 'UNKNOWN_STASH_ACCOUNT');
+    function setLedgerShare(address ledger, uint128 newShare) external auth(spec_manager) {
+        require(ledgers[ledger], 'LEDGER_BOT_FOUND');
 
-        require(Ledger(ledger).getStatus() == ILidoOracle.StakeStatus.Blocked, 'STASH_ALREADY_STARTED');
-        Ledger(ledger).setStatus(ILidoOracle.StakeStatus.Idle);
+        legderSharesTotal -= ledgerShares[ledger];
+        ledgerShares[ledger] = newShare;
+        legderSharesTotal += newShare;
+
+        _rebalanceStakes();
     }
 
-    function disableStash(bytes32 _stashAccount) external auth(spec_manager) {
-        (bool _found, address ledger) = _findStash(_stashAccount);
-        require(_found, 'UNKNOWN_STASH_ACCOUNT');
+    function removeLedger(address ledgerAddress) external auth(spec_manager) {
+        require(ledgers[ledgerAddress], 'LEDGER_BOT_FOUND');
+        require(ledgerShares[ledgerAddress] == 0, 'LEGDER_HAS_NON_ZERO_SHARE');
+        
+        Ledger ledger = Ledger(ledgerAddress);
+        require(ledger.getStatus() == ILedger.Status.Idle, 'LEDGER_NOT_IDLE');
 
-        Ledger(ledger).setStatus(ILidoOracle.StakeStatus.Blocked);
-        // todo immediate send Chill + Unbond
+        members.remove(uint256(ledger.stashAccount()));
+        delete ledgers[ledgerAddress];
+        delete ledgerShares[ledgerAddress];
+
+        _rebalanceStakes();
     }
 
     function setQuorum(uint8 _quorum) external override onlyOracle {
@@ -189,23 +215,9 @@ contract Lido is ILido, LKSM {
     * @dev invoke pallet_stake::nominate on the relay side
     */
     function nominate(bytes32 _stashAccount, bytes32[] calldata validators) external auth(stake_manager) {
-        (bool _found, address ledger) = _findStash(_stashAccount);
-        require(_found, 'UNKNOWN_STASH_ACCOUNT');
+        address ledger = members.get(uint256(_stashAccount), 'UNKNOWN_STASH_ACCOUNT');
 
-        ILidoOracle.StakeStatus _status = Ledger(ledger).getStatus();
-        require(_status == ILidoOracle.StakeStatus.Nominator || _status == ILidoOracle.StakeStatus.Idle || _status == ILidoOracle.StakeStatus.None, 'STASH_WRONG_STATUS');
-
-        bytes[] memory call = new bytes[](1);
-
-        if (_status == ILidoOracle.StakeStatus.None) {
-            uint128 freeBalance = Ledger(ledger).getFreeStashBalance();
-            require(freeBalance >= minStashBalance, 'STASH_INSUFFICIENT_BALANCE');
-            call[0] = AUX.buildBond(Ledger(ledger).controllerAccount(), validators, freeBalance);
-        } else {
-            require(Ledger(ledger).lockedStashBalance() >= minStashBalance, 'STASH_INSUFFICIENT_BALANCE');
-            call[0] = AUX.buildNominate(validators);
-        }
-        vAccounts.relayTransactCall(_stashAccount, GARANTOR, DEFAULT_FEE, call);
+        Ledger(ledger).nominate(validators);
     }
 
     /**
@@ -221,7 +233,7 @@ contract Lido is ILido, LKSM {
 
         fundRaisedBalance += _amount;
 
-        _stake(_amount);
+        _distributeStake(_amount);
     }
 
     /**
@@ -232,16 +244,19 @@ contract Lido is ILido, LKSM {
         uint256 _shares = getSharesByPooledKSM(amount);
         require(_shares <= _sharesOf(msg.sender), 'REDEEM_AMOUNT_EXCEEDS_BALANCE');
 
-        _transferShares(msg.sender, address(this), _shares);
+        _burnShares(msg.sender, _shares);
 
         Claim memory _claim = claimOrders[msg.sender];
         uint128 _amount = uint128(amount);
         _claim.balance += _amount;
         _claim.timeout = uint128(block.timestamp) + unbondingPeriod;
 
+        fundRaisedBalance -= uint128(amount);
         claimOrders[msg.sender] = _claim;
-        _unstake(_amount);
+
+        _distributeUnstake(_amount);
     }
+
     /**
     * @dev Return caller unbonding balance and balance that is ready for claim
     */
@@ -267,11 +282,6 @@ contract Lido is ILido, LKSM {
 
             uint256 sharesAmount = getSharesByPooledKSM(amount);
             vKSM.transfer(msg.sender, amount);
-
-            _burnShares(address(this), sharesAmount);
-            // claimDebt -= amount;
-
-            fundRaisedBalance -= amount;
         }
     }
 
@@ -280,16 +290,7 @@ contract Lido is ILido, LKSM {
     */
     function findLedger(bytes32 _stashAccount) external view override returns (address) {
         (bool _found, address ledger) = members.tryGet(uint256(_stashAccount));
-        //require(_found, 'UNKNOWN_STASH_ACCOUNT');
         return ledger;
-    }
-
-    /**
-    * @dev Find stash account and return its index in the register
-    */
-    function _findStash(bytes32 _stashAccount) internal view returns (bool, address){
-        // todo compare performance with Clones::predictDeterministicAddress + isContract.
-        return members.tryGet(uint256(_stashAccount));
     }
 
     /**
@@ -314,54 +315,81 @@ contract Lido is ILido, LKSM {
         ledgerMaster = _ledgerMaster;
     }
 
+    function setFeeBP(uint16 _feeBP) external auth(spec_manager) {
+        feeBP = _feeBP;
+        emit FeeSet(_feeBP);
+    }
+
+    function distributeRewards(uint128 _totalRewards) external override {
+        require(ledgers[msg.sender], 'NOT_FROM_LEDGER');
+
+        uint256 feeBasis = uint256(feeBP);
+
+        fundRaisedBalance += _totalRewards;
+
+        uint256 shares2mint = (
+            uint256(_totalRewards) * feeBasis * _getTotalShares()
+                / 
+            (_getTotalPooledKSM() * 10000 - (feeBasis * uint256(_totalRewards)))
+        );
+
+        _mintShares(address(this), shares2mint);
+    }
+
     /**
     * @dev Return relay chain stash account addresses
     */
-    function getStakeAccounts(address _oracle) public override view returns (ILido.Stash[] memory){
-        ILido.Stash[] memory _stake = new Stash[](members.length());
+    function getStashAccounts() public override view returns (ILido.Stash[] memory) {
+        ILido.Stash[] memory _stashes = new Stash[](members.length());
 
         for (uint i = 0; i < members.length(); i++) {
             (uint256 key, address ledger) = members.at(i);
-            _stake[i].stashAccount = bytes32(key);
+            _stashes[i].stashAccount = bytes32(key);
             // todo adjust eraId to `_oracle`
-            _stake[i].eraId = Ledger(ledger).getEraId();
+            _stashes[i].eraId = Ledger(ledger).getEraId();
         }
-        return _stake;
+        return _stashes;
     }
 
-    function _stake(uint128 _amount) internal {
+    function _distributeStake(uint128 _amount) internal {
         if (_amount == 0) {
             return;
         }
 
-        uint128 _length = uint128(members.length());
-        uint128 _chunk = (_amount) / _length;
-
-        for (uint i = 0; i < _length; i++) {
+        for (uint i = 0; i < members.length(); i++) {
             (uint256 _key, address ledger) = members.at(i);
-            // todo skip ledgers that have Blocked status
-            // todo safe increaseAllowance
-            //vKSM.increaseAllowance(ledger, uint256(_chunk));
-            vKSM.approve(ledger, vKSM.allowance(address(this), ledger) + uint256(_chunk));
+            if (ledgerShares[ledger] > 0) {
+                uint128 _chunk = _amount * ledgerShares[ledger] / legderSharesTotal;
 
-            Ledger(ledger).stake(_chunk);
+                vKSM.approve(ledger, vKSM.allowance(address(this), ledger) + uint256(_chunk));
+                Ledger(ledger).stake(_chunk);
+            }
         }
     }
 
-    function _unstake(uint128 _amount) internal {
+    function _distributeUnstake(uint128 _amount) internal {
         if (_amount == 0) {
             return;
         }
 
-        uint128 _length = uint128(members.length());
-        uint128 _chunk = (_amount + _length - 1) / _length;
-
-        for (uint i = 0; i < _length; i++) {
+        for (uint i = 0; i < members.length(); i++) {
             (uint256 _key, address ledger) = members.at(i);
-            // todo drain ledgers that have Blocked status
-            // todo safe decreaseAllowance
-            // vKSM.decreaseAllowance(ledger, uint256(_chunk));
-            Ledger(ledger).unstake(_chunk);
+            if (ledgerShares[ledger] > 0) {
+                uint128 _chunk = _amount * ledgerShares[ledger] / legderSharesTotal;
+
+                Ledger(ledger).unstake(_chunk);
+            }
+        }
+    }
+
+    function _rebalanceStakes() internal {
+        uint128 totalStake = uint128(getTotalPooledKSM());
+
+        for (uint i = 0; i < members.length(); i++) {
+            (uint256 _key, address ledger) = members.at(i);
+            uint128 stake = uint128(uint256(totalStake) * ledgerShares[ledger] / legderSharesTotal);
+            vKSM.approve(ledger, stake);
+            Ledger(ledger).exactStake(stake);
         }
     }
 
@@ -389,10 +417,6 @@ contract Lido is ILido, LKSM {
         return sharesAmount;
     }
 
-    function setFeeBP(uint16 _feeBP) external auth(spec_manager) {
-        feeBP = _feeBP;
-        emit FeeSet(_feeBP);
-    }
 
     /**
     * @dev Emits an {Transfer} event where from is 0 address. Indicates mint events.
@@ -401,29 +425,7 @@ contract Lido is ILido, LKSM {
         emit Transfer(address(0), _to, getPooledKSMByShares(_sharesAmount));
     }
 
-    /**
-    * @dev API in base points 0 - 100000.
-    */
-    function getCurrentAPY() external override view returns (uint256){
-        // todo. now 5.4%
-        return 540;
-    }
-
     function _getTotalPooledKSM() internal view override returns (uint256) {
         return fundRaisedBalance - lossBalance;
-    }
-
-    function distributeRewards(uint128 _totalRewards, bytes32 _stashAccount) external override isLedger(_stashAccount) {
-        uint256 feeBasis = uint256(feeBP);
-
-        fundRaisedBalance += _totalRewards;
-
-        uint256 shares2mint = (
-            uint256(_totalRewards) * feeBasis * _getTotalShares()
-                / 
-            (_getTotalPooledKSM() * 10000 - (feeBasis * uint256(_totalRewards)))
-        );
-
-        _mintShares(address(this), shares2mint);
     }
 }

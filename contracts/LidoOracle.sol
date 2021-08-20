@@ -4,6 +4,7 @@ pragma abicoder v2;
 
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
+import "../interfaces/ILedger.sol";
 import "zeppelin/security/Pausable.sol";
 import "./Ledger.sol";
 
@@ -170,7 +171,7 @@ contract LidoOracle is ILidoOracle, Pausable {
      * @param _eraId Relaychain era
      * @param report Relaychain report
      */
-    function reportRelay(uint64 _eraId, LedgerData calldata report) external override whenNotPaused {
+    function reportRelay(uint64 _eraId, ILedger.LedgerData calldata report) external override whenNotPaused {
         require(
             report.unlocking.length < type(uint8).max
             && report.totalBalance >= report.activeBalance
@@ -195,7 +196,7 @@ contract LidoOracle is ILidoOracle, Pausable {
         ledger.reportRelay(index, quorum, _eraId, report);
     }
 
-    function getStakeAccounts(address oracle) external override view returns (ILido.Stash[] memory){
-        return lido.getStakeAccounts(oracle);
+    function getStashAccounts() external override view returns (ILido.Stash[] memory){
+        return lido.getStashAccounts();
     }
 }

@@ -89,8 +89,8 @@ class RelayChain:
         self.era = 2
 
 
-    def new_ledger(self, stash_account, controller_account):
-        tx = self.lido.addStash(stash_account, controller_account, {'from': self.accounts[0]})
+    def new_ledger(self, stash_account, controller_account, share):
+        tx = self.lido.addLedger(stash_account, controller_account, share, {'from': self.accounts[0]})
         self.ledgers.append(RelayLegder(self, tx.events['LegderAdded'][0]['addr'], stash_account, controller_account))
 
     def _ledger_idx_by_stash_account(self, stash_account):
