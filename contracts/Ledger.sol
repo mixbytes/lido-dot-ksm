@@ -186,8 +186,8 @@ contract Ledger is Consensus, ILedger {
     uint128 public targetStashStake;
 
     // Pending transfers
-    uint128 internal transferUpwardBalance;
-    uint128 internal transferDownwardBalance;
+    uint128 public transferUpwardBalance;
+    uint128 public transferDownwardBalance;
 
 
     // vKSM precompile
@@ -321,7 +321,11 @@ contract Ledger is Consensus, ILedger {
         if (cachedStashBalance < report.stashBalance) { // if cached balance > real => we have reward
             uint128 reward = report.stashBalance - cachedStashBalance;
             lido.distributeRewards(reward);
-            targetStashStake += reward;
+
+            // if targetStash is zero we need to keep it zero to drain all active balance
+            if (targetStashStake != 0) {
+                targetStashStake += reward;
+            }
             emit Rewards(reward);
         }
         else if (cachedStashBalance > report.stashBalance) {
@@ -359,9 +363,15 @@ contract Ledger is Consensus, ILedger {
                 calls[calls_counter++] = AUX.buildReBond(unlockingBalance);
             }
 
+            //TODO if status is idle send bond first
             // bond extra all free balance always
             if (report.getFreeBalance() > 0) {
-                calls[calls_counter++] = AUX.buildBondExtra(report.getFreeBalance());
+                if (activeStashBalance == 0) {
+                    calls[calls_counter++] = AUX.buildBond(controllerAccount, report.getFreeBalance());
+                }
+                else {
+                    calls[calls_counter++] = AUX.buildBondExtra(report.getFreeBalance());
+                }
             }
         }
         else if (report.stashBalance > targetStashStake) { // parachain deficit
@@ -370,8 +380,8 @@ contract Ledger is Consensus, ILedger {
             //     - if we still have deficit try to withdraw already unlocked tokens
             //     - if we still have deficit initiate unbond for remain deficit
 
-            // if ledger in the deadpool we need to put it to chill 
-            if (targetStashStake < lido.getMinStashBalance()) {
+            // if ledger is in the deadpool we need to put it to chill 
+            if (targetStashStake < lido.getMinStashBalance() && stakeStatus != Status.Idle) {
                 calls[calls_counter++] = AUX.buildChill();
             }
 

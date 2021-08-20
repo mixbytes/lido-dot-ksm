@@ -7,6 +7,7 @@ class RelayLegder:
     free_balance = 0
     unlocking_chunks = []
     validators = 0
+    status = None
 
     relay = None
 
@@ -20,6 +21,7 @@ class RelayLegder:
         self.free_balance = 0
         self.unlocking_chunks = []
         self.validators = 0
+        self.status = None
 
     def unbond(self, amount):
         assert self.active_balance >= amount
@@ -27,11 +29,10 @@ class RelayLegder:
         self.unlocking_chunks.append((amount, self.relay.era + 28))
         assert len(self.unlocking_chunks) < 32
 
-    def bond(self, amount, validators):
+    def bond(self, amount):
         assert self.free_balance >= amount
         self.active_balance += amount
         self.free_balance -= amount
-        self.validators = validators
 
     def bond_extra(self, amount):
         assert self.free_balance >= amount
@@ -55,11 +56,21 @@ class RelayLegder:
             sum += self.unlocking_chunks[i][0]
         return sum
 
+    def _status_num(self):
+        if self.status == 'Chill':
+            return 0
+        elif self.status == 'Nominator':
+            return 1
+        elif self.status == 'Validator':
+            return 2
+        else:
+            return 3
+    
     def get_report_data(self):
         return (
             self.stash_account, 
             self.controller_account,
-            1,
+            self._status_num(),
             self.active_balance, 
             self.active_balance + self._unlocking_sum(), 
             self.unlocking_chunks, 
@@ -75,6 +86,7 @@ class RelayChain:
     accounts = None
     ledgers = []
     era = 2
+    total_rewards = 0
 
     def __init__(self, lido, vKSM, oracle, accounts):
         self.lido = lido
@@ -87,10 +99,11 @@ class RelayChain:
 
         self.ledgers = []
         self.era = 2
-
+        self.total_rewards = 0
 
     def new_ledger(self, stash_account, controller_account, share):
         tx = self.lido.addLedger(stash_account, controller_account, share, {'from': self.accounts[0]})
+        tx.info()
         self.ledgers.append(RelayLegder(self, tx.events['LegderAdded'][0]['addr'], stash_account, controller_account))
 
     def _ledger_idx_by_stash_account(self, stash_account):
@@ -124,7 +137,7 @@ class RelayChain:
     def _process_call(self, name, event):
         if name == 'Bond':
             idx = self._ledger_idx_by_ledger_address(event['caller'])
-            self.ledgers[idx].bond(event['amount'], event['validators'])
+            self.ledgers[idx].bond(event['amount'])
         elif name == 'BondExtra':
             idx = self._ledger_idx_by_ledger_address(event['caller'])
             self.ledgers[idx].bond_extra(event['amount'])
@@ -140,7 +153,10 @@ class RelayChain:
         elif name == 'Nominate':
             idx = self._ledger_idx_by_ledger_address(event['caller'])
             self.ledgers[idx].validators += event['validators']
+            self.ledgers[idx].status = 'Nominator'
         elif name == 'Chill':
+            idx = self._ledger_idx_by_ledger_address(event['caller'])
+            self.ledgers[idx].status = 'Chill'
             pass
 
     def _after_report(self, tx):
@@ -157,8 +173,9 @@ class RelayChain:
     def new_era(self, rewards = []):
         self.era += 1
         for i in range(len(self.ledgers)):
-            if i < len(rewards):
+            if i < len(rewards) and self.ledgers[i].status != 'Chill':
                 self.ledgers[i].active_balance += rewards[i]
+                self.total_rewards += rewards[i]
             tx = self.oracle.reportRelay(self.era, self.ledgers[i].get_report_data())
             tx.info()
             self._after_report(tx)

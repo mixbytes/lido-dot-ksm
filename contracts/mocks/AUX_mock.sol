@@ -7,7 +7,6 @@ contract AUX_mock is IAUX {
     event Bond (
         address caller,
         bytes32 controller,
-        bytes32[] validators,
         uint256 amount
     );
 
@@ -39,8 +38,8 @@ contract AUX_mock is IAUX {
         address caller
     );
 
-    function buildBond(bytes32 controller, bytes32[] memory validators, uint256 amount) override external returns (bytes memory) {
-        emit Bond(msg.sender, controller, validators, amount);
+    function buildBond(bytes32 controller, uint256 amount) override external returns (bytes memory) {
+        emit Bond(msg.sender, controller, amount);
         return toBytes(0x00);
     }
 
