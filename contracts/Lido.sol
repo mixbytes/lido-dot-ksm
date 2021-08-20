@@ -11,10 +11,10 @@ import "../interfaces/ILedger.sol";
 import "./LKSM.sol";
 import "./Ledger.sol";
 
-import "zeppelin/token/ERC20/IERC20.sol";
-import "zeppelin/utils/math/SafeMath.sol";
-import "zeppelin/proxy/Clones.sol";
-import "zeppelin/utils/structs/EnumerableMap.sol";
+import "@openzeppelin/token/ERC20/IERC20.sol";
+import "@openzeppelin/utils/math/SafeMath.sol";
+import "@openzeppelin/proxy/Clones.sol";
+import "@openzeppelin/utils/structs/EnumerableMap.sol";
 
 contract Lido is ILido, LKSM {
     using Clones for address;

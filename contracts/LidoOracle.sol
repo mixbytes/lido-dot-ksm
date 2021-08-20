@@ -5,7 +5,7 @@ pragma abicoder v2;
 import "../interfaces/ILidoOracle.sol";
 import "../interfaces/ILido.sol";
 import "../interfaces/ILedger.sol";
-import "zeppelin/security/Pausable.sol";
+import "@openzeppelin/security/Pausable.sol";
 import "./Ledger.sol";
 
 contract LidoOracle is ILidoOracle, Pausable {

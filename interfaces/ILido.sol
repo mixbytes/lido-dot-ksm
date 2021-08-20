@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 pragma abicoder v2;
 
 import "./ILidoOracle.sol";
-import "zeppelin/token/ERC20/IERC20.sol";
+import "@openzeppelin/token/ERC20/IERC20.sol";
 
 interface ILido is IERC20 {
     // Records a deposit made by a user

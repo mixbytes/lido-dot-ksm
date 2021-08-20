@@ -2,9 +2,9 @@
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
-import "../interfaces/ILidoOracle.sol";
-import "../interfaces/ILido.sol";
-import "zeppelin/token/ERC20/ERC20.sol";
+import "../../interfaces/ILidoOracle.sol";
+import "../../interfaces/ILido.sol";
+import "@openzeppelin/token/ERC20/ERC20.sol";
 
 contract LidoMock is ILido, ERC20 {
     address private owner;
@@ -20,7 +20,7 @@ contract LidoMock is ILido, ERC20 {
         _;
     }
 
-    function getStakeAccounts(address oracle) override public view returns(ILido.Stash[] memory){
+    function getStashAccounts() override public view returns(ILido.Stash[] memory){
         ILido.Stash[] memory stake = new ILido.Stash[](2);
         // Ferdie DE14BzQ1bDXWPKeLoAqdLAm1GpyAWaWF1knF74cEZeomTBM
         stake[0].stashAccount = 0x1cbd2d43530a44705ad088af313e18f80b53ef16b36177cd4b77b846f2a5f07c;
@@ -37,8 +37,8 @@ contract LidoMock is ILido, ERC20 {
 
     }
 
-    function getUnbonded(address holder) external override returns (uint256,uint256) {
-        return (0,0);
+    function getUnbonded(address holder) external override returns (uint256) {
+        return 0;
     }
 
     function claimUnbonded() external override notImplemented{
@@ -69,7 +69,7 @@ contract LidoMock is ILido, ERC20 {
         return address(0);
     }
 
-    function distributeRewards(uint128 _totalRewards, bytes32 _stashAccount) external override {
+    function distributeRewards(uint128 _totalRewards) external override {
         _mint(address(this), _totalRewards);
     }
 }
