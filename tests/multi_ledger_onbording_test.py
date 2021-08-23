@@ -10,13 +10,13 @@ def check_distribution(lido, stashes, shares, total_deposit):
         assert legder.targetStashStake() == total_deposit * shares[i] // total_shares  
 
 
-def test_add_ledger_slowly(lido, oracle, vKSM, accounts):
+def test_add_ledger_slowly(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
     stashes = [0x10]
     shares = [100]
     total_deposit = 0
 
-    relay = RelayChain(lido, vKSM, oracle, accounts)
+    relay = RelayChain(lido, vKSM, oracle_master, accounts)
     relay.new_ledger(hex(stashes[0]), hex(stashes[0]+1), shares[0])
 
     deposit = 1000 * 10**18
@@ -48,13 +48,13 @@ def test_add_ledger_slowly(lido, oracle, vKSM, accounts):
     assert relay.ledgers[1].active_balance == Ledger.at(lido.findLedger(hex(stashes[1]))).targetStashStake()
 
 
-def test_remove_ledger_slowly(lido, oracle, vKSM, accounts):
+def test_remove_ledger_slowly(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
     stashes = [0x10, 0x20]
     shares = [100, 50]
     total_deposit = 0
 
-    relay = RelayChain(lido, vKSM, oracle, accounts)
+    relay = RelayChain(lido, vKSM, oracle_master, accounts)
     relay.new_ledger(hex(stashes[0]), hex(stashes[0]+1), shares[0])
     relay.new_ledger(hex(stashes[1]), hex(stashes[1]+1), shares[1])
 
@@ -86,7 +86,7 @@ def test_remove_ledger_slowly(lido, oracle, vKSM, accounts):
     relay.new_era([rewards]) # downward transfer from second ledger
     relay.new_era([rewards]) # upward transfer for first ledger
     relay.new_era([rewards]) # bondextra for fisrt ledger
-    relay.new_era([rewards]) # bondextra for fisrt ledger [it depend on oracleReport order accross ledgers]
+    relay.new_era([rewards]) # bondextra for fisrt ledger [it depend on oracle_masterReport order accross ledgers]
 
     assert relay.ledgers[0].active_balance == Ledger.at(lido.findLedger(hex(stashes[0]))).targetStashStake()
     assert relay.ledgers[1].active_balance == Ledger.at(lido.findLedger(hex(stashes[1]))).targetStashStake()

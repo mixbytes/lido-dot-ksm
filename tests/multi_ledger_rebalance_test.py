@@ -3,14 +3,14 @@ from brownie import chain
 from helpers import RelayChain, distribute_initial_tokens
 
 
-def test_add_multi_ledgers(lido, oracle, vKSM, Ledger, accounts):
+def test_add_multi_ledgers(lido, oracle_master, vKSM, Ledger, accounts):
     for stash in (0x10, 0x20, 0x30):
         lido.addLedger(hex(stash), hex(stash + 1), 100, {'from': accounts[0]})
         legder = Ledger.at(lido.findLedger(hex(stash)))
         assert legder.stashAccount() == hex(stash)
 
 
-def test_deposit_distribution(lido, oracle, vKSM, Ledger, accounts):
+def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, accounts):
     stashes = [0x10, 0x20, 0x30]
     shares = [100, 50, 10]
     total_shares = sum(i for i in shares)
@@ -49,7 +49,7 @@ def test_deposit_distribution(lido, oracle, vKSM, Ledger, accounts):
     check_distribution()
 
 
-def test_change_shares_distribution(lido, oracle, vKSM, Ledger, accounts):
+def test_change_shares_distribution(lido, oracle_master, vKSM, Ledger, accounts):
     stashes = [0x10, 0x20, 0x30]
     shares = [100, 50, 10]
     total_shares = sum(i for i in shares)
@@ -82,7 +82,7 @@ def test_change_shares_distribution(lido, oracle, vKSM, Ledger, accounts):
     check_distribution()
 
 
-def test_redeem_distribution(lido, oracle, vKSM, Ledger, accounts):
+def test_redeem_distribution(lido, oracle_master, vKSM, Ledger, accounts):
     stashes = [0x10, 0x20, 0x30]
     shares = [100, 50, 10]
     total_shares = sum(i for i in shares)

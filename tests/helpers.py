@@ -82,20 +82,20 @@ class RelayLegder:
 class RelayChain:
     lido = None
     vKSM = None
-    oracle = None
+    oracle_master = None
     accounts = None
     ledgers = []
     era = 2
     total_rewards = 0
 
-    def __init__(self, lido, vKSM, oracle, accounts):
+    def __init__(self, lido, vKSM, oracle_master, accounts):
         self.lido = lido
         self.vKSM = vKSM
-        self.oracle = oracle
+        self.oracle_master = oracle_master
         self.accounts = accounts
 
-        self.oracle.addOracleMember(self.accounts[0], {'from': self.accounts[0]})
-        self.oracle.setQuorum(1, {'from': self.accounts[0]})
+        self.oracle_master.addOracleMember(self.accounts[0], {'from': self.accounts[0]})
+        self.oracle_master.setQuorum(1, {'from': self.accounts[0]})
 
         self.ledgers = []
         self.era = 2
@@ -176,7 +176,7 @@ class RelayChain:
             if i < len(rewards) and self.ledgers[i].status != 'Chill':
                 self.ledgers[i].active_balance += rewards[i]
                 self.total_rewards += rewards[i]
-            tx = self.oracle.reportRelay(self.era, self.ledgers[i].get_report_data())
+            tx = self.oracle_master.reportRelay(self.era, self.ledgers[i].get_report_data())
             tx.info()
             self._after_report(tx)
 

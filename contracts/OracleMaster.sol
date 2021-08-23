@@ -2,13 +2,21 @@
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
-import "../interfaces/ILidoOracle.sol";
+import "@openzeppelin/security/Pausable.sol";
+import "@openzeppelin/proxy/Clones.sol";
+
+import "../interfaces/IOracle.sol";
 import "../interfaces/ILido.sol";
 import "../interfaces/ILedger.sol";
-import "@openzeppelin/security/Pausable.sol";
-import "./Ledger.sol";
 
-contract LidoOracle is ILidoOracle, Pausable {
+
+contract OracleMaster is Pausable {
+    using Clones for address;
+
+    event MemberAdded(address member);
+    event MemberRemoved(address member);
+    event QuorumChanged(uint8 quorum);
+
     /// Maximum number of oracle committee members
     uint256 public constant MAX_MEMBERS = 255;
     // Missing member index
@@ -18,24 +26,30 @@ contract LidoOracle is ILidoOracle, Pausable {
     // Oracle members
     address[] private members;
     // Relaychain era timestamp
-    RelaySpec private relaySpec;
+    Types.RelaySpec private relaySpec;
 
     // todo pack it with eraId as uint8
     uint8  public quorum;
 
     // Lido smart contract
-    ILido    private lido;
+    address private lido;
+
+    mapping(address => address) private oracleForLedger;
 
     address  private member_manager;
     address  private quorum_manager;
     address  private spec_manager;
 
+    address public oracleClone;
+
     // APY biases. low 16 bytes - slash (decrease) bias, high 16 bytes - reward (increase) bias
     uint256 private report_balance_bias;
+    uint64 private eraId;
 
-    // todo remove
-    constructor() {
-        initialize(address(0), msg.sender, msg.sender, msg.sender);
+
+    modifier onlyLido() {
+        require(msg.sender == lido, "CALLER_NOT_LIDO");
+        _;
     }
 
     // todo remove.
@@ -47,16 +61,20 @@ contract LidoOracle is ILidoOracle, Pausable {
         address _lido,
         address _member_manager,
         address _quorum_manager,
-        address _spec_manager
-    ) internal {
+        address _spec_manager,
+        address _oracleClone
+    ) external {
+        require(oracleClone == address(0), 'ALREADY_INITIALIZED');
+        
         member_manager = _member_manager;
         quorum_manager = _quorum_manager;
         spec_manager = _spec_manager;
 
-        lido = ILido(_lido);
+        lido = _lido;
 
         _setRelaySpec(0, 0);
         quorum = 1;
+        oracleClone = _oracleClone;
     }
 
     /**
@@ -78,7 +96,7 @@ contract LidoOracle is ILidoOracle, Pausable {
         _;
     }
 
-    function setLido(ILido _lido) external auth(spec_manager) {
+    function setLido(address _lido) external auth(spec_manager) {
         lido = _lido;
     }
 
@@ -117,14 +135,24 @@ contract LidoOracle is ILidoOracle, Pausable {
         emit MemberRemoved(_member);
 
         // delete the data for the last epoch, let remained oracles report it again
-        lido.clearReporting();
+        _clearReporting();
+    }
+
+    function _clearReporting() internal {
+        address[] memory ledgers = ILido(lido).getLedgerAddresses();
+        for (uint256 i = 0; i < ledgers.length; ++i) {
+            address oracle = oracleForLedger[ledgers[i]];
+            if (oracle != address(0)) {
+                IOracle(oracle).cleanReporting();
+            }
+        }
     }
 
     function _setRelaySpec(
         uint64 _genesisTimestamp,
         uint64 _secondsPerEra
     ) private {
-        RelaySpec memory _relaySpec;
+        Types.RelaySpec memory _relaySpec;
         _relaySpec.genesisTimestamp = _genesisTimestamp;
         _relaySpec.secondsPerEra = _secondsPerEra;
 
@@ -150,20 +178,33 @@ contract LidoOracle is ILidoOracle, Pausable {
 
         // If the quorum value lowered, check existing reports whether it is time to push
         if (oldQuorum > _quorum) {
-            lido.setQuorum(_quorum);
+            address[] memory ledgers = ILido(lido).getLedgerAddresses();
+            for (uint256 i = 0; i < ledgers.length; ++i) {
+                address oracle = oracleForLedger[ledgers[i]];
+                if (oracle != address(0)) {
+                    IOracle(oracle).softenQuorum(_quorum, eraId);
+                }
+            }
         }
         emit QuorumChanged(_quorum);
     }
 
-    function _getCurrentEraId(RelaySpec memory /* _relaySpec */) internal view returns (uint64) {
-        // todo. uncomment and fix the expression
-        return 0;
-        //return ( uint64(block.timestamp) - _relaySpec.genesisTimestamp )/ _relaySpec.secondsPerEra;
+    function addLedger(address _ledger) external onlyLido {
+        IOracle newOracle = IOracle(oracleClone.cloneDeterministic(bytes32(uint256(uint160(_ledger)) << 96)));
+        newOracle.initialize(address(this), _ledger);
+        oracleForLedger[_ledger] = address(newOracle);
     }
 
-    function getCurrentEraId() external view override returns (uint64){
-        RelaySpec memory _relayspec = relaySpec;
-        return _getCurrentEraId(_relayspec);
+    function removeLedger(address _ledger) external onlyLido {
+        oracleForLedger[_ledger] = address(0);
+    }
+
+    function getOracle(address _ledger) view external returns (address) {
+        return oracleForLedger[_ledger];
+    }
+
+    function getCurrentEraId() public view returns (uint64){
+        return (uint64(block.timestamp) - relaySpec.genesisTimestamp ) / relaySpec.secondsPerEra;
     }
 
     /**
@@ -171,7 +212,7 @@ contract LidoOracle is ILidoOracle, Pausable {
      * @param _eraId Relaychain era
      * @param report Relaychain report
      */
-    function reportRelay(uint64 _eraId, ILedger.LedgerData calldata report) external override whenNotPaused {
+    function reportRelay(uint64 _eraId, Types.OracleData calldata report) external whenNotPaused {
         require(
             report.unlocking.length < type(uint8).max
             && report.totalBalance >= report.activeBalance
@@ -179,24 +220,23 @@ contract LidoOracle is ILidoOracle, Pausable {
             'INCORRECT_REPORT'
         );
 
-        Ledger ledger = Ledger(lido.findLedger(report.stashAccount));
+        address ledger = ILido(lido).findLedger(report.stashAccount);
+        address oracle = oracleForLedger[ledger];
+        require(oracle != address(0), 'ORACLE_FOR_LEDGER_NOT_FOUND');
 
-        uint64 _ledgerEraId = ledger.getEraId();
-        require(_eraId >= _ledgerEraId, 'FAR_TOO_LATE');
-
-        if (_eraId > _ledgerEraId) {
-            require(_eraId >= _getCurrentEraId(relaySpec), "UNEXPECTED_ERA");
-        }
+        //TODO !!!!! fix condition !!!!!
+        //require(_eraId == _getCurrentEraId(relaySpec), "UNEXPECTED_ERA");
 
         uint256 index = _getMemberId(msg.sender);
         require(index != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
 
-        require(report.controllerAccount == ledger.controllerAccount(), 'UNKNOWN_CONTROLLER');
+        require(report.controllerAccount == ILedger(ledger).controllerAccount(), 'UNKNOWN_CONTROLLER');
 
-        ledger.reportRelay(index, quorum, _eraId, report);
+        IOracle(oracle).reportRelay(index, quorum, _eraId, report);
+        eraId = _eraId;
     }
 
-    function getStashAccounts() external override view returns (ILido.Stash[] memory){
-        return lido.getStashAccounts();
+    function getStashAccounts() external view returns (Types.Stash[] memory) {
+        return ILido(lido).getStashAccounts();
     }
 }

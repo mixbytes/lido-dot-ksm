@@ -23,15 +23,18 @@ def aux(AUX_mock, accounts):
 
 @pytest.fixture(scope="module")
 def lido(Lido, vKSM, vAccounts, aux, Ledger, accounts):
-    lm = Ledger.deploy({'from': accounts[0]})
-    l = Lido.deploy(vKSM, aux, vAccounts, {'from': accounts[0]})
-    l.setLedgerMaster(lm)
+    lc = Ledger.deploy({'from': accounts[0]})
+    l = Lido.deploy({'from': accounts[0]})
+    l.initialize(vKSM, aux, vAccounts, {'from': accounts[0]})
+    l.setLedgerClone(lc)
     return l
 
 
 @pytest.fixture(scope="module")
-def oracle(lido, LidoOracle, Ledger, accounts):
-    o = LidoOracle.deploy({'from': accounts[0]})
-    o.setLido(lido, {'from': accounts[0]})
-    lido.setOracle(o, {'from': accounts[0]})
-    return o
+def oracle_master(lido, Oracle, OracleMaster, Ledger, accounts, chain):
+    o = Oracle.deploy({'from': accounts[0]})
+    om = OracleMaster.deploy({'from': accounts[0]})
+    om.initialize(lido, accounts[0], accounts[0], accounts[0], o, {'from': accounts[0]})
+    om.setRelaySpec(chain.time(), 60 * 60 * 24 * 6) # kusama period
+    lido.setOracleMaster(om, {'from': accounts[0]})
+    return om

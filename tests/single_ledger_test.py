@@ -29,7 +29,7 @@ def test_downward_transfer_mock(vKSM, vAccounts, accounts):
     assert vKSM.balanceOf(accounts[0]) == before
 
 
-def test_add_stash(lido, oracle, vKSM, Ledger, accounts):
+def test_add_stash(lido, oracle_master, vKSM, Ledger, accounts):
     lido.addLedger("0x10", "0x20", 100, {'from': accounts[0]})
 
     legder = Ledger.at(lido.findLedger("0x10"))
@@ -37,10 +37,10 @@ def test_add_stash(lido, oracle, vKSM, Ledger, accounts):
     assert legder.controllerAccount() == "0x20"
 
 
-def test_single_deposit(lido, oracle, vKSM, accounts):
+def test_single_deposit(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
-    relay = RelayChain(lido, vKSM, oracle, accounts)
+    relay = RelayChain(lido, vKSM, oracle_master, accounts)
     relay.new_ledger("0x10", "0x11", 100)
   
     deposit = 20 * 10**18
@@ -57,10 +57,10 @@ def test_single_deposit(lido, oracle, vKSM, accounts):
     assert lido.getTotalPooledKSM() == deposit + reward
 
 
-def test_multi_deposit(lido, oracle, vKSM, accounts):
+def test_multi_deposit(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
-    relay = RelayChain(lido, vKSM, oracle, accounts)
+    relay = RelayChain(lido, vKSM, oracle_master, accounts)
     relay.new_ledger("0x10", "0x11", 100)
   
     deposit1 = 20 * 10**18
@@ -88,10 +88,10 @@ def test_multi_deposit(lido, oracle, vKSM, accounts):
     assert abs(acc1_balance + acc2_balance + acc3_balance + lido_rewards - lido.getTotalPooledKSM()) <= 1000
 
 
-def test_redeem(lido, oracle, vKSM, accounts):
+def test_redeem(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
-    relay = RelayChain(lido, vKSM, oracle, accounts)
+    relay = RelayChain(lido, vKSM, oracle_master, accounts)
     relay.new_ledger("0x10", "0x11", 100)
 
     deposit1 = 20 * 10**18

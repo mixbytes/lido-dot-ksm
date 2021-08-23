@@ -1,36 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
-pragma abicoder v2;
+
+import "./Types.sol";
+
 interface ILedger {
-    enum Status {
-        // bonded but not participate in staking
-        Idle,
-        // participate as nominator
-        Nominator,
-        // participate as validator
-        Validator,
-        // not bonded not participate in staking
-        None
-    }
+    function initialize(
+        bytes32 _stashAccount,
+        bytes32 _controllerAccount,
+        uint64 _startEraId,
+        address _vKSM,
+        address _AUX,
+        address _vAccounts
+    ) external;
+    function pushData(uint64 _eraId, Types.OracleData calldata staking) external;
+    
+    function exactStake(uint128 _amount) external;
+    function stake(uint128 _amount) external;
+    function unstake(uint128 _amount) external;
+    function nominate(bytes32[] calldata validators) external;
 
-    struct UnlockingChunk {
-        uint128 balance;
-        uint64 era;
-    }
-
-    struct LedgerData {
-        bytes32 stashAccount;
-        bytes32 controllerAccount;
-        Status stakeStatus;
-        // active part of stash balance
-        uint128 activeBalance;
-        // locked for stake stash balance.
-        uint128 totalBalance;
-        // totalBalance = activeBalance + sum(unlocked.balance)
-        UnlockingChunk[] unlocking;
-        uint32[] claimedRewards;
-        // stash account balance. It includes locked (totalBalance) balance assigned
-        // to a controller.
-        uint128 stashBalance;
-    }
+    function getStatus() external view returns (Types.LedgerStatus);
+    function stashAccount() external view returns (bytes32);
+    function controllerAccount() external view returns (bytes32);
 }
