@@ -7,7 +7,7 @@ def check_distribution(lido, stashes, shares, total_deposit):
     for i in range(len(stashes)):
         stash = hex(stashes[i])
         legder = Ledger.at(lido.findLedger(stash))
-        assert legder.targetStashStake() == total_deposit * shares[i] // total_shares  
+        assert legder.targetStake() == total_deposit * shares[i] // total_shares  
 
 
 def test_add_ledger_slowly(lido, oracle_master, vKSM, accounts):
@@ -16,7 +16,7 @@ def test_add_ledger_slowly(lido, oracle_master, vKSM, accounts):
     shares = [100]
     total_deposit = 0
 
-    relay = RelayChain(lido, vKSM, oracle_master, accounts)
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger(hex(stashes[0]), hex(stashes[0]+1), shares[0])
 
     deposit = 1000 * 10**18
@@ -44,8 +44,8 @@ def test_add_ledger_slowly(lido, oracle_master, vKSM, accounts):
     relay.new_era() # upward transfer for second ledger
     relay.new_era() # bond for first ledger
 
-    assert relay.ledgers[0].active_balance == Ledger.at(lido.findLedger(hex(stashes[0]))).targetStashStake()
-    assert relay.ledgers[1].active_balance == Ledger.at(lido.findLedger(hex(stashes[1]))).targetStashStake()
+    assert relay.ledgers[0].active_balance == Ledger.at(lido.findLedger(hex(stashes[0]))).targetStake()
+    assert relay.ledgers[1].active_balance == Ledger.at(lido.findLedger(hex(stashes[1]))).targetStake()
 
 
 def test_remove_ledger_slowly(lido, oracle_master, vKSM, accounts):
@@ -54,7 +54,7 @@ def test_remove_ledger_slowly(lido, oracle_master, vKSM, accounts):
     shares = [100, 50]
     total_deposit = 0
 
-    relay = RelayChain(lido, vKSM, oracle_master, accounts)
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger(hex(stashes[0]), hex(stashes[0]+1), shares[0])
     relay.new_ledger(hex(stashes[1]), hex(stashes[1]+1), shares[1])
 
@@ -88,7 +88,7 @@ def test_remove_ledger_slowly(lido, oracle_master, vKSM, accounts):
     relay.new_era([rewards]) # bondextra for fisrt ledger
     relay.new_era([rewards]) # bondextra for fisrt ledger [it depend on oracle_masterReport order accross ledgers]
 
-    assert relay.ledgers[0].active_balance == Ledger.at(lido.findLedger(hex(stashes[0]))).targetStashStake()
-    assert relay.ledgers[1].active_balance == Ledger.at(lido.findLedger(hex(stashes[1]))).targetStashStake()
+    assert relay.ledgers[0].active_balance == Ledger.at(lido.findLedger(hex(stashes[0]))).targetStake()
+    assert relay.ledgers[1].active_balance == Ledger.at(lido.findLedger(hex(stashes[1]))).targetStake()
     assert relay.ledgers[1].active_balance == 0
     assert relay.total_rewards + total_deposit == lido.getTotalPooledKSM()

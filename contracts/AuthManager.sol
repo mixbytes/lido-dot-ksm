@@ -47,6 +47,17 @@ contract AuthManager is IAuthManager {
         emit AddMember(member);
     }
 
+    function addByString(string calldata roleString, address member) external {
+        require(_find(members[msg.sender], SUPER_ROLE) != NOTFOUND, "FORBIDDEN");
+
+        bytes32[] storage _roles = members[member];
+        bytes32 role = keccak256(bytes(roleString));
+
+        require(_find(_roles, role) == NOTFOUND, "ALREADY_MEMBER");
+        _roles.push(role);
+        emit AddMember(member);
+    }
+
     function remove(bytes32 role, address member) external override {
         require(_find(members[msg.sender], SUPER_ROLE) != NOTFOUND, "FORBIDDEN");
 

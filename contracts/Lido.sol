@@ -42,7 +42,7 @@ contract Lido is LKSM {
         address addr,
         uint256 share
     );
-    
+
 
     // sum of all losses
     uint128 private lossBalance;
@@ -146,21 +146,6 @@ contract Lido is LKSM {
         AUTH_MANAGER = _authManager;
     }
 
-
-    /**
-    *   @notice Stop pool routine operations
-    */
-    function pause() external auth(ROLE_PAUSE_MANAGER) {
-        _pause();
-    }
-
-    /**
-    * @notice Resume pool routine operations
-    */
-    function resume() external auth(ROLE_PAUSE_MANAGER) {
-        _unpause();
-    }
-
     fallback() external {
         revert("FORBIDDEN");
     }
@@ -171,6 +156,50 @@ contract Lido is LKSM {
     function getCurrentAPY() external view returns (uint256){
         // todo. now 5.4%
         return 540;
+    }
+
+    /**
+    * @dev Return caller unbonding balance and balance that is ready for claim
+    */
+    function getUnbonded(address holder) external view returns (uint256) {
+        uint256 _balance = claimOrders[holder].balance;
+        if (claimOrders[holder].timeout < block.timestamp) {
+            return _balance;
+        }
+        return 0;
+    }
+
+    /**
+    * @dev Return relay chain stash account addresses
+    */
+    function getStashAccounts() public view returns (Types.Stash[] memory) {
+        Types.Stash[] memory _stashes = new Types.Stash[](members.length());
+
+        for (uint i = 0; i < members.length(); i++) {
+            (uint256 key, address ledger) = members.at(i);
+            _stashes[i].stashAccount = bytes32(key);
+            // todo adjust eraId to `_oracleMaster`
+            _stashes[i].eraId = 0;
+        }
+        return _stashes;
+    }
+
+    function getLedgerAddresses() public view returns (address[] memory) {
+        address[] memory _addrs = new address[](members.length());
+
+        for (uint i = 0; i < members.length(); i++) {
+            (uint256 key, address ledger) = members.at(i);
+            _addrs[i] = ledger;
+        }
+        return _addrs;
+    }
+
+    /**
+    * @dev Find ledger contract address associated with the stash account
+    */
+    function findLedger(bytes32 _stashAccount) external view returns (address) {
+        (bool _found, address ledger) = members.tryGet(uint256(_stashAccount));
+        return ledger;
     }
 
     function setRelaySpec(Types.RelaySpec calldata _relaySpec) external auth(ROLE_SPEC_MANAGER) {
@@ -185,6 +214,41 @@ contract Lido is LKSM {
         RELAY_SPEC = _relaySpec;
 
         IOracleMaster(ORACLE_MASTER).setRelayParams(_relaySpec.genesisTimestamp, _relaySpec.secondsPerEra);
+    }
+
+    /**
+    * @dev Update ORACLE_MASTER contract address
+    */
+    function setOracleMaster(address _oracleMaster) external auth(ROLE_ORACLE_MANAGER) {
+        require(ORACLE_MASTER == address(0), 'ORACLE_MASTER_ALREADY_DEFINED');
+        ORACLE_MASTER = _oracleMaster;
+    }
+
+    /**
+    * @dev Update ledger master contract address
+    */
+    function setLedgerClone(address _ledgerClone) external auth(ROLE_LEDGER_MANAGER) {
+        require(members.length() == 0, "ONLY_ONCE");
+        LEDGER_CLONE = _ledgerClone;
+    }
+
+    function setFeeBP(uint16 _feeBP) external auth(ROLE_FEE_MANAGER) {
+        FEE_BP = _feeBP;
+        emit FeeSet(_feeBP);
+    }
+    
+    /**
+    *   @notice Stop pool routine operations
+    */
+    function pause() external auth(ROLE_PAUSE_MANAGER) {
+        _pause();
+    }
+
+    /**
+    * @notice Resume pool routine operations
+    */
+    function resume() external auth(ROLE_PAUSE_MANAGER) {
+        _unpause();
     }
 
     function addLedger(
@@ -241,7 +305,7 @@ contract Lido is LKSM {
         require(ledgerShares[_ledgerAddress] == 0, "LEGDER_HAS_NON_ZERO_SHARE");
         
         ILedger ledger = ILedger(_ledgerAddress);
-        require(ledger.getStatus() == Types.LedgerStatus.Idle, "LEDGER_NOT_IDLE");
+        require(ledger.status() == Types.LedgerStatus.Idle, "LEDGER_NOT_IDLE");
 
         members.remove(uint256(ledger.stashAccount()));
         delete ledgers[_ledgerAddress];
@@ -301,17 +365,6 @@ contract Lido is LKSM {
     }
 
     /**
-    * @dev Return caller unbonding balance and balance that is ready for claim
-    */
-    function getUnbonded(address holder) external view returns (uint256) {
-        uint256 _balance = claimOrders[holder].balance;
-        if (claimOrders[holder].timeout < block.timestamp) {
-            return _balance;
-        }
-        return 0;
-    }
-
-    /**
     * @dev Claim unbonded vKSM burning locked LKSM
     */
     function claimUnbonded() external whenNotPaused {
@@ -326,42 +379,6 @@ contract Lido is LKSM {
             uint256 sharesAmount = getSharesByPooledKSM(amount);
             vKSM.transfer(msg.sender, amount);
         }
-    }
-
-    /**
-    * @dev Find ledger contract address associated with the stash account
-    */
-    function findLedger(bytes32 _stashAccount) external view returns (address) {
-        (bool _found, address ledger) = members.tryGet(uint256(_stashAccount));
-        return ledger;
-    }
-
-    /**
-    * @dev Update ORACLE_MASTER contract address
-    */
-    function setOracleMaster(address _oracleMaster) external auth(ROLE_ORACLE_MANAGER) {
-        require(ORACLE_MASTER == address(0), 'ORACLE_MASTER_ALREADY_DEFINED');
-        ORACLE_MASTER = _oracleMaster;
-    }
-
-    /**
-    * @dev Return ORACLE_MASTER contract address
-    */
-    function getOracleMaster() external view returns (address) {
-        return ORACLE_MASTER;
-    }
-
-    /**
-    * @dev Update ledger master contract address
-    */
-    function setLedgerClone(address _ledgerClone) external auth(ROLE_LEDGER_MANAGER) {
-        require(members.length() == 0, "ONLY_ONCE");
-        LEDGER_CLONE = _ledgerClone;
-    }
-
-    function setFeeBP(uint16 _feeBP) external auth(ROLE_FEE_MANAGER) {
-        FEE_BP = _feeBP;
-        emit FeeSet(_feeBP);
     }
 
     function distributeRewards(uint128 _totalRewards) external {
@@ -380,29 +397,8 @@ contract Lido is LKSM {
         _mintShares(address(this), shares2mint);
     }
 
-    /**
-    * @dev Return relay chain stash account addresses
-    */
-    function getStashAccounts() public view returns (Types.Stash[] memory) {
-        Types.Stash[] memory _stashes = new Types.Stash[](members.length());
-
-        for (uint i = 0; i < members.length(); i++) {
-            (uint256 key, address ledger) = members.at(i);
-            _stashes[i].stashAccount = bytes32(key);
-            // todo adjust eraId to `_oracleMaster`
-            _stashes[i].eraId = 0;
-        }
-        return _stashes;
-    }
-
-    function getLedgerAddresses() public view returns (address[] memory) {
-        address[] memory _addrs = new address[](members.length());
-
-        for (uint i = 0; i < members.length(); i++) {
-            (uint256 key, address ledger) = members.at(i);
-            _addrs[i] = ledger;
-        }
-        return _addrs;
+    function forceRebalanceStake() external auth(ROLE_STAKE_MANAGER) {
+        _rebalanceStakes();
     }
 
     function _distributeStake(uint128 _amount) internal {

@@ -20,7 +20,7 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, accounts):
         for i in range(len(stashes)):
             stash = hex(stashes[i])
             legder = Ledger.at(lido.findLedger(stash))
-            assert legder.targetStashStake() == total_deposit * shares[i] // total_shares  
+            assert legder.targetStake() == total_deposit * shares[i] // total_shares  
 
     for i in range(len(stashes)):
         stash = stashes[i]
@@ -59,7 +59,7 @@ def test_change_shares_distribution(lido, oracle_master, vKSM, Ledger, accounts)
         for i in range(len(stashes)):
             stash = hex(stashes[i])
             legder = Ledger.at(lido.findLedger(stash))
-            assert legder.targetStashStake() == total_deposit * shares[i] // total_shares  
+            assert legder.targetStake() == total_deposit * shares[i] // total_shares  
 
     for i in range(len(stashes)):
         stash = stashes[i]
@@ -92,7 +92,7 @@ def test_redeem_distribution(lido, oracle_master, vKSM, Ledger, accounts):
         for i in range(len(stashes)):
             stash = hex(stashes[i])
             legder = Ledger.at(lido.findLedger(stash))
-            assert legder.targetStashStake() == total_deposit * shares[i] // total_shares  
+            assert legder.targetStake() == total_deposit * shares[i] // total_shares  
 
     for i in range(len(stashes)):
         stash = stashes[i]

@@ -19,7 +19,6 @@ interface ILedger {
     function unstake(uint128 _amount) external;
     function nominate(bytes32[] calldata validators) external;
 
-    function getStatus() external view returns (Types.LedgerStatus);
+    function status() external view returns (Types.LedgerStatus);
     function stashAccount() external view returns (bytes32);
-    function controllerAccount() external view returns (bytes32);
 }

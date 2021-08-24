@@ -85,26 +85,28 @@ class RelayChain:
     oracle_master = None
     accounts = None
     ledgers = []
-    era = 2
+    era = 0
     total_rewards = 0
+    chain = None
 
-    def __init__(self, lido, vKSM, oracle_master, accounts):
+    def __init__(self, lido, vKSM, oracle_master, accounts, chain):
         self.lido = lido
         self.vKSM = vKSM
         self.oracle_master = oracle_master
         self.accounts = accounts
+        self.chain = chain
 
         self.oracle_master.addOracleMember(self.accounts[0], {'from': self.accounts[0]})
         self.oracle_master.setQuorum(1, {'from': self.accounts[0]})
 
         self.ledgers = []
-        self.era = 2
+        self.era = 0
         self.total_rewards = 0
 
     def new_ledger(self, stash_account, controller_account, share):
         tx = self.lido.addLedger(stash_account, controller_account, share, {'from': self.accounts[0]})
         tx.info()
-        self.ledgers.append(RelayLegder(self, tx.events['LegderAdded'][0]['addr'], stash_account, controller_account))
+        self.ledgers.append(RelayLegder(self, tx.events['LegderAdd'][0]['addr'], stash_account, controller_account))
 
     def _ledger_idx_by_stash_account(self, stash_account):
         for i in range(len(self.ledgers)):
@@ -172,6 +174,7 @@ class RelayChain:
 
     def new_era(self, rewards = []):
         self.era += 1
+        self.chain.sleep(6 * 60 * 60)
         for i in range(len(self.ledgers)):
             if i < len(rewards) and self.ledgers[i].status != 'Chill':
                 self.ledgers[i].active_balance += rewards[i]
@@ -181,6 +184,7 @@ class RelayChain:
             self._after_report(tx)
 
     def timetravel(self, eras):
+        self.chain.sleep(6 * 60 * 60 * eras)
         self.era += eras
 
 

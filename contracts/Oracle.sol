@@ -38,61 +38,15 @@ contract Oracle {
 
 
     function initialize(address _oracleMaster, address _ledger) external {
-        require(_oracleMaster == address(0), "ALREADY_INITIALIZED");
+        require(ORACLE_MASTER == address(0), "ALREADY_INITIALIZED");
         ORACLE_MASTER = _oracleMaster;
         LEDGER = _ledger;
     }
 
+
     function getStakeReport(uint256 index) internal view returns (Types.OracleData storage staking) {
         assert(index < currentReports.length);
         return currentReports[index];
-    }
-
-    /**
-    * @notice advance era
-    */
-    function _clearReporting() internal {
-        currentReportBitmask = 0;
-
-        delete currentReportVariants;
-        delete currentReports;
-    }
-
-    function _push(uint64 _eraId, Types.OracleData memory report) internal {
-        ILedger(LEDGER).pushData(_eraId, report);
-
-        _clearReporting();
-    }
-
-    /**
-    * @notice Return whether the `_quorum` is reached and the final report can be pushed
-    */
-    function _getQuorumReport(uint256 _quorum) internal view returns (bool isQuorum, uint256 reportIndex) {
-        // check most frequent cases first: all reports are the same or no reports yet
-        if (currentReportVariants.length == 1) {
-            return (currentReportVariants[0].getCount() >= _quorum, 0);
-        } else if (currentReportVariants.length == 0) {
-            return (false, type(uint256).max);
-        }
-
-        // if more than 2 kind of reports exist, choose the most frequent
-        uint256 maxind = 0;
-        uint256 repeat = 0;
-        uint16 maxval = 0;
-        uint16 cur = 0;
-        for (uint256 i = 0; i < currentReportVariants.length; ++i) {
-            cur = currentReportVariants[i].getCount();
-            if (cur >= maxval) {
-                if (cur == maxval) {
-                    ++repeat;
-                } else {
-                    maxind = i;
-                    maxval = cur;
-                    repeat = 0;
-                }
-            }
-        }
-        return (maxval >= _quorum && repeat == 0, maxind);
     }
 
     /**
@@ -144,5 +98,52 @@ contract Oracle {
 
     function clearReporting() external onlyOracleMaster {
         _clearReporting();
+    }
+
+    /**
+    * @notice advance era
+    */
+    function _clearReporting() internal {
+        currentReportBitmask = 0;
+
+        delete currentReportVariants;
+        delete currentReports;
+    }
+
+    function _push(uint64 _eraId, Types.OracleData memory report) internal {
+        ILedger(LEDGER).pushData(_eraId, report);
+
+        _clearReporting();
+    }
+
+    /**
+    * @notice Return whether the `_quorum` is reached and the final report can be pushed
+    */
+    function _getQuorumReport(uint256 _quorum) internal view returns (bool isQuorum, uint256 reportIndex) {
+        // check most frequent cases first: all reports are the same or no reports yet
+        if (currentReportVariants.length == 1) {
+            return (currentReportVariants[0].getCount() >= _quorum, 0);
+        } else if (currentReportVariants.length == 0) {
+            return (false, type(uint256).max);
+        }
+
+        // if more than 2 kind of reports exist, choose the most frequent
+        uint256 maxind = 0;
+        uint256 repeat = 0;
+        uint16 maxval = 0;
+        uint16 cur = 0;
+        for (uint256 i = 0; i < currentReportVariants.length; ++i) {
+            cur = currentReportVariants[i].getCount();
+            if (cur >= maxval) {
+                if (cur == maxval) {
+                    ++repeat;
+                } else {
+                    maxind = i;
+                    maxval = cur;
+                    repeat = 0;
+                }
+            }
+        }
+        return (maxval >= _quorum && repeat == 0, maxind);
     }
 }
