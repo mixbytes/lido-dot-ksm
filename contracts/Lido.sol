@@ -11,6 +11,7 @@ import "../interfaces/IOracleMaster.sol";
 import "../interfaces/ILido.sol";
 import "../interfaces/ILedger.sol";
 import "../interfaces/IvKSM.sol";
+import "../interfaces/IAuthManager.sol";
 
 import "./LKSM.sol";
 
@@ -26,43 +27,28 @@ contract Lido is LKSM {
     // Fee was updated
     event FeeSet(uint16 feeBasisPoints);
 
-    event LegderAdded(
+    event LegderAdd(
         address addr,
         bytes32 stashAccount,
         bytes32 controllerAccount,
-        uint256 era
+        uint256 share
     );
 
-    // Maximum number of oracleMaster committee members
-    uint256 private constant MAX_STASH_ACCOUNTS = 200;
+    event LegderRemove(
+        address addr
+    );
 
-    uint256 private constant MAX_VALIDATOR_PER_STASH = 16;
-    // Missing member index
-    uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
+    event LegderSetShare(
+        address addr,
+        uint256 share
+    );
+    
 
-    // 7 + 2 days = 777600 sec for Kusama, 28 + 2 days= 2592000 sec for Polkadot
-    uint32 internal unbondingPeriod = 777600;
-    // default interest value in base points
-    uint16 internal constant DEFAULT_FEE = 1000;
-
-    address  private stake_manager;
-    address  private spec_manager;
-    // bool    private initialized;
-    // todo remove before release
-    // uint256 internal constant MIN_PARACHAIN_BALANCE = 1_000_000_000;
-    // todo remove before release
-    // uint256 private  parachainBalance;
-    // ledger clone template contract
-    address private ledgerClone;
-    // oracle master contract
-    address public  oracleMaster;
-    // fee interest in basis points
-    uint16  public  feeBP;
-    // difference between vKSM.balanceOf(this) and bufferedBalance comes from downward transfer
-
+    // sum of all losses
     uint128 private lossBalance;
+
+    // sum of all deposits and rewards
     uint128 private fundRaisedBalance;
-    // uint128 private claimDebt;
 
     struct Claim {
         uint128 balance;
@@ -70,14 +56,6 @@ contract Lido is LKSM {
     }
     // one claim for account
     mapping(address => Claim) private claimOrders;
-    // vKSM precompile
-    IvKSM internal vKSM = IvKSM(0x0000000000000000000000000000000000000801);
-    // AUX relay call builder precompile
-    address internal AUX = 0x0000000000000000000000000000000000000801;
-    // Virtual accounts precompile
-    address internal vAccounts = 0x0000000000000000000000000000000000000801;
-    // Who pay off relay chain transaction fees
-    bytes32 internal constant GARANTOR = 0x00;
 
     // Ledger accounts (start eraId + Ledger contract address)
     EnumerableMap.UintToAddressMap private members;
@@ -88,16 +66,73 @@ contract Lido is LKSM {
     // Ledger shares map
     mapping(address => uint128) public ledgerShares;
 
-    // Sum of all shares
+    // Sum of all ledger shares
     uint128 public legderSharesTotal;
 
-    // existential deposit value for relay-chain currency.
-    // Polkadot has 100 CENTS = 1 DOT where DOT = 10_000_000_000;
-    // Kusama has 1 CENTS. CENTS = KSM / 30_000 where KSM = 1_000_000_000_000
-    uint128 internal minStashBalance;
+
+    // vKSM precompile
+    IvKSM internal vKSM = IvKSM(0x0000000000000000000000000000000000000801);
+    // AUX relay call builder precompile
+    address internal AUX = 0x0000000000000000000000000000000000000801;
+    // Virtual accounts precompile
+    address internal vAccounts = 0x0000000000000000000000000000000000000801;
+
+
+    // auth manager contract address
+    address public AUTH_MANAGER;
+
+    // Maximum number of ORACLE_MASTER committee members
+    uint256 public MAX_STASH_ACCOUNTS = 200;
+
+    // Who pay off relay chain transaction fees
+    bytes32 public GARANTOR = 0x00;
+
+    // fee interest in basis points
+    uint16 public FEE_BP = 200;
+    
+    // ledger clone template contract
+    address public LEDGER_CLONE;
+    
+    // oracle master contract
+    address public ORACLE_MASTER;
+
+    // relay spec
+    Types.RelaySpec public RELAY_SPEC;
+
+
+    // default interest value in base points
+    uint16 internal constant DEFAULT_FEE = 1000;
+
+    // Missing member index
+    uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
+
+    // Spec manager role
+    bytes32 internal constant ROLE_SPEC_MANAGER = keccak256("ROLE_SPEC_MANAGER");
+
+    // Pause manager role
+    bytes32 internal constant ROLE_PAUSE_MANAGER = keccak256("ROLE_PAUSE_MANAGER");
+
+    // Fee manager role
+    bytes32 internal constant ROLE_FEE_MANAGER = keccak256("ROLE_FEE_MANAGER");
+
+    // Oracle manager role
+    bytes32 internal constant ROLE_ORACLE_MANAGER = keccak256("ROLE_ORACLE_MANAGER");
+
+    // Ledger manager role
+    bytes32 internal constant ROLE_LEDGER_MANAGER = keccak256("ROLE_LEDGER_MANAGER");
+
+    // Stake manager role
+    bytes32 internal constant ROLE_STAKE_MANAGER = keccak256("ROLE_STAKE_MANAGER");
+
+
+    modifier auth(bytes32 role) {
+        require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "UNAUTHOROZED");
+        _;
+    }
 
 
     function initialize(
+        address _authManager,
         address _vKSM,
         address _AUX,
         address _vAccounts
@@ -108,28 +143,21 @@ contract Lido is LKSM {
             vAccounts = _vAccounts;
         }
 
-        feeBP = DEFAULT_FEE;
-        minStashBalance = 33333334;
+        AUTH_MANAGER = _authManager;
     }
-
-    modifier auth(address manager) {
-        // todo  Manager contract along with LidoOracleMaster . require(msg.sender == manager, "FORBIDDEN");
-        _;
-    }
-
 
 
     /**
     *   @notice Stop pool routine operations
     */
-    function pause() external auth(spec_manager) {
+    function pause() external auth(ROLE_PAUSE_MANAGER) {
         _pause();
     }
 
     /**
     * @notice Resume pool routine operations
     */
-    function resume() external auth(spec_manager) {
+    function resume() external auth(ROLE_PAUSE_MANAGER) {
         _unpause();
     }
 
@@ -145,71 +173,92 @@ contract Lido is LKSM {
         return 540;
     }
 
+    function setRelaySpec(Types.RelaySpec calldata _relaySpec) external auth(ROLE_SPEC_MANAGER) {
+        require(ORACLE_MASTER != address(0), "ORACLE_MASTER_UNDEFINED");
+        require(_relaySpec.genesisTimestamp > 0, "BAD_GENESIS_TIMESTAMP");
+        require(_relaySpec.secondsPerEra > 0, "BAD_SECONDS_PER_ERA");
+        require(_relaySpec.unbondingPeriod > 0, "BAD_UNBONDING_PERIOD");
+        require(_relaySpec.maxValidatorsPerLedger > 0, "BAD_MAX_VALIDATORS_PER_LEDGER");
 
-    function getMinStashBalance() external view returns (uint128){
-        return minStashBalance;
+        //TODO loop through ledgers and oracles if some params changed
+
+        RELAY_SPEC = _relaySpec;
+
+        IOracleMaster(ORACLE_MASTER).setRelayParams(_relaySpec.genesisTimestamp, _relaySpec.secondsPerEra);
     }
 
-    function addLedger(bytes32 _stashAccount, bytes32 _controllerAccount, uint128 share) external auth(spec_manager) returns(address) {
-        require(ledgerClone != address(0), 'UNSPECIFIED_LEDGER_CLONE');
-        require(oracleMaster != address(0), 'NO_ORACLE_MASTER');
-        require(members.length() < MAX_STASH_ACCOUNTS, 'STASH_POOL_LIMIT');
-        require(!members.contains(uint256(_stashAccount)), 'STASH_ALREADY_EXISTS');
+    function addLedger(
+        bytes32 _stashAccount, 
+        bytes32 _controllerAccount, 
+        uint128 _share
+    ) 
+        external 
+        auth(ROLE_LEDGER_MANAGER) 
+        returns(address) 
+    {
+        require(LEDGER_CLONE != address(0), "UNSPECIFIED_LEDGER_CLONE");
+        require(ORACLE_MASTER != address(0), "NO_ORACLE_MASTER");
+        require(members.length() < MAX_STASH_ACCOUNTS, "STASH_POOL_LIMIT");
+        require(!members.contains(uint256(_stashAccount)), "STASH_ALREADY_EXISTS");
 
-        address ledger = ledgerClone.cloneDeterministic(_stashAccount);
+        address ledger = LEDGER_CLONE.cloneDeterministic(_stashAccount);
         // skip one era before commissioning
         ILedger(ledger).initialize(
             _stashAccount, 
             _controllerAccount, 
-            IOracleMaster(oracleMaster).getCurrentEraId() + 1,
             address(vKSM),
             AUX,
-            vAccounts
+            vAccounts,
+            RELAY_SPEC.minNominatorBalance
         );
         members.set(uint256(_stashAccount), ledger);
         ledgers[ledger] = true;
-        ledgerShares[ledger] = share;
-        legderSharesTotal += share;
+        ledgerShares[ledger] = _share;
+        legderSharesTotal += _share;
 
-        IOracleMaster(oracleMaster).addLedger(ledger);
+        IOracleMaster(ORACLE_MASTER).addLedger(ledger);
 
         _rebalanceStakes();
 
-        emit LegderAdded(ledger, _stashAccount, _controllerAccount, IOracleMaster(oracleMaster).getCurrentEraId() + 1);
+        emit LegderAdd(ledger, _stashAccount, _controllerAccount, _share);
         return ledger;
     }
 
-    function setLedgerShare(address ledger, uint128 newShare) external auth(spec_manager) {
-        require(ledgers[ledger], 'LEDGER_BOT_FOUND');
+    function setLedgerShare(address _ledger, uint128 _newShare) external auth(ROLE_LEDGER_MANAGER) {
+        require(ledgers[_ledger], "LEDGER_BOT_FOUND");
 
-        legderSharesTotal -= ledgerShares[ledger];
-        ledgerShares[ledger] = newShare;
-        legderSharesTotal += newShare;
+        legderSharesTotal -= ledgerShares[_ledger];
+        ledgerShares[_ledger] = _newShare;
+        legderSharesTotal += _newShare;
 
         _rebalanceStakes();
+
+        emit LegderSetShare(_ledger, _newShare);
     }
 
-    function removeLedger(address ledgerAddress) external auth(spec_manager) {
-        require(ledgers[ledgerAddress], 'LEDGER_BOT_FOUND');
-        require(ledgerShares[ledgerAddress] == 0, 'LEGDER_HAS_NON_ZERO_SHARE');
+    function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
+        require(ledgers[_ledgerAddress], "LEDGER_BOT_FOUND");
+        require(ledgerShares[_ledgerAddress] == 0, "LEGDER_HAS_NON_ZERO_SHARE");
         
-        ILedger ledger = ILedger(ledgerAddress);
-        require(ledger.getStatus() == Types.LedgerStatus.Idle, 'LEDGER_NOT_IDLE');
+        ILedger ledger = ILedger(_ledgerAddress);
+        require(ledger.getStatus() == Types.LedgerStatus.Idle, "LEDGER_NOT_IDLE");
 
         members.remove(uint256(ledger.stashAccount()));
-        delete ledgers[ledgerAddress];
-        delete ledgerShares[ledgerAddress];
+        delete ledgers[_ledgerAddress];
+        delete ledgerShares[_ledgerAddress];
 
-        IOracleMaster(oracleMaster).removeLedger(ledgerAddress);
+        IOracleMaster(ORACLE_MASTER).removeLedger(_ledgerAddress);
 
         _rebalanceStakes();
+
+        emit LegderRemove(_ledgerAddress);
     }
 
     /**
     * @dev invoke pallet_stake::nominate on the relay side
     */
-    function nominate(bytes32 _stashAccount, bytes32[] calldata validators) external auth(stake_manager) {
-        address ledger = members.get(uint256(_stashAccount), 'UNKNOWN_STASH_ACCOUNT');
+    function nominate(bytes32 _stashAccount, bytes32[] calldata validators) external auth(ROLE_STAKE_MANAGER) {
+        address ledger = members.get(uint256(_stashAccount), "UNKNOWN_STASH_ACCOUNT");
 
         ILedger(ledger).nominate(validators);
     }
@@ -236,14 +285,14 @@ contract Lido is LKSM {
     function redeem(uint256 amount) external whenNotPaused {
         assert( amount< type(uint128).max );
         uint256 _shares = getSharesByPooledKSM(amount);
-        require(_shares <= _sharesOf(msg.sender), 'REDEEM_AMOUNT_EXCEEDS_BALANCE');
+        require(_shares <= _sharesOf(msg.sender), "REDEEM_AMOUNT_EXCEEDS_BALANCE");
 
         _burnShares(msg.sender, _shares);
 
         Claim memory _claim = claimOrders[msg.sender];
         uint128 _amount = uint128(amount);
         _claim.balance += _amount;
-        _claim.timeout = uint128(block.timestamp) + unbondingPeriod;
+        _claim.timeout = uint128(block.timestamp) + RELAY_SPEC.unbondingPeriod;
 
         fundRaisedBalance -= uint128(amount);
         claimOrders[msg.sender] = _claim;
@@ -267,10 +316,10 @@ contract Lido is LKSM {
     */
     function claimUnbonded() external whenNotPaused {
         uint128 amount = claimOrders[msg.sender].balance;
-        require(amount > 0, 'CLAIM_NOT_FOUND');
+        require(amount > 0, "CLAIM_NOT_FOUND");
         if (claimOrders[msg.sender].timeout < block.timestamp) {
             uint128 _buffered = uint128(vKSM.balanceOf(address(this)));
-            require(_buffered >= amount, 'CLAIM_BALANCE_ERROR');
+            require(_buffered >= amount, "CLAIM_BALANCE_ERROR");
 
             delete claimOrders[msg.sender];
 
@@ -288,36 +337,37 @@ contract Lido is LKSM {
     }
 
     /**
-    * @dev Update oracleMaster contract address
+    * @dev Update ORACLE_MASTER contract address
     */
-    function setOracleMaster(address _oracleMaster) external auth(spec_manager) {
-        oracleMaster = _oracleMaster;
+    function setOracleMaster(address _oracleMaster) external auth(ROLE_ORACLE_MANAGER) {
+        require(ORACLE_MASTER == address(0), 'ORACLE_MASTER_ALREADY_DEFINED');
+        ORACLE_MASTER = _oracleMaster;
     }
 
     /**
-    * @dev Return oracleMaster contract address
+    * @dev Return ORACLE_MASTER contract address
     */
     function getOracleMaster() external view returns (address) {
-        return oracleMaster;
+        return ORACLE_MASTER;
     }
 
     /**
     * @dev Update ledger master contract address
     */
-    function setLedgerClone(address _ledgerClone) external auth(spec_manager) {
-        require(members.length() == 0, 'ONLY_ONCE');
-        ledgerClone = _ledgerClone;
+    function setLedgerClone(address _ledgerClone) external auth(ROLE_LEDGER_MANAGER) {
+        require(members.length() == 0, "ONLY_ONCE");
+        LEDGER_CLONE = _ledgerClone;
     }
 
-    function setFeeBP(uint16 _feeBP) external auth(spec_manager) {
-        feeBP = _feeBP;
+    function setFeeBP(uint16 _feeBP) external auth(ROLE_FEE_MANAGER) {
+        FEE_BP = _feeBP;
         emit FeeSet(_feeBP);
     }
 
     function distributeRewards(uint128 _totalRewards) external {
-        require(ledgers[msg.sender], 'NOT_FROM_LEDGER');
+        require(ledgers[msg.sender], "NOT_FROM_LEDGER");
 
-        uint256 feeBasis = uint256(feeBP);
+        uint256 feeBasis = uint256(FEE_BP);
 
         fundRaisedBalance += _totalRewards;
 

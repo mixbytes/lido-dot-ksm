@@ -23,4 +23,6 @@ interface IOracleMaster {
     function removeLedger(address _ledger) external;
 
     function getOracle(address _ledger) view external returns (address);
+
+    function setRelayParams(uint64 _relayGenesisTs, uint64 _relaySecondsPerEra) external;
 }

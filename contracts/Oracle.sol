@@ -13,26 +13,34 @@ contract Oracle {
 
     event Completed(uint256);
     
-    address public oracleMaster;
-    address public ledger;
-    address public oracleClone;
 
     // Current era report  hashes
     uint256[] internal currentReportVariants;
+
     // Current era reports
     Types.OracleData[]  private currentReports;
+
     // Then oracle member push report, its bit is set
-    uint256   internal currentReportBitmask;
+    uint256 internal currentReportBitmask;
     
+
+    // oracle master contract address
+    address public ORACLE_MASTER;
+    
+    // linked ledger contract address
+    address public LEDGER;
+
+
     modifier onlyOracleMaster() {
-        require(msg.sender == oracleMaster);
+        require(msg.sender == ORACLE_MASTER);
         _;
     }
 
+
     function initialize(address _oracleMaster, address _ledger) external {
-        require(oracleMaster == address(0), 'ALREADY_INITIALIZED');
-        oracleMaster = _oracleMaster;
-        ledger = _ledger;
+        require(_oracleMaster == address(0), "ALREADY_INITIALIZED");
+        ORACLE_MASTER = _oracleMaster;
+        LEDGER = _ledger;
     }
 
     function getStakeReport(uint256 index) internal view returns (Types.OracleData storage staking) {
@@ -43,7 +51,7 @@ contract Oracle {
     /**
     * @notice advance era
     */
-    function _cleanReporting() internal {
+    function _clearReporting() internal {
         currentReportBitmask = 0;
 
         delete currentReportVariants;
@@ -51,9 +59,9 @@ contract Oracle {
     }
 
     function _push(uint64 _eraId, Types.OracleData memory report) internal {
-        ILedger(ledger).pushData(_eraId, report);
+        ILedger(LEDGER).pushData(_eraId, report);
 
-        _cleanReporting();
+        _clearReporting();
     }
 
     /**
@@ -108,7 +116,7 @@ contract Oracle {
         if (i < currentReportVariants.length) {
             if (currentReportVariants[i].getCount() + 1 >= quorum) {
                 _push(eraId, staking);
-                _cleanReporting();
+                _clearReporting();
             } else {
                 ++currentReportVariants[i];
                 // increment variant counter, see ReportUtils for details
@@ -130,11 +138,11 @@ contract Oracle {
             _push(
                 _eraId, report
             );
-            _cleanReporting();
+            _clearReporting();
         }
     }
 
-    function cleanReporting() external onlyOracleMaster {
-        _cleanReporting();
+    function clearReporting() external onlyOracleMaster {
+        _clearReporting();
     }
 }

@@ -7,13 +7,13 @@ interface ILedger {
     function initialize(
         bytes32 _stashAccount,
         bytes32 _controllerAccount,
-        uint64 _startEraId,
         address _vKSM,
         address _AUX,
-        address _vAccounts
+        address _vAccounts,
+        uint128 _minNominatorBalance
     ) external;
     function pushData(uint64 _eraId, Types.OracleData calldata staking) external;
-    
+
     function exactStake(uint128 _amount) external;
     function stake(uint128 _amount) external;
     function unstake(uint128 _amount) external;

@@ -8,6 +8,7 @@ import "@openzeppelin/proxy/Clones.sol";
 import "../interfaces/IOracle.sol";
 import "../interfaces/ILido.sol";
 import "../interfaces/ILedger.sol";
+import "../interfaces/IAuthManager.sol";
 
 
 contract OracleMaster is Pausable {
@@ -15,89 +16,95 @@ contract OracleMaster is Pausable {
 
     event MemberAdded(address member);
     event MemberRemoved(address member);
-    event QuorumChanged(uint8 quorum);
+    event QuorumChanged(uint8 QUORUM);
+
+    // current era id
+    uint64 private eraId;
+
+    // Oracle members
+    address[] private members;
+
+    // ledger -> oracle pairing
+    mapping(address => address) private oracleForLedger;
+
+
+    // address of oracle clone template contract
+    address public ORACLE_CLONE;
+    
+    // Lido smart contract
+    address public LIDO;
+
+    // Quorum threshold
+    uint8 public QUORUM;
+
+    // Relay genesis timestamp
+    uint64 public RELAY_GENESIS_TIMESTAMP;
+
+    // Relay seconds per era
+    uint64 public RELAY_SECONDS_PER_ERA;
+
 
     /// Maximum number of oracle committee members
     uint256 public constant MAX_MEMBERS = 255;
+
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
 
-    // Contract structured storage
-    // Oracle members
-    address[] private members;
-    // Relaychain era timestamp
-    Types.RelaySpec private relaySpec;
+    // General oracle manager role
+    bytes32 internal constant ROLE_ORACLE_MANAGER = keccak256("ROLE_ORACLE_MANAGER");
 
-    // todo pack it with eraId as uint8
-    uint8  public quorum;
-
-    // Lido smart contract
-    address private lido;
-
-    mapping(address => address) private oracleForLedger;
-
-    address  private member_manager;
-    address  private quorum_manager;
-    address  private spec_manager;
-
-    address public oracleClone;
-
-    // APY biases. low 16 bytes - slash (decrease) bias, high 16 bytes - reward (increase) bias
-    uint256 private report_balance_bias;
-    uint64 private eraId;
+    // Oracle members manager role
+    bytes32 internal constant ROLE_ORACLE_MEMBERS_MANAGER = keccak256("ROLE_ORACLE_MEMBERS_MANAGER");
+    
+    // Oracle members manager role
+    bytes32 internal constant ROLE_ORACLE_QUORUM_MANAGER = keccak256("ROLE_ORACLE_QUORUM_MANAGER");
 
 
-    modifier onlyLido() {
-        require(msg.sender == lido, "CALLER_NOT_LIDO");
+    modifier auth(bytes32 role) {
+        require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "UNAUTHOROZED");
         _;
     }
 
-    // todo remove.
-    function _timestamp() external view returns (uint256){
-        return block.timestamp;
+    modifier onlyLido() {
+        require(msg.sender == LIDO, "CALLER_NOT_LIDO");
+        _;
     }
+
 
     function initialize(
         address _lido,
-        address _member_manager,
-        address _quorum_manager,
-        address _spec_manager,
-        address _oracleClone
+        address _oracleClone,
+        uint8 _quorum
     ) external {
-        require(oracleClone == address(0), 'ALREADY_INITIALIZED');
-        
-        member_manager = _member_manager;
-        quorum_manager = _quorum_manager;
-        spec_manager = _spec_manager;
+        require(ORACLE_CLONE == address(0), "ALREADY_INITIALIZED");
 
-        lido = _lido;
+        LIDO = _lido;
+        ORACLE_CLONE = _oracleClone;
+        QUORUM = _quorum;
+    }
 
-        _setRelaySpec(0, 0);
-        quorum = 1;
-        oracleClone = _oracleClone;
+
+    function setRelayParams(uint64 _relayGenesisTs, uint64 _relaySecondsPerEra) external onlyLido {
+        RELAY_GENESIS_TIMESTAMP = _relayGenesisTs;
+        RELAY_SECONDS_PER_ERA = _relaySecondsPerEra;
     }
 
     /**
     *   @notice Stop pool routine operations
     */
-    function pause() external auth(spec_manager) {
+    function pause() external auth(ROLE_ORACLE_MANAGER) {
         _pause();
     }
 
     /**
     * @notice Resume pool routine operations
     */
-    function resume() external auth(spec_manager) {
+    function resume() external auth(ROLE_ORACLE_MANAGER) {
         _unpause();
     }
 
-    modifier auth(address manager) {
-        require(msg.sender == manager, "FORBIDDEN");
-        _;
-    }
-
-    function setLido(address _lido) external auth(spec_manager) {
-        lido = _lido;
+    function setLido(address _lido) external auth(ROLE_ORACLE_MANAGER) {
+        LIDO = _lido;
     }
 
     function _getMemberId(address _member) internal view returns (uint256) {
@@ -113,7 +120,7 @@ contract OracleMaster is Pausable {
     /**
     * @notice Add `_member` to the oracle member committee list
     */
-    function addOracleMember(address _member) external auth(member_manager) {
+    function addOracleMember(address _member) external auth(ROLE_ORACLE_MEMBERS_MANAGER) {
         require(address(0) != _member, "BAD_ARGUMENT");
         require(MEMBER_NOT_FOUND == _getMemberId(_member), "MEMBER_EXISTS");
         require(members.length < 254, "MEMBERS_TOO_MANY");
@@ -124,9 +131,9 @@ contract OracleMaster is Pausable {
     }
 
     /**
-    * @notice Remove '_member` from the oracle member committee list
+    * @notice Remove "_member` from the oracle member committee list
     */
-    function removeOracleMember(address _member) external auth(member_manager) {
+    function removeOracleMember(address _member) external auth(ROLE_ORACLE_MEMBERS_MANAGER) {
         uint256 index = _getMemberId(_member);
         require(index != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
         uint256 last = members.length - 1;
@@ -139,46 +146,26 @@ contract OracleMaster is Pausable {
     }
 
     function _clearReporting() internal {
-        address[] memory ledgers = ILido(lido).getLedgerAddresses();
+        address[] memory ledgers = ILido(LIDO).getLedgerAddresses();
         for (uint256 i = 0; i < ledgers.length; ++i) {
             address oracle = oracleForLedger[ledgers[i]];
             if (oracle != address(0)) {
-                IOracle(oracle).cleanReporting();
+                IOracle(oracle).clearReporting();
             }
         }
-    }
-
-    function _setRelaySpec(
-        uint64 _genesisTimestamp,
-        uint64 _secondsPerEra
-    ) private {
-        Types.RelaySpec memory _relaySpec;
-        _relaySpec.genesisTimestamp = _genesisTimestamp;
-        _relaySpec.secondsPerEra = _secondsPerEra;
-
-        relaySpec = _relaySpec;
-
-        // todo emit event
-    }
-
-    function setRelaySpec(uint64 _genesisTimestamp, uint64 _secondsPerEra) external auth(spec_manager) {
-        require(_genesisTimestamp > 0, "BAD_GENESIS_TIMESTAMP");
-        require(_secondsPerEra > 0, "BAD_SECONDS_PER_ERA");
-
-        _setRelaySpec(_genesisTimestamp, _secondsPerEra);
     }
 
     /**
     * @notice Set the number of exactly the same reports needed to finalize the epoch to `_quorum`
     */
-    function setQuorum(uint8 _quorum) external auth(quorum_manager) {
+    function setQuorum(uint8 _quorum) external auth(ROLE_ORACLE_QUORUM_MANAGER) {
         require(0 != _quorum, "QUORUM_WONT_BE_MADE");
-        uint8 oldQuorum = quorum;
-        quorum = _quorum;
+        uint8 oldQuorum = QUORUM;
+        QUORUM = _quorum;
 
-        // If the quorum value lowered, check existing reports whether it is time to push
+        // If the QUORUM value lowered, check existing reports whether it is time to push
         if (oldQuorum > _quorum) {
-            address[] memory ledgers = ILido(lido).getLedgerAddresses();
+            address[] memory ledgers = ILido(LIDO).getLedgerAddresses();
             for (uint256 i = 0; i < ledgers.length; ++i) {
                 address oracle = oracleForLedger[ledgers[i]];
                 if (oracle != address(0)) {
@@ -190,7 +177,7 @@ contract OracleMaster is Pausable {
     }
 
     function addLedger(address _ledger) external onlyLido {
-        IOracle newOracle = IOracle(oracleClone.cloneDeterministic(bytes32(uint256(uint160(_ledger)) << 96)));
+        IOracle newOracle = IOracle(ORACLE_CLONE.cloneDeterministic(bytes32(uint256(uint160(_ledger)) << 96)));
         newOracle.initialize(address(this), _ledger);
         oracleForLedger[_ledger] = address(newOracle);
     }
@@ -203,8 +190,8 @@ contract OracleMaster is Pausable {
         return oracleForLedger[_ledger];
     }
 
-    function getCurrentEraId() public view returns (uint64){
-        return (uint64(block.timestamp) - relaySpec.genesisTimestamp ) / relaySpec.secondsPerEra;
+    function getCurrentEraId() public view returns (uint64) {
+        return (uint64(block.timestamp) - RELAY_GENESIS_TIMESTAMP ) / RELAY_SECONDS_PER_ERA;
     }
 
     /**
@@ -217,26 +204,27 @@ contract OracleMaster is Pausable {
             report.unlocking.length < type(uint8).max
             && report.totalBalance >= report.activeBalance
             && report.stashBalance >= report.totalBalance,
-            'INCORRECT_REPORT'
+            "INCORRECT_REPORT"
         );
 
-        address ledger = ILido(lido).findLedger(report.stashAccount);
+        uint256 memberIndex = _getMemberId(msg.sender);
+        require(memberIndex != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
+
+        address ledger = ILido(LIDO).findLedger(report.stashAccount);
         address oracle = oracleForLedger[ledger];
-        require(oracle != address(0), 'ORACLE_FOR_LEDGER_NOT_FOUND');
+        require(oracle != address(0), "ORACLE_FOR_LEDGER_NOT_FOUND");
+        require(_eraId >= eraId, "ERA_TOO_OLD");
 
-        //TODO !!!!! fix condition !!!!!
-        //require(_eraId == _getCurrentEraId(relaySpec), "UNEXPECTED_ERA");
+        if (_eraId > eraId) {
+            require(_eraId == getCurrentEraId(), "UNEXPECTED_NEW_ERA");
+            eraId = _eraId;
+            IOracle(oracle).clearReporting();
+        }
 
-        uint256 index = _getMemberId(msg.sender);
-        require(index != MEMBER_NOT_FOUND, "MEMBER_NOT_FOUND");
-
-        require(report.controllerAccount == ILedger(ledger).controllerAccount(), 'UNKNOWN_CONTROLLER');
-
-        IOracle(oracle).reportRelay(index, quorum, _eraId, report);
-        eraId = _eraId;
+        IOracle(oracle).reportRelay(memberIndex, QUORUM, _eraId, report);
     }
 
     function getStashAccounts() external view returns (Types.Stash[] memory) {
-        return ILido(lido).getStashAccounts();
+        return ILido(LIDO).getStashAccounts();
     }
 }

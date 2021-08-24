@@ -26,4 +26,6 @@ interface ILido is IERC20 {
     function getUnbonded(address holder) external returns (uint256);
     // Claim unbonded LKSM . Top up the caller vKSM balance burning LKSM
     function claimUnbonded() external;
+
+    function AUTH_MANAGER() external returns(address);
 }

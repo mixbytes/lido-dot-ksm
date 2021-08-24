@@ -15,7 +15,7 @@ contract LidoMock is ERC20 {
         owner = msg.sender;
     }
 
-    modifier notImplemented(){
+    modifier notImplemented() {
         revert("NOT_IMPLEMENTED");
         _;
     }

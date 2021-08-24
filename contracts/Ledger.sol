@@ -17,17 +17,29 @@ import "./utils/ReportUtils.sol";
 contract Ledger {
     using LedgerUtils for Types.OracleData;
 
-    ILido private lido;
-    Types.LedgerStatus internal stakeStatus;
+    event DownwardComplete(uint128);
+    event UpwardComplete(uint128);
+    event Rewards(uint128);
+    event Slash(uint128);
 
+
+    // ledger stash account
     bytes32 public stashAccount;
+
+    // ledger controller account
     bytes32 public controllerAccount;
+
     // Stash balance that includes locked (bounded in stake) and free to transfer balance
     uint128 public totalStashBalance;
+
     // Locked, or bonded in stake module, balance
     uint128 public lockedStashBalance;
 
+    // last reported active ledger balance
     uint128 public activeStashBalance;
+
+    // last reported ledger status
+    Types.LedgerStatus public stakeStatus;
 
     // Cached stash balance. Need to calculate rewards between successfull up/down transfers
     uint128 public cachedStashBalance;
@@ -46,34 +58,41 @@ contract Ledger {
     IAUX internal AUX;
     // Virtual accounts precompile
     IvAccounts internal vAccounts;
+
+
+    // Lido main contract address
+    ILido public LIDO;
+
+    // Minimal allowed balance to being a nominator
+    uint128 public MIN_NOMINATOR_BALANCE;
+
+
     // Who pay off relay chain transaction fees
     bytes32 internal constant GARANTOR = 0x00;
 
-    event DownwardComplete(uint128);
-    event UpwardComplete(uint128);
-    event Rewards(uint128);
-    event Slash(uint128);
 
 
     modifier onlyLido() {
-        require(msg.sender == address(lido), 'NOT_LIDO');
+        require(msg.sender == address(LIDO), "NOT_LIDO");
         _;
     }
 
     modifier onlyOracle() {
-        address oracle = IOracleMaster(ILido(lido).getOracleMaster()).getOracle(address(this));
-        require(msg.sender == oracle, 'NOT_ORACLE');
+        address oracle = IOracleMaster(ILido(LIDO).getOracleMaster()).getOracle(address(this));
+        require(msg.sender == oracle, "NOT_ORACLE");
         _;
     }
 
     function initialize(
         bytes32 _stashAccount,
         bytes32 _controllerAccount,
-        uint64 _startEraId,
         address _vKSM,
         address _AUX,
-        address _vAccounts
+        address _vAccounts,
+        uint128 _minNominatorBalance
     ) external {
+        require(stashAccount == 0x0, "ALREADY_INITALIZED");
+
         // The owner of the funds
         stashAccount = _stashAccount;
         // The account which handles bounded part of stash funds (unbond, rebond, withdraw, nominate)
@@ -81,11 +100,17 @@ contract Ledger {
 
         stakeStatus = Types.LedgerStatus.None;
 
-        lido = ILido(msg.sender);
+        LIDO = ILido(msg.sender);
 
         vKSM = IvKSM(_vKSM);
         AUX = IAUX(_AUX);
         vAccounts = IvAccounts(_vAccounts);
+
+        MIN_NOMINATOR_BALANCE = _minNominatorBalance;
+    }
+
+    function setMinNominatorBalance(uint128 _minNominatorBalance) external onlyLido {
+        MIN_NOMINATOR_BALANCE = _minNominatorBalance;
     }
 
     function exactStake(uint128 _amount) external onlyLido {
@@ -101,7 +126,7 @@ contract Ledger {
     }
 
     function nominate(bytes32[] calldata validators) external onlyLido {
-        require(activeStashBalance >= lido.getMinStashBalance(), 'NOT_ENOUGH_STAKE');
+        require(activeStashBalance >= LIDO.getMinStashBalance(), "NOT_ENOUGH_STAKE");
         bytes[] memory calls = new bytes[](1);
         calls[0] = AUX.buildNominate(validators);
         vAccounts.relayTransactCallAll(controllerAccount, GARANTOR, 0, calls);
@@ -111,10 +136,6 @@ contract Ledger {
         return stakeStatus;
     }
 
-    function getFreeStashBalance() external view returns (uint128) {
-        return totalStashBalance - lockedStashBalance;
-    }
-
     function _processRelayTransfers(Types.OracleData memory report) internal returns(bool) {
         // wait for the downward transfer to complete
         if (transferDownwardBalance > 0) {
@@ -122,7 +143,7 @@ contract Ledger {
 
             if (totalDownwardTransferred >= transferDownwardBalance ) {
                 // take transferred funds into buffered balance
-                vKSM.transfer(address(lido), transferDownwardBalance);
+                vKSM.transfer(address(LIDO), transferDownwardBalance);
 
                 // Clear transfer flag
                 cachedStashBalance -= transferDownwardBalance;
@@ -156,7 +177,7 @@ contract Ledger {
     }
 
     function pushData(uint64 _eraId, Types.OracleData memory report) external onlyOracle {
-        require(stashAccount == report.stashAccount, 'STASH_ACCOUNT_MISMATCH');
+        require(stashAccount == report.stashAccount, "STASH_ACCOUNT_MISMATCH");
 
         stakeStatus = report.stakeStatus;
         activeStashBalance = report.activeBalance;
@@ -170,7 +191,7 @@ contract Ledger {
 
         if (cachedStashBalance < report.stashBalance) { // if cached balance > real => we have reward
             uint128 reward = report.stashBalance - cachedStashBalance;
-            lido.distributeRewards(reward);
+            LIDO.distributeRewards(reward);
 
             // if targetStash is zero we need to keep it zero to drain all active balance
             if (targetStashStake != 0) {
@@ -199,10 +220,10 @@ contract Ledger {
 
             // just upward transfer if we have deficit
             if (deficit > 0) {
-                uint128 lidoBalance = uint128(vKSM.balanceOf(address(lido)));
+                uint128 lidoBalance = uint128(vKSM.balanceOf(address(LIDO)));
                 uint128 forTransfer = lidoBalance > deficit ? deficit : lidoBalance;
 
-                vKSM.transferFrom(address(lido), address(this), forTransfer);
+                vKSM.transferFrom(address(LIDO), address(this), forTransfer);
                 vKSM.relayTransferTo(report.stashAccount, forTransfer);
                 transferUpwardBalance += forTransfer;
                 deficit -= forTransfer;
@@ -231,7 +252,7 @@ contract Ledger {
             //     - if we still have deficit initiate unbond for remain deficit
 
             // if ledger is in the deadpool we need to put it to chill 
-            if (targetStashStake < lido.getMinStashBalance() && stakeStatus != Types.LedgerStatus.Idle) {
+            if (targetStashStake < MIN_NOMINATOR_BALANCE && stakeStatus != Types.LedgerStatus.Idle) {
                 calls[calls_counter++] = AUX.buildChill();
             }
 

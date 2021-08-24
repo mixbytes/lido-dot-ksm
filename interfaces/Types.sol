@@ -42,5 +42,8 @@ interface Types {
     struct RelaySpec {
         uint64 genesisTimestamp;
         uint64 secondsPerEra;
+        uint64 unbondingPeriod;
+        uint16 maxValidatorsPerLedger;
+        uint128 minNominatorBalance;
     }
 }
