@@ -56,11 +56,11 @@ contract Lido is LKSM {
     // one claim for account
     mapping(address => Claim) private claimOrders;
 
-    // Ledger accounts (start eraId + Ledger contract address)
-    EnumerableMap.UintToAddressMap private members;
+    // Ledger accounts 
+    EnumerableMap.UintToAddressMap private ledgers;
 
     // Map to check ledger existence by address
-    mapping(address => bool) private ledgers;
+    mapping(address => bool) private ledgerByAddress;
 
     // Ledger shares map
     mapping(address => uint128) public ledgerShares;
@@ -80,8 +80,8 @@ contract Lido is LKSM {
     // auth manager contract address
     address public AUTH_MANAGER;
 
-    // Maximum number of ORACLE_MASTER committee members
-    uint256 public MAX_STASH_ACCOUNTS = 200;
+    // Maximum number of ledgers
+    uint256 public MAX_LEDGERS_AMOUNT = 200;
 
     // Who pay off relay chain transaction fees
     bytes32 public GARANTOR = 0x00;
@@ -172,10 +172,10 @@ contract Lido is LKSM {
     * @dev Return relay chain stash account addresses
     */
     function getStashAccounts() public view returns (Types.Stash[] memory) {
-        Types.Stash[] memory _stashes = new Types.Stash[](members.length());
+        Types.Stash[] memory _stashes = new Types.Stash[](ledgers.length());
 
-        for (uint i = 0; i < members.length(); i++) {
-            (uint256 key, address ledger) = members.at(i);
+        for (uint i = 0; i < ledgers.length(); i++) {
+            (uint256 key, address ledger) = ledgers.at(i);
             _stashes[i].stashAccount = bytes32(key);
             // todo adjust eraId to `_oracleMaster`
             _stashes[i].eraId = 0;
@@ -184,10 +184,10 @@ contract Lido is LKSM {
     }
 
     function getLedgerAddresses() public view returns (address[] memory) {
-        address[] memory _addrs = new address[](members.length());
+        address[] memory _addrs = new address[](ledgers.length());
 
-        for (uint i = 0; i < members.length(); i++) {
-            (uint256 key, address ledger) = members.at(i);
+        for (uint i = 0; i < ledgers.length(); i++) {
+            (uint256 key, address ledger) = ledgers.at(i);
             _addrs[i] = ledger;
         }
         return _addrs;
@@ -197,7 +197,7 @@ contract Lido is LKSM {
     * @dev Find ledger contract address associated with the stash account
     */
     function findLedger(bytes32 _stashAccount) external view returns (address) {
-        (bool _found, address ledger) = members.tryGet(uint256(_stashAccount));
+        (bool _found, address ledger) = ledgers.tryGet(uint256(_stashAccount));
         return ledger;
     }
 
@@ -208,7 +208,7 @@ contract Lido is LKSM {
         require(_relaySpec.unbondingPeriod > 0, "BAD_UNBONDING_PERIOD");
         require(_relaySpec.maxValidatorsPerLedger > 0, "BAD_MAX_VALIDATORS_PER_LEDGER");
 
-        //TODO loop through ledgers and oracles if some params changed
+        //TODO loop through ledgerByAddress and oracles if some params changed
 
         RELAY_SPEC = _relaySpec;
 
@@ -227,7 +227,7 @@ contract Lido is LKSM {
     * @dev Update ledger master contract address
     */
     function setLedgerClone(address _ledgerClone) external auth(ROLE_LEDGER_MANAGER) {
-        require(members.length() == 0, "ONLY_ONCE");
+        require(ledgers.length() == 0, "ONLY_ONCE");
         LEDGER_CLONE = _ledgerClone;
     }
 
@@ -261,8 +261,8 @@ contract Lido is LKSM {
     {
         require(LEDGER_CLONE != address(0), "UNSPECIFIED_LEDGER_CLONE");
         require(ORACLE_MASTER != address(0), "NO_ORACLE_MASTER");
-        require(members.length() < MAX_STASH_ACCOUNTS, "STASH_POOL_LIMIT");
-        require(!members.contains(uint256(_stashAccount)), "STASH_ALREADY_EXISTS");
+        require(ledgers.length() < MAX_LEDGERS_AMOUNT, "LEDGERS_POOL_LIMIT");
+        require(!ledgers.contains(uint256(_stashAccount)), "STASH_ALREADY_EXISTS");
 
         address ledger = LEDGER_CLONE.cloneDeterministic(_stashAccount);
         // skip one era before commissioning
@@ -274,8 +274,8 @@ contract Lido is LKSM {
             vAccounts,
             RELAY_SPEC.minNominatorBalance
         );
-        members.set(uint256(_stashAccount), ledger);
-        ledgers[ledger] = true;
+        ledgers.set(uint256(_stashAccount), ledger);
+        ledgerByAddress[ledger] = true;
         ledgerShares[ledger] = _share;
         legderSharesTotal += _share;
 
@@ -288,7 +288,7 @@ contract Lido is LKSM {
     }
 
     function setLedgerShare(address _ledger, uint128 _newShare) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgers[_ledger], "LEDGER_BOT_FOUND");
+        require(ledgerByAddress[_ledger], "LEDGER_BOT_FOUND");
 
         legderSharesTotal -= ledgerShares[_ledger];
         ledgerShares[_ledger] = _newShare;
@@ -300,14 +300,14 @@ contract Lido is LKSM {
     }
 
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgers[_ledgerAddress], "LEDGER_BOT_FOUND");
+        require(ledgerByAddress[_ledgerAddress], "LEDGER_NOT_FOUND");
         require(ledgerShares[_ledgerAddress] == 0, "LEGDER_HAS_NON_ZERO_SHARE");
         
         ILedger ledger = ILedger(_ledgerAddress);
         require(ledger.status() == Types.LedgerStatus.Idle, "LEDGER_NOT_IDLE");
 
-        members.remove(uint256(ledger.stashAccount()));
-        delete ledgers[_ledgerAddress];
+        ledgers.remove(uint256(ledger.stashAccount()));
+        delete ledgerByAddress[_ledgerAddress];
         delete ledgerShares[_ledgerAddress];
 
         IOracleMaster(ORACLE_MASTER).removeLedger(_ledgerAddress);
@@ -321,7 +321,7 @@ contract Lido is LKSM {
     * @dev invoke pallet_stake::nominate on the relay side
     */
     function nominate(bytes32 _stashAccount, bytes32[] calldata validators) external auth(ROLE_STAKE_MANAGER) {
-        address ledger = members.get(uint256(_stashAccount), "UNKNOWN_STASH_ACCOUNT");
+        address ledger = ledgers.get(uint256(_stashAccount), "UNKNOWN_STASH_ACCOUNT");
 
         ILedger(ledger).nominate(validators);
     }
@@ -381,7 +381,7 @@ contract Lido is LKSM {
     }
 
     function distributeRewards(uint128 _totalRewards) external {
-        require(ledgers[msg.sender], "NOT_FROM_LEDGER");
+        require(ledgerByAddress[msg.sender], "NOT_FROM_LEDGER");
 
         uint256 feeBasis = uint256(FEE_BP);
 
@@ -405,8 +405,8 @@ contract Lido is LKSM {
             return;
         }
 
-        for (uint i = 0; i < members.length(); i++) {
-            (uint256 _key, address ledger) = members.at(i);
+        for (uint i = 0; i < ledgers.length(); i++) {
+            (uint256 _key, address ledger) = ledgers.at(i);
             if (ledgerShares[ledger] > 0) {
                 uint128 _chunk = _amount * ledgerShares[ledger] / legderSharesTotal;
 
@@ -421,8 +421,8 @@ contract Lido is LKSM {
             return;
         }
 
-        for (uint i = 0; i < members.length(); i++) {
-            (uint256 _key, address ledger) = members.at(i);
+        for (uint i = 0; i < ledgers.length(); i++) {
+            (uint256 _key, address ledger) = ledgers.at(i);
             if (ledgerShares[ledger] > 0) {
                 uint128 _chunk = _amount * ledgerShares[ledger] / legderSharesTotal;
 
@@ -434,8 +434,8 @@ contract Lido is LKSM {
     function _rebalanceStakes() internal {
         uint128 totalStake = uint128(getTotalPooledKSM());
 
-        for (uint i = 0; i < members.length(); i++) {
-            (uint256 _key, address ledger) = members.at(i);
+        for (uint i = 0; i < ledgers.length(); i++) {
+            (uint256 _key, address ledger) = ledgers.at(i);
             uint128 stake = uint128(uint256(totalStake) * ledgerShares[ledger] / legderSharesTotal);
             vKSM.approve(ledger, stake);
             ILedger(ledger).exactStake(stake);
