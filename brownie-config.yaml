@@ -1,8 +1,11 @@
 networks:
-    default: moonriver
+    default: development
     moonriver:
         gas_limit: max
         gas_price: 1_000_000_000
+
+dependencies:
+  - OpenZeppelin/openzeppelin-contracts@4.1.0
 
 compiler:
     evm_version: null
@@ -12,4 +15,4 @@ compiler:
             enabled: true
             runs: 200
         remappings:
-            - "@openzeppelin=./node_modules/@openzeppelin/contracts"
+            - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@4.1.0"
