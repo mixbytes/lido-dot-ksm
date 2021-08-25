@@ -8,7 +8,6 @@ import "@openzeppelin/proxy/Clones.sol";
 import "@openzeppelin/utils/structs/EnumerableMap.sol";
 
 import "../interfaces/IOracleMaster.sol";
-import "../interfaces/ILido.sol";
 import "../interfaces/ILedger.sol";
 import "../interfaces/IvKSM.sol";
 import "../interfaces/IAuthManager.sol";
@@ -220,7 +219,7 @@ contract Lido is LKSM {
     * @dev Update ORACLE_MASTER contract address
     */
     function setOracleMaster(address _oracleMaster) external auth(ROLE_ORACLE_MANAGER) {
-        require(ORACLE_MASTER == address(0), 'ORACLE_MASTER_ALREADY_DEFINED');
+        require(ORACLE_MASTER == address(0), "ORACLE_MASTER_ALREADY_DEFINED");
         ORACLE_MASTER = _oracleMaster;
     }
 
