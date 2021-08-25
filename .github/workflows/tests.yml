@@ -58,4 +58,4 @@ jobs:
       run: brownie compile --size
 
     - name: Run Tests
-      run: brownie test -sv
+      run: brownie test --coverage --gas

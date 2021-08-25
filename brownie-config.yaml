@@ -16,3 +16,12 @@ compiler:
             runs: 200
         remappings:
             - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@4.1.0"
+
+reports:
+  exclude_contracts:
+    - Clones
+    - EnumerableSet
+    - EnumerableMap
+    - vAccounts_mock
+    - vKSM_mock
+    - AUX_mock
