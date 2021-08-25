@@ -2,10 +2,10 @@
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
-import "@openzeppelin/token/ERC20/IERC20.sol";
-import "@openzeppelin/utils/math/SafeMath.sol";
-import "@openzeppelin/proxy/Clones.sol";
-import "@openzeppelin/utils/structs/EnumerableMap.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
 import "../interfaces/IOracleMaster.sol";
 import "../interfaces/ILedger.sol";

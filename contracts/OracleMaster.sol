@@ -2,8 +2,8 @@
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
-import "@openzeppelin/security/Pausable.sol";
-import "@openzeppelin/proxy/Clones.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
 
 import "../interfaces/IOracle.sol";
 import "../interfaces/ILido.sol";
