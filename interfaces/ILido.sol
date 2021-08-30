@@ -1,12 +1,18 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.7.5;
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.0;
 
-pragma abicoder v2;
-
-import "./ILidoOracle.sol";
+import "./Types.sol";
 
 interface ILido {
-    function reportRelay(uint64 _eraId, ILidoOracle.StakeReport memory staking) external;
+    function distributeRewards(uint128 _totalRewards) external;
 
-    function totalSupply() external view returns (uint256);
+    function getStashAccounts() external view returns (Types.Stash[] memory);
+
+    function getLedgerAddresses() external view returns (address[] memory);
+
+    function findLedger(bytes32 _stash) external view returns (address);
+
+    function AUTH_MANAGER() external returns(address);
+
+    function ORACLE_MASTER() external view returns (address);
 }

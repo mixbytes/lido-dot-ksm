@@ -24,7 +24,7 @@
     "solium": "^1.2.5"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "3.4.0",
+    "@openzeppelin/contracts": "4.1.0",
     "openzeppelin-solidity": "2.0.0",
     "solidity-bytes-utils": "0.0.6"
   }

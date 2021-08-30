@@ -1,0 +1,27 @@
+networks:
+    default: development
+    moonriver:
+        gas_limit: max
+        gas_price: 1_000_000_000
+
+dependencies:
+  - OpenZeppelin/openzeppelin-contracts@4.1.0
+
+compiler:
+    evm_version: null
+    solc:
+        version: null
+        optimizer:
+            enabled: true
+            runs: 200
+        remappings:
+            - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@4.1.0"
+
+reports:
+  exclude_contracts:
+    - Clones
+    - EnumerableSet
+    - EnumerableMap
+    - vAccounts_mock
+    - vKSM_mock
+    - AUX_mock
