@@ -73,7 +73,7 @@ abstract contract LKSM is IERC20, Pausable {
     /**
      * @return the entire amount of KSMs controlled by the protocol.
      *
-     * @dev The sum of all ETH balances in the protocol, equals to the total supply of stETH.
+     * @dev The sum of all KSM balances in the protocol.
      */
     function getTotalPooledKSM() public view returns (uint256) {
         return _getTotalPooledKSM();

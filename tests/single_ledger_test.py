@@ -32,9 +32,9 @@ def test_downward_transfer_mock(vKSM, vAccounts, accounts):
 def test_add_stash(lido, oracle_master, vKSM, Ledger, accounts):
     lido.addLedger("0x10", "0x20", 100, {'from': accounts[0]})
 
-    legder = Ledger.at(lido.findLedger("0x10"))
-    assert legder.stashAccount() == "0x10"
-    assert legder.controllerAccount() == "0x20"
+    ledger = Ledger.at(lido.findLedger("0x10"))
+    assert ledger.stashAccount() == "0x10"
+    assert ledger.controllerAccount() == "0x20"
 
 
 def test_single_deposit(lido, oracle_master, vKSM, accounts):

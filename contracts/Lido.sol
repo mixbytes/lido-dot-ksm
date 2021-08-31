@@ -26,18 +26,18 @@ contract Lido is LKSM {
     // Fee was updated
     event FeeSet(uint16 feeBasisPoints);
 
-    event LegderAdd(
+    event LedgerAdd(
         address addr,
         bytes32 stashAccount,
         bytes32 controllerAccount,
         uint256 share
     );
 
-    event LegderRemove(
+    event LedgerRemove(
         address addr
     );
 
-    event LegderSetShare(
+    event LedgerSetShare(
         address addr,
         uint256 share
     );
@@ -66,7 +66,7 @@ contract Lido is LKSM {
     mapping(address => uint128) public ledgerShares;
 
     // Sum of all ledger shares
-    uint128 public legderSharesTotal;
+    uint128 public ledgerSharesTotal;
 
 
     // vKSM precompile
@@ -277,26 +277,26 @@ contract Lido is LKSM {
         ledgers.set(uint256(_stashAccount), ledger);
         ledgerByAddress[ledger] = true;
         ledgerShares[ledger] = _share;
-        legderSharesTotal += _share;
+        ledgerSharesTotal += _share;
 
         IOracleMaster(ORACLE_MASTER).addLedger(ledger);
 
         _rebalanceStakes();
 
-        emit LegderAdd(ledger, _stashAccount, _controllerAccount, _share);
+        emit LedgerAdd(ledger, _stashAccount, _controllerAccount, _share);
         return ledger;
     }
 
     function setLedgerShare(address _ledger, uint128 _newShare) external auth(ROLE_LEDGER_MANAGER) {
         require(ledgerByAddress[_ledger], "LEDGER_BOT_FOUND");
 
-        legderSharesTotal -= ledgerShares[_ledger];
+        ledgerSharesTotal -= ledgerShares[_ledger];
         ledgerShares[_ledger] = _newShare;
-        legderSharesTotal += _newShare;
+        ledgerSharesTotal += _newShare;
 
         _rebalanceStakes();
 
-        emit LegderSetShare(_ledger, _newShare);
+        emit LedgerSetShare(_ledger, _newShare);
     }
 
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
@@ -314,7 +314,7 @@ contract Lido is LKSM {
 
         _rebalanceStakes();
 
-        emit LegderRemove(_ledgerAddress);
+        emit LedgerRemove(_ledgerAddress);
     }
 
     /**
@@ -408,7 +408,7 @@ contract Lido is LKSM {
         for (uint i = 0; i < ledgers.length(); i++) {
             (uint256 _key, address ledger) = ledgers.at(i);
             if (ledgerShares[ledger] > 0) {
-                uint128 _chunk = _amount * ledgerShares[ledger] / legderSharesTotal;
+                uint128 _chunk = _amount * ledgerShares[ledger] / ledgerSharesTotal;
 
                 vKSM.approve(ledger, vKSM.allowance(address(this), ledger) + uint256(_chunk));
                 ILedger(ledger).stake(_chunk);
@@ -424,7 +424,7 @@ contract Lido is LKSM {
         for (uint i = 0; i < ledgers.length(); i++) {
             (uint256 _key, address ledger) = ledgers.at(i);
             if (ledgerShares[ledger] > 0) {
-                uint128 _chunk = _amount * ledgerShares[ledger] / legderSharesTotal;
+                uint128 _chunk = _amount * ledgerShares[ledger] / ledgerSharesTotal;
 
                 ILedger(ledger).unstake(_chunk);
             }
@@ -436,7 +436,7 @@ contract Lido is LKSM {
 
         for (uint i = 0; i < ledgers.length(); i++) {
             (uint256 _key, address ledger) = ledgers.at(i);
-            uint128 stake = uint128(uint256(totalStake) * ledgerShares[ledger] / legderSharesTotal);
+            uint128 stake = uint128(uint256(totalStake) * ledgerShares[ledger] / ledgerSharesTotal);
             vKSM.approve(ledger, stake);
             ILedger(ledger).exactStake(stake);
         }
@@ -445,7 +445,7 @@ contract Lido is LKSM {
     /**
     * @dev Process user deposit, mints LKSM and increase the pool buffer
     * @param _referral address of referral.
-    * @return amount of StETH shares generated
+    * @return amount of LKSM shares generated
     */
     function _submit(address _referral, uint256 _deposit) internal whenNotPaused returns (uint256) {
         address sender = msg.sender;

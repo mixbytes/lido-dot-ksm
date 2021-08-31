@@ -6,8 +6,8 @@ def check_distribution(lido, stashes, shares, total_deposit):
     total_shares = sum(i for i in shares)
     for i in range(len(stashes)):
         stash = hex(stashes[i])
-        legder = Ledger.at(lido.findLedger(stash))
-        assert legder.targetStake() == total_deposit * shares[i] // total_shares  
+        ledger = Ledger.at(lido.findLedger(stash))
+        assert ledger.targetStake() == total_deposit * shares[i] // total_shares
 
 
 def test_add_ledger_slowly(lido, oracle_master, vKSM, accounts):

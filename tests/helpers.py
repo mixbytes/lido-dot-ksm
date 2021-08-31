@@ -1,4 +1,4 @@
-class RelayLegder:
+class RelayLedger:
     ledger_address = None
     stash_account = None
     controller_account = None
@@ -106,7 +106,7 @@ class RelayChain:
     def new_ledger(self, stash_account, controller_account, share):
         tx = self.lido.addLedger(stash_account, controller_account, share, {'from': self.accounts[0]})
         tx.info()
-        self.ledgers.append(RelayLegder(self, tx.events['LegderAdd'][0]['addr'], stash_account, controller_account))
+        self.ledgers.append(RelayLedger(self, tx.events['LedgerAdd'][0]['addr'], stash_account, controller_account))
 
     def _ledger_idx_by_stash_account(self, stash_account):
         for i in range(len(self.ledgers)):
