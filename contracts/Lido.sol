@@ -125,7 +125,7 @@ contract Lido is LKSM {
 
 
     modifier auth(bytes32 role) {
-        require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "UNAUTHOROZED");
+        require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "UNAUTHORIZED");
         _;
     }
 
@@ -160,12 +160,12 @@ contract Lido is LKSM {
     /**
     * @dev Return caller unbonding balance and balance that is ready for claim
     */
-    function getUnbonded(address holder) external view returns (uint256) {
+    function getUnbonded(address holder) external view returns (uint256, uint256){
         uint256 _balance = claimOrders[holder].balance;
         if (claimOrders[holder].timeout < block.timestamp) {
-            return _balance;
+            return (_balance, _balance);
         }
-        return 0;
+        return (_balance, 0);
     }
 
     /**
@@ -375,7 +375,6 @@ contract Lido is LKSM {
 
             delete claimOrders[msg.sender];
 
-            uint256 sharesAmount = getSharesByPooledKSM(amount);
             vKSM.transfer(msg.sender, amount);
         }
     }

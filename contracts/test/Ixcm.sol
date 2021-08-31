@@ -17,7 +17,7 @@ interface XcmPrecompile {
 
     function relayProxy(bytes32 relayChainAccount, bytes calldata message) external;
 
-    function buildBond(bytes32 controller, bytes32[] memory validators, uint256 amount) external view returns (bytes memory);
+    function buildBond(bytes32 controller, uint256 amount) external view returns (bytes memory);
 
     function buildBondExtra(uint256 amount) external view returns (bytes memory);
 

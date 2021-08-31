@@ -112,7 +112,7 @@ contract OracleMaster is Pausable {
         emit QuorumChanged(_quorum);
     }
 
-    function getOracle(address _ledger) view external returns (address) {
+    function getOracle(address _ledger) external view returns (address) {
         return oracleForLedger[_ledger];
     }
 
@@ -168,6 +168,7 @@ contract OracleMaster is Pausable {
     }
 
     function addLedger(address _ledger) external onlyLido {
+        require(ORACLE_CLONE != address(0), "ORACLE_CLONE_UNINITIALIZED");
         IOracle newOracle = IOracle(ORACLE_CLONE.cloneDeterministic(bytes32(uint256(uint160(_ledger)) << 96)));
         newOracle.initialize(address(this), _ledger);
         oracleForLedger[_ledger] = address(newOracle);
@@ -199,7 +200,7 @@ contract OracleMaster is Pausable {
         require(_eraId >= eraId, "OM: ERA_TOO_OLD");
 
         if (_eraId > eraId) {
-            require(_eraId == _getCurrentEraId(), "OM: UNEXPECTED_NEW_ERA");
+            require(_eraId <= _getCurrentEraId(), "OM: UNEXPECTED_NEW_ERA");
             eraId = _eraId;
             IOracle(oracle).clearReporting();
         }

@@ -278,9 +278,9 @@ contract Ledger {
 
             if (freeBalanceIncrement >= transferUpwardBalance) {
                 cachedTotalBalance += transferUpwardBalance;
-                transferUpwardBalance = 0;
 
                 emit UpwardComplete(transferUpwardBalance);
+                transferUpwardBalance = 0;
             }
         }
 
