@@ -35,7 +35,7 @@ vKSM = interface.IvKSM('0x0000000000000000000000000000000000000801')
 
 # set after deployment
 lido = None
-oracleMaster = None 
+oracleMaster = None
 
 UNIT = 1_000_000_000_000
 

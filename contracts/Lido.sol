@@ -175,7 +175,7 @@ contract Lido is LKSM {
         Types.Stash[] memory _stashes = new Types.Stash[](ledgers.length());
 
         for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 key, address ledger) = ledgers.at(i);
+            (uint256 key, ) = ledgers.at(i);
             _stashes[i].stashAccount = bytes32(key);
             // todo adjust eraId to `_oracleMaster`
             _stashes[i].eraId = 0;
@@ -187,7 +187,7 @@ contract Lido is LKSM {
         address[] memory _addrs = new address[](ledgers.length());
 
         for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 key, address ledger) = ledgers.at(i);
+            (, address ledger) = ledgers.at(i);
             _addrs[i] = ledger;
         }
         return _addrs;
@@ -197,7 +197,7 @@ contract Lido is LKSM {
     * @dev Find ledger contract address associated with the stash account
     */
     function findLedger(bytes32 _stashAccount) external view returns (address) {
-        (bool _found, address ledger) = ledgers.tryGet(uint256(_stashAccount));
+        (, address ledger) = ledgers.tryGet(uint256(_stashAccount));
         return ledger;
     }
 
@@ -405,7 +405,7 @@ contract Lido is LKSM {
         }
 
         for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 _key, address ledger) = ledgers.at(i);
+            (, address ledger) = ledgers.at(i);
             if (ledgerShares[ledger] > 0) {
                 uint128 _chunk = _amount * ledgerShares[ledger] / ledgerSharesTotal;
 
@@ -421,7 +421,7 @@ contract Lido is LKSM {
         }
 
         for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 _key, address ledger) = ledgers.at(i);
+            (, address ledger) = ledgers.at(i);
             if (ledgerShares[ledger] > 0) {
                 uint128 _chunk = _amount * ledgerShares[ledger] / ledgerSharesTotal;
 
@@ -434,7 +434,7 @@ contract Lido is LKSM {
         uint128 totalStake = uint128(getTotalPooledKSM());
 
         for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 _key, address ledger) = ledgers.at(i);
+            (, address ledger) = ledgers.at(i);
             uint128 stake = uint128(uint256(totalStake) * ledgerShares[ledger] / ledgerSharesTotal);
             vKSM.approve(ledger, stake);
             ILedger(ledger).exactStake(stake);
