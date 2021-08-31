@@ -20,15 +20,15 @@ contract AuthManager is IAuthManager {
         }
     }
 
-    function roles(address _member) external view returns (bytes32[] memory){
+    function roles(address _member) external view returns (bytes32[] memory) {
         return members[_member];
     }
 
-    function has(bytes32 role, address _member) external override view returns (bool){
+    function has(bytes32 role, address _member) external override view returns (bool) {
         return _find(members[_member], role) != NOTFOUND;
     }
 
-    function _find(bytes32[] storage _roles, bytes32 _role) internal view returns (uint256){
+    function _find(bytes32[] storage _roles, bytes32 _role) internal view returns (uint256) {
         for (uint256 i = 0; i < _roles.length; ++i) {
             if (_role == _roles[i]) {
                 return i;
@@ -65,11 +65,11 @@ contract AuthManager is IAuthManager {
 
         uint256 i = _find(_roles, role);
         require(i != NOTFOUND, "MEMBER_NOT_FOUND");
-        if( _roles.length == 1 ){
-            require( role!= SUPER_ROLE, "INVALID");
+        if (_roles.length == 1) {
+            require(role != SUPER_ROLE, "INVALID");
 
             delete members[member];
-        }else{
+        } else {
             if (i < _roles.length - 1) {
                 _roles[i] = _roles[_roles.length - 1];
             }
