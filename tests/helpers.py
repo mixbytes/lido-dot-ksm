@@ -186,6 +186,7 @@ class RelayChain:
     def timetravel(self, eras):
         self.chain.sleep(6 * 60 * 60 * eras)
         self.era += eras
+        self.chain.mine()
 
 
 
