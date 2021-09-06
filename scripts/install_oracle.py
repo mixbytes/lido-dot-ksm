@@ -8,8 +8,11 @@ ALL_ROLES = [ 'ROLE_SPEC_MANAGER','ROLE_PAUSE_MANAGER', 'ROLE_FEE_MANAGER', 'ROL
 
 QUORUM = 2
 # set you own proxy accounts
-STASH1='F7yiRjEEJs6xwNyrrt96rgKC2GxCa2uHN9iVX3KJi9QwpwT'
-STASH2='H6zbEa7FZC56nndNzEbbKgBCp9rnZS7KH6vLyRJgV7z4Sei'
+STASH1='HPTY21V37W4yvkQrR2GUfKzfTUZAbLSGfFqsLRf5mw3iVj9'
+STASH2='FPCADC3nRXaXz4XSsaXfLyMBhCrb9x9bDrSv58xGbJbV7KK'
+
+#STASH1='F7yiRjEEJs6xwNyrrt96rgKC2GxCa2uHN9iVX3KJi9QwpwT'
+#STASH2='H6zbEa7FZC56nndNzEbbKgBCp9rnZS7KH6vLyRJgV7z4Sei'
 
 # charlie
 STASH10='Fr4NzY1udSFFLzb2R3qxVQkwz9cZraWkyfH4h3mVVk7BK7P'
@@ -17,6 +20,11 @@ STASH10='Fr4NzY1udSFFLzb2R3qxVQkwz9cZraWkyfH4h3mVVk7BK7P'
 STASH11='DfnTB4z7eUvYRqcGtTpFsLC69o6tvBSC1pEv8vWPZFtCkaK'
 # eve
 STASH12='HnMAUz7r2G8G3hB27SYNyit5aJmh2a5P4eMdDtACtMFDbam'
+
+
+OR1='0x925eda0e60dac4a29712e1f9cfe1a3f1efe4270596e46722295248428f25e6ee'
+OR2='0x0801d35e1dbb9e47f89ff7971c627617eef53ced08e622e82bc551540efdcb4d'
+
 
 # Parachain soverein account
 MOONBEAM='F7fq1jSAsQD9BqmTx3UAhwpMNa9WJGMmru2o7Evn83gSgfb'
@@ -27,8 +35,10 @@ VALIDATORS = [
 ]
 
 alith  = accounts.add(private_key=0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133)
-baltathar =  accounts.add(private_key=0x8075991ce870b93a8870eca0c0f91913d12f47948ca0fd25b49c6fa7cdbeee8b) 
+baltathar =  accounts.add(private_key=0x8075991ce870b93a8870eca0c0f91913d12f47948ca0fd25b49c6fa7cdbeee8b)
 
+oracle1 = accounts.add(private_key=OR1)
+oracle2 = accounts.add(private_key=OR2)
 
 x = interface.XcmPrecompile('0x0000000000000000000000000000000000000801')
 vKSM = interface.IvKSM('0x0000000000000000000000000000000000000801')
@@ -48,7 +58,10 @@ t = None
 def ss58decode( address ):
     return Keypair(ss58_address=address, ss58_format=2).public_key
 
-stash = ss58decode( STASH1 )
+stash1 = ss58decode( STASH1 )
+stash2 = ss58decode( STASH2 )
+
+assert( 1<=QUORUM<=2 , 'supported QUORUM of 1 or 2')
 
 def prompt():
     pass
@@ -56,15 +69,11 @@ def prompt():
 def config(_lido=None):
     _lido = _lido or lido
 
-    stash = ss58decode( STASH1 )
-    print(f"stash {STASH1} = {stash} addLedger")
-    
-    _lido.addLedger( stash, stash, 100, {'from': alith})
+    print(f"stash {STASH1} = {stash1} addLedger")
+    _lido.addLedger( stash1, stash1, 100, {'from': alith})
 
-    stash = ss58decode( STASH2 )
-    print(f"stash {STASH2} = {stash} addLedger")
-
-    _lido.addLedger( stash, stash, 100, {'from': alith})
+    print(f"stash {STASH2} = {stash2} addLedger")
+    _lido.addLedger( stash2, stash2, 100, {'from': alith})
 
 def main():
     global lido
@@ -102,8 +111,8 @@ def main():
     lido.setRelaySpec((chain.time(), era_sec, era_sec * (28+3), 16, 1))
 
     print("addOracleMember")
-    oracleMaster.addOracleMember( alith.address, {'from':alith})
-    oracleMaster.addOracleMember( baltathar.address, {'from':alith})
+    oracleMaster.addOracleMember( oracle1.address, {'from':alith})
+    oracleMaster.addOracleMember( oracle2.address, {'from':alith})
 
     # mint 
     x.mint( alith.address, 100 * UNIT , {'from': alith})
@@ -120,10 +129,6 @@ def new_proxy():
 
 def deposit(_lido = None):
     _lido = _lido or lido
-    
-    stash = ss58decode( STASH1 )
-    print(f"stash {STASH1} = {stash} ") 
-    
 
     vKSM.approve(_lido.address, 20 * UNIT , {'from': alith})
     vKSM.approve(_lido.address, 30 * UNIT , {'from': baltathar})
@@ -214,10 +219,9 @@ def nominate():
 
 def report():
     global oracleMaster
-    report = createReport(RELAY_URL, STASH1)
-    print(report)
+    r = createReport(RELAY_URL, STASH1)
 
-    t = oracleMaster.reportRelay( report[0], report[1:], {'from': alith} )
+    t = oracleMaster.reportRelay( r[0], r[1:], {'from': oracle1} )
     if QUORUM>1:
-        t = oracleMaster.reportRelay( report[0], report[1:], {'from': baltathar} )
+        t = oracleMaster.reportRelay( r[0], r[1:], {'from': oracle2} )
     print( t.info() )

@@ -177,12 +177,15 @@ contract Lido is LKSM {
         for (uint i = 0; i < ledgers.length(); i++) {
             (uint256 key, ) = ledgers.at(i);
             _stashes[i].stashAccount = bytes32(key);
-            // todo adjust eraId to `_oracleMaster`
-            _stashes[i].eraId = 0;
+            // todo adjust eraId to an oracle member
+            _stashes[i].eraId = IOracleMaster(ORACLE_MASTER).eraId();
         }
         return _stashes;
     }
 
+    /**
+    * @dev Return ledger contract addresses
+    */
     function getLedgerAddresses() public view returns (address[] memory) {
         address[] memory _addrs = new address[](ledgers.length());
 

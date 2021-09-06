@@ -10,19 +10,21 @@ import "../interfaces/ILido.sol";
 import "../interfaces/ILedger.sol";
 import "../interfaces/IAuthManager.sol";
 
+import "./utils/LedgerUtils.sol";
 
 contract OracleMaster is Pausable {
     using Clones for address;
+    using LedgerUtils for Types.OracleData;
 
     event MemberAdded(address member);
     event MemberRemoved(address member);
     event QuorumChanged(uint8 QUORUM);
 
     // current era id
-    uint64 private eraId;
+    uint64 public eraId;
 
     // Oracle members
-    address[] private members;
+    address[] public members;
 
     // ledger -> oracle pairing
     mapping(address => address) private oracleForLedger;
@@ -70,7 +72,6 @@ contract OracleMaster is Pausable {
         _;
     }
 
-
     function initialize(
         address _oracleClone,
         uint8 _quorum
@@ -92,7 +93,7 @@ contract OracleMaster is Pausable {
     }
 
     /**
-    * @notice Set the number of exactly the same reports needed to finalize the epoch to `_quorum`
+    * @notice Set the number of exactly the same reports needed to finalize the era to `_quorum`
     */
     function setQuorum(uint8 _quorum) external auth(ROLE_ORACLE_QUORUM_MANAGER) {
         require(0 != _quorum, "OM: QUORUM_WONT_BE_MADE");
@@ -112,14 +113,23 @@ contract OracleMaster is Pausable {
         emit QuorumChanged(_quorum);
     }
 
+    /**
+     * @notice Return oracle contract for the  `_ledger`
+     */
     function getOracle(address _ledger) external view returns (address) {
         return oracleForLedger[_ledger];
     }
 
+    /**
+     * @notice Return current Era according to relay chain spec
+     */
     function getCurrentEraId() public view returns (uint64) {
         return _getCurrentEraId();
     }
 
+    /**
+    *   @notice Return relay-chain stash accounts for which an oracle-service will gather report data
+    */
     function getStashAccounts() external view returns (Types.Stash[] memory) {
         return ILido(LIDO).getStashAccounts();
     }
@@ -138,7 +148,6 @@ contract OracleMaster is Pausable {
         _unpause();
     }
 
-
     /**
     * @notice Add `_member` to the oracle member committee list
     */
@@ -153,7 +162,7 @@ contract OracleMaster is Pausable {
     }
 
     /**
-    * @notice Remove "_member` from the oracle member committee list
+    * @notice Remove `_member` from the oracle member committee list
     */
     function removeOracleMember(address _member) external auth(ROLE_ORACLE_MEMBERS_MANAGER) {
         uint256 index = _getMemberId(_member);
@@ -163,10 +172,14 @@ contract OracleMaster is Pausable {
         members.pop();
         emit MemberRemoved(_member);
 
-        // delete the data for the last epoch, let remained oracles report it again
+        // delete the data for the last eraId, let remained oracles report it again
         _clearReporting();
     }
 
+    /**
+     * @notice Add ledger to oracle set
+     * @param _ledger Ledger contract
+     */
     function addLedger(address _ledger) external onlyLido {
         require(ORACLE_CLONE != address(0), "ORACLE_CLONE_UNINITIALIZED");
         IOracle newOracle = IOracle(ORACLE_CLONE.cloneDeterministic(bytes32(uint256(uint160(_ledger)) << 96)));
@@ -174,6 +187,10 @@ contract OracleMaster is Pausable {
         oracleForLedger[_ledger] = address(newOracle);
     }
 
+    /**
+     * @notice Remove ledger from oracle set
+     * @param _ledger Ledger contract
+     */
     function removeLedger(address _ledger) external onlyLido {
         oracleForLedger[_ledger] = address(0);
     }
@@ -184,12 +201,7 @@ contract OracleMaster is Pausable {
      * @param report Relaychain report
      */
     function reportRelay(uint64 _eraId, Types.OracleData calldata report) external whenNotPaused {
-        require(
-            report.unlocking.length < type(uint8).max
-            && report.totalBalance >= report.activeBalance
-            && report.stashBalance >= report.totalBalance,
-            "INCORRECT_REPORT"
-        );
+        require(report.isConsistent(), "OM: INCORRECT_REPORT");
 
         uint256 memberIndex = _getMemberId(msg.sender);
         require(memberIndex != MEMBER_NOT_FOUND, "OM: MEMBER_NOT_FOUND");
@@ -202,12 +214,15 @@ contract OracleMaster is Pausable {
         if (_eraId > eraId) {
             require(_eraId <= _getCurrentEraId(), "OM: UNEXPECTED_NEW_ERA");
             eraId = _eraId;
-            IOracle(oracle).clearReporting();
+            _clearReporting();
         }
 
         IOracle(oracle).reportRelay(memberIndex, QUORUM, _eraId, report);
     }
 
+    /**
+     * @notice Return oracle instance index in the member array
+     */
     function _getMemberId(address _member) internal view returns (uint256) {
         uint256 length = members.length;
         for (uint256 i = 0; i < length; ++i) {
@@ -218,6 +233,9 @@ contract OracleMaster is Pausable {
         return MEMBER_NOT_FOUND;
     }
 
+    /**
+     * @notice Delete interim data for current Era, free storage memory
+     */
     function _clearReporting() internal {
         address[] memory ledgers = ILido(LIDO).getLedgerAddresses();
         for (uint256 i = 0; i < ledgers.length; ++i) {

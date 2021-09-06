@@ -25,6 +25,8 @@ library LedgerUtils {
     /// @notice Return true if report is consistent
     function isConsistent(Types.OracleData memory report) internal pure returns (bool) {
         (uint128 _total,) = getTotalUnlocking(report, 0);
-        return report.unlocking.length < type(uint8).max && report.totalBalance == (report.activeBalance + _total);
+        return report.unlocking.length < type(uint8).max
+            && report.totalBalance == (report.activeBalance + _total)
+            && report.stashBalance >= report.totalBalance;
     }
 }
