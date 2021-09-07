@@ -8,5 +8,7 @@ interface IOracleMaster {
 
     function getOracle(address _ledger) view external returns (address);
 
+    function eraId() view external returns (uint64);
+
     function setRelayParams(uint64 _relayGenesisTs, uint64 _relaySecondsPerEra) external;
 }

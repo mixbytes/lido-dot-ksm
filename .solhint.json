@@ -9,6 +9,7 @@
     "compiler-version": "off",
     "reason-string": "off",
     "no-empty-blocks": "off",
-    "func-name-mixedcase": "off"
+    "func-name-mixedcase": "off",
+    "func-visibility": ["warn",{"ignoreConstructors":true}]
   }
 }

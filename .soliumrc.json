@@ -36,6 +36,6 @@
     "value-in-payable": "error",
     "max-len": "error",
     "visibility-first": "error",
-    "linebreak-style": "error"
+    "linebreak-style": "off"
   }
 }

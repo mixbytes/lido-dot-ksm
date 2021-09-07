@@ -3,9 +3,16 @@ import pytest
 from substrateinterface import Keypair
 from substrateinterface import SubstrateInterface
 
+ALL_ROLES = [ 'ROLE_SPEC_MANAGER','ROLE_PAUSE_MANAGER', 'ROLE_FEE_MANAGER', 'ROLE_ORACLE_MANAGER','ROLE_LEDGER_MANAGER',
+                'ROLE_STAKE_MANAGER', 'ROLE_ORACLE_MEMBERS_MANAGER', 'ROLE_ORACLE_QUORUM_MANAGER' ]
+
+QUORUM = 2
 # set you own proxy accounts
-STASH2='H8ST31GnWD6AaGchQMDnqvMgZz6Nb9HGREA1R8XbRH3dkW5'
-STASH1='HGcoj2TGFpVHjtbkaXfn9Zen4SB3cY7t7Pez7s72AYNRLbo'
+STASH1='HPTY21V37W4yvkQrR2GUfKzfTUZAbLSGfFqsLRf5mw3iVj9'
+STASH2='FPCADC3nRXaXz4XSsaXfLyMBhCrb9x9bDrSv58xGbJbV7KK'
+
+#STASH1='F7yiRjEEJs6xwNyrrt96rgKC2GxCa2uHN9iVX3KJi9QwpwT'
+#STASH2='H6zbEa7FZC56nndNzEbbKgBCp9rnZS7KH6vLyRJgV7z4Sei'
 
 # charlie
 STASH10='Fr4NzY1udSFFLzb2R3qxVQkwz9cZraWkyfH4h3mVVk7BK7P'
@@ -13,6 +20,11 @@ STASH10='Fr4NzY1udSFFLzb2R3qxVQkwz9cZraWkyfH4h3mVVk7BK7P'
 STASH11='DfnTB4z7eUvYRqcGtTpFsLC69o6tvBSC1pEv8vWPZFtCkaK'
 # eve
 STASH12='HnMAUz7r2G8G3hB27SYNyit5aJmh2a5P4eMdDtACtMFDbam'
+
+
+OR1='0x925eda0e60dac4a29712e1f9cfe1a3f1efe4270596e46722295248428f25e6ee'
+OR2='0x0801d35e1dbb9e47f89ff7971c627617eef53ced08e622e82bc551540efdcb4d'
+
 
 # Parachain soverein account
 MOONBEAM='F7fq1jSAsQD9BqmTx3UAhwpMNa9WJGMmru2o7Evn83gSgfb'
@@ -23,15 +35,17 @@ VALIDATORS = [
 ]
 
 alith  = accounts.add(private_key=0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133)
-baltathar =  accounts.add(private_key=0x8075991ce870b93a8870eca0c0f91913d12f47948ca0fd25b49c6fa7cdbeee8b) 
+baltathar =  accounts.add(private_key=0x8075991ce870b93a8870eca0c0f91913d12f47948ca0fd25b49c6fa7cdbeee8b)
 
+oracle1 = accounts.add(private_key=OR1)
+oracle2 = accounts.add(private_key=OR2)
 
 x = interface.XcmPrecompile('0x0000000000000000000000000000000000000801')
 vKSM = interface.IvKSM('0x0000000000000000000000000000000000000801')
 
 # set after deployment
-lido = None #Lido.at('0x263E845eD8536782b1FFDe3908ad36d4d023b139')
-lidoOracle = None # LidoOracle.at('0xDa98d56F3357422ba9397F102E8C311Fd3fE004A')
+lido = None
+oracleMaster = None
 
 UNIT = 1_000_000_000_000
 
@@ -41,86 +55,65 @@ RELAY_URL='ws://localhost:9951'
 # the last transaction
 t = None
 
-
 def ss58decode( address ):
     return Keypair(ss58_address=address, ss58_format=2).public_key
 
-stash = ss58decode( STASH1 )
+stash1 = ss58decode( STASH1 )
+stash2 = ss58decode( STASH2 )
+
+assert( 1<=QUORUM<=2 , 'supported QUORUM of 1 or 2')
 
 def prompt():
     pass
     
 def config(_lido=None):
-    
     _lido = _lido or lido
 
-    ledger = Ledger.deploy({'from': alith, 'required_confs': 2})
-    
-    print(f"set ledger {ledger.address} for lido {_lido.address}" )
-    
-    print("ledger's deployed")
-    _lido.setLedgerMaster( ledger.address, {'from': alith, 'required_confs': 2})
+    print(f"stash {STASH1} = {stash1} addLedger")
+    _lido.addLedger( stash1, stash1, 100, {'from': alith})
 
-    stash = ss58decode( STASH1 )
-    print(f"stash {STASH1} = {stash} ") 
-    
-    _lido.addStash( stash, stash, {'from': alith})   
-
-
-def test():
-    global lido
-    global lidoOracle
-    global t
-    
-    lidoOracle = LidoOracle.deploy({'from':alith, 'required_confs': 2})
-    
-    lido = Lido.deploy({'from': alith, 'required_confs': 2})
-    
-    #lidoOracle = LidoOracle.deploy({'from':alith, 'required_confs': 2})
-    lidoOracle.setLido( lido.address, {'from':alith})
-    print("addOracleMember")
-    lidoOracle.addOracleMember( alith.address, {'from':alith})
-    lidoOracle.addOracleMember( baltathar.address, {'from':alith})    
-    
-    ledger = Ledger.deploy({'from': alith, 'required_confs': 2})
-    lido.setOracle( lidoOracle.address, {'from': alith})
-    print("set Ledger")
-    lido.setLedgerMaster( ledger.address, {'from': alith, 'required_confs': 2})
-    
-    print("add Stash")
-    stash = ss58decode( STASH1 )
-    lido.addStash( stash, stash, {'from': alith, 'required_confs': 2})   
-    
-    #stash = ss58decode( STASH2 )
-    #lido.addStash( stash, stash, {'from': alith})   
-    
-    ledgerAddress = lido.findLedger( stash )
-    print(f"ledger address {ledgerAddress}")
-    
-    ledger = Ledger.at( ledgerAddress )
-    
-    #t = ledger.reportRelay(0,1,2, (stash, stash, 0, 0, 0, [], [], 0 ), {'from': alith })
-    t = lidoOracle.reportRelay(2, (stash, stash, 0, 0, 0, [], [], 0 ), {'from': alith }) 
-    
-    print(t.info())
-
+    print(f"stash {STASH2} = {stash2} addLedger")
+    _lido.addLedger( stash2, stash2, 100, {'from': alith})
 
 def main():
     global lido
-    global lidoOracle
- 
+    global oracleMaster
+
+    print("configure AuthManager")
+
+    mgr  = AuthManager.deploy(ZERO_ADDRESS, {'from':alith, 'required_confs': 2})
+
+    for role in ALL_ROLES:
+        mgr.addByString(role, alith, {'from': alith })
+
+    # mgr = AuthManager.at('0x9c1da847B31C0973F26b1a2A3d5c04365a867703')
+
+    print("configure Lido")
     lido = Lido.deploy({'from': alith, 'required_confs': 2})
-    
-    lidoOracle = LidoOracle.deploy({'from':alith, 'required_confs': 2})
-    print("setLido")
-    lidoOracle.setLido( lido.address, {'from':alith})
-    print("setOracle")
-    lido.setOracle( lidoOracle.address, {'from': alith})
+
+    print("Oracle deploy")
+    oracle = Oracle.deploy({'from':alith, 'required_confs': 2})
+    print("Oracle master")
+    oracleMaster = OracleMaster.deploy({'from': alith, 'required_confs': 2})
+    oracleMaster.initialize(oracle, QUORUM, {'from': alith})
+
+    print("Ledger")
+    lc = Ledger.deploy({'from': alith, 'required_confs': 2 })
+
+    lido.initialize(mgr, vKSM, x, x, {'from': alith})
+    lido.setLedgerClone(lc, {'from':alith})
+
+    print("setLido for oracleMaster")
+    oracleMaster.setLido(lido, {'from':alith})
+    lido.setOracleMaster(oracleMaster, {'from':alith, 'required_confs': 2})
+    # Dev Kusama has 3 min era
+    era_sec = 60 * 3
+    lido.setRelaySpec((chain.time(), era_sec, era_sec * (28+3), 16, 1))
+
     print("addOracleMember")
-    lidoOracle.addOracleMember( alith.address, {'from':alith})
-    lidoOracle.addOracleMember( baltathar.address, {'from':alith})
-    lidoOracle.setQuorum( 1, {'from':alith})
-    
+    oracleMaster.addOracleMember( oracle1.address, {'from':alith})
+    oracleMaster.addOracleMember( oracle2.address, {'from':alith})
+
     # mint 
     x.mint( alith.address, 100 * UNIT , {'from': alith})
     x.mint( baltathar.address, 100 * UNIT, {'from': alith} )
@@ -136,10 +129,6 @@ def new_proxy():
 
 def deposit(_lido = None):
     _lido = _lido or lido
-    
-    stash = ss58decode( STASH1 )
-    print(f"stash {STASH1} = {stash} ") 
-    
 
     vKSM.approve(_lido.address, 20 * UNIT , {'from': alith})
     vKSM.approve(_lido.address, 30 * UNIT , {'from': baltathar})
@@ -228,9 +217,11 @@ def createReport(url, stashAddress):
 def nominate():
     lido.nominate(stash, [ss58decode(item) for item in VALIDATORS], {'from': alith})
 
-def report():    
-    report = createReport(RELAY_URL, STASH1)
-    print(report)
-    
-    t= lidoOracle.reportRelay( report[0], report[1:], {'from': baltathar} ) 
+def report():
+    global oracleMaster
+    r = createReport(RELAY_URL, STASH1)
+
+    t = oracleMaster.reportRelay( r[0], r[1:], {'from': oracle1} )
+    if QUORUM>1:
+        t = oracleMaster.reportRelay( r[0], r[1:], {'from': oracle2} )
     print( t.info() )

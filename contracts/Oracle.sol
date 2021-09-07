@@ -12,7 +12,6 @@ contract Oracle {
     using ReportUtils for uint256;
 
     event Completed(uint256);
-    
 
     // Current era report  hashes
     uint256[] internal currentReportVariants;
@@ -22,14 +21,12 @@ contract Oracle {
 
     // Then oracle member push report, its bit is set
     uint256 internal currentReportBitmask;
-    
 
     // oracle master contract address
     address public ORACLE_MASTER;
     
     // linked ledger contract address
     address public LEDGER;
-
 
     modifier onlyOracleMaster() {
         require(msg.sender == ORACLE_MASTER);
@@ -112,8 +109,6 @@ contract Oracle {
 
     function _push(uint64 _eraId, Types.OracleData memory report) internal {
         ILedger(LEDGER).pushData(_eraId, report);
-
-        _clearReporting();
     }
 
     /**

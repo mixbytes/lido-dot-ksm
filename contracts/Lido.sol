@@ -26,18 +26,18 @@ contract Lido is LKSM {
     // Fee was updated
     event FeeSet(uint16 feeBasisPoints);
 
-    event LegderAdd(
+    event LedgerAdd(
         address addr,
         bytes32 stashAccount,
         bytes32 controllerAccount,
         uint256 share
     );
 
-    event LegderRemove(
+    event LedgerRemove(
         address addr
     );
 
-    event LegderSetShare(
+    event LedgerSetShare(
         address addr,
         uint256 share
     );
@@ -66,7 +66,7 @@ contract Lido is LKSM {
     mapping(address => uint128) public ledgerShares;
 
     // Sum of all ledger shares
-    uint128 public legderSharesTotal;
+    uint128 public ledgerSharesTotal;
 
 
     // vKSM precompile
@@ -125,7 +125,7 @@ contract Lido is LKSM {
 
 
     modifier auth(bytes32 role) {
-        require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "UNAUTHOROZED");
+        require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "UNAUTHORIZED");
         _;
     }
 
@@ -160,12 +160,12 @@ contract Lido is LKSM {
     /**
     * @dev Return caller unbonding balance and balance that is ready for claim
     */
-    function getUnbonded(address holder) external view returns (uint256) {
+    function getUnbonded(address holder) external view returns (uint256, uint256){
         uint256 _balance = claimOrders[holder].balance;
         if (claimOrders[holder].timeout < block.timestamp) {
-            return _balance;
+            return (_balance, _balance);
         }
-        return 0;
+        return (_balance, 0);
     }
 
     /**
@@ -175,19 +175,22 @@ contract Lido is LKSM {
         Types.Stash[] memory _stashes = new Types.Stash[](ledgers.length());
 
         for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 key, address ledger) = ledgers.at(i);
+            (uint256 key, ) = ledgers.at(i);
             _stashes[i].stashAccount = bytes32(key);
-            // todo adjust eraId to `_oracleMaster`
-            _stashes[i].eraId = 0;
+            // todo adjust eraId to an oracle member
+            _stashes[i].eraId = IOracleMaster(ORACLE_MASTER).eraId();
         }
         return _stashes;
     }
 
+    /**
+    * @dev Return ledger contract addresses
+    */
     function getLedgerAddresses() public view returns (address[] memory) {
         address[] memory _addrs = new address[](ledgers.length());
 
         for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 key, address ledger) = ledgers.at(i);
+            (, address ledger) = ledgers.at(i);
             _addrs[i] = ledger;
         }
         return _addrs;
@@ -197,7 +200,7 @@ contract Lido is LKSM {
     * @dev Find ledger contract address associated with the stash account
     */
     function findLedger(bytes32 _stashAccount) external view returns (address) {
-        (bool _found, address ledger) = ledgers.tryGet(uint256(_stashAccount));
+        (, address ledger) = ledgers.tryGet(uint256(_stashAccount));
         return ledger;
     }
 
@@ -277,26 +280,26 @@ contract Lido is LKSM {
         ledgers.set(uint256(_stashAccount), ledger);
         ledgerByAddress[ledger] = true;
         ledgerShares[ledger] = _share;
-        legderSharesTotal += _share;
+        ledgerSharesTotal += _share;
 
         IOracleMaster(ORACLE_MASTER).addLedger(ledger);
 
         _rebalanceStakes();
 
-        emit LegderAdd(ledger, _stashAccount, _controllerAccount, _share);
+        emit LedgerAdd(ledger, _stashAccount, _controllerAccount, _share);
         return ledger;
     }
 
     function setLedgerShare(address _ledger, uint128 _newShare) external auth(ROLE_LEDGER_MANAGER) {
         require(ledgerByAddress[_ledger], "LEDGER_BOT_FOUND");
 
-        legderSharesTotal -= ledgerShares[_ledger];
+        ledgerSharesTotal -= ledgerShares[_ledger];
         ledgerShares[_ledger] = _newShare;
-        legderSharesTotal += _newShare;
+        ledgerSharesTotal += _newShare;
 
         _rebalanceStakes();
 
-        emit LegderSetShare(_ledger, _newShare);
+        emit LedgerSetShare(_ledger, _newShare);
     }
 
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
@@ -314,7 +317,7 @@ contract Lido is LKSM {
 
         _rebalanceStakes();
 
-        emit LegderRemove(_ledgerAddress);
+        emit LedgerRemove(_ledgerAddress);
     }
 
     /**
@@ -375,7 +378,6 @@ contract Lido is LKSM {
 
             delete claimOrders[msg.sender];
 
-            uint256 sharesAmount = getSharesByPooledKSM(amount);
             vKSM.transfer(msg.sender, amount);
         }
     }
@@ -406,9 +408,9 @@ contract Lido is LKSM {
         }
 
         for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 _key, address ledger) = ledgers.at(i);
+            (, address ledger) = ledgers.at(i);
             if (ledgerShares[ledger] > 0) {
-                uint128 _chunk = _amount * ledgerShares[ledger] / legderSharesTotal;
+                uint128 _chunk = _amount * ledgerShares[ledger] / ledgerSharesTotal;
 
                 vKSM.approve(ledger, vKSM.allowance(address(this), ledger) + uint256(_chunk));
                 ILedger(ledger).stake(_chunk);
@@ -422,9 +424,9 @@ contract Lido is LKSM {
         }
 
         for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 _key, address ledger) = ledgers.at(i);
+            (, address ledger) = ledgers.at(i);
             if (ledgerShares[ledger] > 0) {
-                uint128 _chunk = _amount * ledgerShares[ledger] / legderSharesTotal;
+                uint128 _chunk = _amount * ledgerShares[ledger] / ledgerSharesTotal;
 
                 ILedger(ledger).unstake(_chunk);
             }
@@ -435,8 +437,8 @@ contract Lido is LKSM {
         uint128 totalStake = uint128(getTotalPooledKSM());
 
         for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 _key, address ledger) = ledgers.at(i);
-            uint128 stake = uint128(uint256(totalStake) * ledgerShares[ledger] / legderSharesTotal);
+            (, address ledger) = ledgers.at(i);
+            uint128 stake = uint128(uint256(totalStake) * ledgerShares[ledger] / ledgerSharesTotal);
             vKSM.approve(ledger, stake);
             ILedger(ledger).exactStake(stake);
         }
@@ -445,7 +447,7 @@ contract Lido is LKSM {
     /**
     * @dev Process user deposit, mints LKSM and increase the pool buffer
     * @param _referral address of referral.
-    * @return amount of StETH shares generated
+    * @return amount of LKSM shares generated
     */
     function _submit(address _referral, uint256 _deposit) internal whenNotPaused returns (uint256) {
         address sender = msg.sender;

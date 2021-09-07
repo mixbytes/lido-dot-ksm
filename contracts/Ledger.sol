@@ -22,7 +22,6 @@ contract Ledger {
     event Rewards(uint128);
     event Slash(uint128);
 
-
     // ledger stash account
     bytes32 public stashAccount;
 
@@ -190,16 +189,15 @@ contract Ledger {
                 calls[calls_counter++] = AUX.buildReBond(unlockingBalance);
             }
 
-            //TODO if status is idle send bond first
-            // bond extra all free balance always
-            if (report.getFreeBalance() > 0) {
-                if (activeBalance == 0) {
-                    calls[calls_counter++] = AUX.buildBond(controllerAccount, report.getFreeBalance());
-                }
-                else {
-                    calls[calls_counter++] = AUX.buildBondExtra(report.getFreeBalance());
-                }
+            uint128 relayFreeBalance = report.getFreeBalance();
+
+            if (relayFreeBalance > 0 &&
+                (report.stakeStatus == Types.LedgerStatus.Nominator || report.stakeStatus == Types.LedgerStatus.Idle)) {
+                calls[calls_counter++] = AUX.buildBondExtra(relayFreeBalance);
+            } else if (report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
+                calls[calls_counter++] = AUX.buildBond(controllerAccount, relayFreeBalance);
             }
+
         }
         else if (report.stashBalance > targetStake) { // parachain deficit
             //    Unstaking strategy:
@@ -232,6 +230,7 @@ contract Ledger {
 
             // need to unbond if we still have deficit
             if (deficit > 0 && nonWithdrawableBalance < deficit) {
+                // todo drain stake if remaining balance is less than MIN_NOMINATOR_BALANCE
                 uint128 forUnbond = deficit - nonWithdrawableBalance;
                 calls[calls_counter++] = AUX.buildUnBond(deficit - nonWithdrawableBalance);
                 deficit -= forUnbond;
@@ -278,9 +277,9 @@ contract Ledger {
 
             if (freeBalanceIncrement >= transferUpwardBalance) {
                 cachedTotalBalance += transferUpwardBalance;
-                transferUpwardBalance = 0;
 
                 emit UpwardComplete(transferUpwardBalance);
+                transferUpwardBalance = 0;
             }
         }
 
