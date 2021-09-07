@@ -22,7 +22,6 @@ contract Ledger {
     event Rewards(uint128);
     event Slash(uint128);
 
-    uint64 public eraId;
     // ledger stash account
     bytes32 public stashAccount;
 
@@ -137,7 +136,6 @@ contract Ledger {
 
         status = report.stakeStatus;
         activeBalance = report.activeBalance;
-        eraId = _eraId;
         
         (uint128 unlockingBalance, uint128 withdrawableBalance) = report.getTotalUnlocking(_eraId);
         uint128 nonWithdrawableBalance = unlockingBalance - withdrawableBalance;
@@ -193,11 +191,10 @@ contract Ledger {
 
             uint128 relayFreeBalance = report.getFreeBalance();
 
-            if (relayFreeBalance > 0  && (report.stakeStatus == Types.LedgerStatus.Nominator
-                || report.stakeStatus == Types.LedgerStatus.Idle)) {
+            if (relayFreeBalance > 0 &&
+                (report.stakeStatus == Types.LedgerStatus.Nominator || report.stakeStatus == Types.LedgerStatus.Idle)) {
                 calls[calls_counter++] = AUX.buildBondExtra(relayFreeBalance);
-            }else  if (report.stakeStatus == Types.LedgerStatus.None
-                && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
+            } else if (report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
                 calls[calls_counter++] = AUX.buildBond(controllerAccount, relayFreeBalance);
             }
 

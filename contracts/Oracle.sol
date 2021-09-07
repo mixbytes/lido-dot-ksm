@@ -12,7 +12,6 @@ contract Oracle {
     using ReportUtils for uint256;
 
     event Completed(uint256);
-    
 
     // Current era report  hashes
     uint256[] internal currentReportVariants;
@@ -110,8 +109,6 @@ contract Oracle {
 
     function _push(uint64 _eraId, Types.OracleData memory report) internal {
         ILedger(LEDGER).pushData(_eraId, report);
-
-        //_clearReporting();
     }
 
     /**
