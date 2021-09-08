@@ -17,7 +17,7 @@ contract Oracle {
     uint256[] internal currentReportVariants;
 
     // Current era reports
-    Types.OracleData[]  private currentReports;
+    Types.OracleData[] private currentReports;
 
     // Then oracle member push report, its bit is set
     uint256 internal currentReportBitmask;
@@ -28,60 +28,78 @@ contract Oracle {
     // linked ledger contract address
     address public LEDGER;
 
+
     modifier onlyOracleMaster() {
         require(msg.sender == ORACLE_MASTER);
         _;
     }
 
-
+    /**
+    * @notice Initialize oracle contract
+    * @param _oracleMaster oracle master address
+    * @param _ledger linked ledger address
+    */
     function initialize(address _oracleMaster, address _ledger) external {
-        require(ORACLE_MASTER == address(0), "ALREADY_INITIALIZED");
+        require(ORACLE_MASTER == address(0), "ORACLE: ALREADY_INITIALIZED");
         ORACLE_MASTER = _oracleMaster;
         LEDGER = _ledger;
     }
 
 
+    /**
+    * @notice Returns report by given index
+    * @return staking report data
+    */
     function getStakeReport(uint256 index) internal view returns (Types.OracleData storage staking) {
         assert(index < currentReports.length);
         return currentReports[index];
     }
 
     /**
-     * @notice Accept oracle report data
-     * @param index oracle member index
-     * @param quorum the minimum number of voted oracle members to accept a variant
-     */
-    function reportRelay(uint256 index, uint256 quorum, uint64 eraId, Types.OracleData calldata staking) external onlyOracleMaster {
-        uint256 mask = 1 << index;
+    * @notice Accept oracle report data, allowed to call only by oracle master contract
+    * @param _index oracle member index
+    * @param _quorum the minimum number of voted oracle members to accept a variant
+    * @param _eraId current era id
+    * @param _staking report data
+    */
+    function reportRelay(uint256 _index, uint256 _quorum, uint64 _eraId, Types.OracleData calldata _staking) external onlyOracleMaster {
+        uint256 mask = 1 << _index;
         uint256 reportBitmask = currentReportBitmask;
-        require(reportBitmask & mask == 0, "ALREADY_SUBMITTED");
+        require(reportBitmask & mask == 0, "ORACLE: ALREADY_SUBMITTED");
         currentReportBitmask = (reportBitmask | mask);
 
         // convert staking report into 31 byte hash. The last byte is used for vote counting
-        uint256 variant = uint256(keccak256(abi.encode(staking))) & ReportUtils.COUNT_OUTMASK;
+        uint256 variant = uint256(keccak256(abi.encode(_staking))) & ReportUtils.COUNT_OUTMASK;
 
         uint256 i = 0;
 
         // iterate on all report variants we already have, limited by the oracle members maximum
         while (i < currentReportVariants.length && currentReportVariants[i].isDifferent(variant)) ++i;
         if (i < currentReportVariants.length) {
-            if (currentReportVariants[i].getCount() + 1 >= quorum) {
-                _push(eraId, staking);
+            if (currentReportVariants[i].getCount() + 1 >= _quorum) {
+                _push(_eraId, _staking);
                 _clearReporting();
             } else {
                 ++currentReportVariants[i];
                 // increment variant counter, see ReportUtils for details
             }
         } else {
-            if (quorum == 1) {
-                _push(eraId, staking);
+            if (_quorum == 1) {
+                _push(_eraId, _staking);
             } else {
                 currentReportVariants.push(variant + 1);
-                currentReports.push(staking);
+                currentReports.push(_staking);
             }
         }
     }
 
+    /**
+    * @notice Change quorum threshold, allowed to call only by oracle master contract
+    * @dev Method can trigger to pushing data to ledger if quorum threshold decreased and 
+           now for contract already reached new threshold.
+    * @param _quorum new quorum threshold
+    * @param _eraId current era id
+    */
     function softenQuorum(uint8 _quorum, uint64 _eraId) external onlyOracleMaster {
         (bool isQuorum, uint256 reportIndex) = _getQuorumReport(_quorum);
         if (isQuorum) {
@@ -93,12 +111,15 @@ contract Oracle {
         }
     }
 
+    /**
+    * @notice Clear data about current reporting, allowed to call only by oracle master contract
+    */
     function clearReporting() external onlyOracleMaster {
         _clearReporting();
     }
 
     /**
-    * @notice advance era
+    * @notice Clear data about current reporting
     */
     function _clearReporting() internal {
         currentReportBitmask = 0;
@@ -107,6 +128,9 @@ contract Oracle {
         delete currentReports;
     }
 
+    /**
+    * @notice Push data to ledger
+    */
     function _push(uint64 _eraId, Types.OracleData memory report) internal {
         ILedger(LEDGER).pushData(_eraId, report);
     }
