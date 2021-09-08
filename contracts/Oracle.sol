@@ -45,14 +45,23 @@ contract Oracle {
         LEDGER = _ledger;
     }
 
+    /**
+    * @notice Returns true if member is already reported
+    * @param _index oracle member index
+    * @return is reported indicator
+    */
+    function isReported(uint256 _index) external view returns (bool) {
+        return (currentReportBitmask & (1 << _index)) != 0;
+    }
 
     /**
     * @notice Returns report by given index
+    * @param _index oracle member index
     * @return staking report data
     */
-    function getStakeReport(uint256 index) internal view returns (Types.OracleData storage staking) {
-        assert(index < currentReports.length);
-        return currentReports[index];
+    function getStakeReport(uint256 _index) internal view returns (Types.OracleData storage staking) {
+        assert(_index < currentReports.length);
+        return currentReports[_index];
     }
 
     /**

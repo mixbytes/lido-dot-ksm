@@ -156,6 +156,29 @@ contract OracleMaster is Pausable {
     }
 
     /**
+    * @notice Return current era and oracle is already reported indicator
+    * @param _oracleMember - oracle member address
+    * @param _stash - stash account id
+    * @return currentEra - current era
+    * @return isReported - true if oracle member already reported for given stash, else false
+    */
+    function isReportedLastEra(address _oracleMember, bytes32 _stash)
+        external
+        view
+        returns (
+            uint64 currentEra,
+            bool isReported
+        )
+    {
+        uint64 _currentEraId = _getCurrentEraId();
+        if (eraId != _currentEraId) {
+            return (_currentEraId, false);
+        }
+        address ledger = ILido(LIDO).findLedger(_stash);
+        return (_currentEraId, IOracle(oracleForLedger[ledger]).isReported(_getMemberId(_oracleMember)));
+    }
+
+    /**
     * @notice Stop pool routine operations (reportRelay), allowed to call only by ROLE_ORACLE_MANAGER
     */
     function pause() external auth(ROLE_ORACLE_MANAGER) {

@@ -8,7 +8,7 @@ def test_upward_transfer_mock(vKSM, accounts):
 
     tx = vKSM.relayTransferTo("123", 123, {'from': accounts[0]})
     tx.info()
-    
+
     assert tx.events['UpwardTransfer'][0]['amount'] == 123
     assert tx.events['UpwardTransfer'][0]['from'] == accounts[0]
     assert tx.events['UpwardTransfer'][0]['to'] == "0x123"
@@ -21,7 +21,7 @@ def test_downward_transfer_mock(vKSM, vAccounts, accounts):
 
     tx = vAccounts.relayTransferFrom("123", 123, {'from': accounts[0]})
     #tx.info()
-    
+
     assert tx.events['DownwardTransfer'][0]['amount'] == 123
     assert tx.events['DownwardTransfer'][0]['from'] == "0x123"
     assert tx.events['DownwardTransfer'][0]['to'] == accounts[0]
@@ -42,7 +42,7 @@ def test_single_deposit(lido, oracle_master, vKSM, accounts):
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger("0x10", "0x11", 100)
-  
+
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
 
@@ -62,7 +62,7 @@ def test_multi_deposit(lido, oracle_master, vKSM, accounts):
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger("0x10", "0x11", 100)
-  
+
     deposit1 = 20 * 10**18
     deposit2 = 5 * 10**18
     deposit3 = 100 * 10**18
@@ -111,7 +111,7 @@ def test_redeem(lido, oracle_master, vKSM, accounts):
     balance_for_redeem = lido.balanceOf(accounts[1])
     lido.redeem(balance_for_redeem, {'from': accounts[1]})
     relay.new_era([reward])
-    
+
     # travel for 29 eras
     relay.timetravel(29)
 
@@ -123,7 +123,7 @@ def test_redeem(lido, oracle_master, vKSM, accounts):
     lido.claimUnbonded({'from': accounts[1]})
 
     assert vKSM.balanceOf(accounts[1]) == balance_for_redeem + balance_before_claim
-    assert lido.getTotalPooledKSM() == deposit1 + deposit2 + deposit3 + 5*reward - balance_for_redeem 
+    assert lido.getTotalPooledKSM() == deposit1 + deposit2 + deposit3 + 5*reward - balance_for_redeem
 
 
 def test_multi_redeem(lido, oracle_master, vKSM, accounts):
@@ -280,3 +280,18 @@ def test_multi_redeem_mixed_timeout(lido, oracle_master, vKSM, accounts):
     lido.claimUnbonded({'from': accounts[1]})
     assert lido.getUnbonded(accounts[1]) == (redeem_1, 0) # redeem_2, redeem_3 are claimed, redeem_1 is remaining
     assert lido.claimOrders(accounts[1], 0)[0] == redeem_1
+
+
+def test_is_reported_indicator(lido, oracle_master, vKSM, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11", 100)
+
+    deposit = 20 * 10**18
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    assert oracle_master.isReportedLastEra(accounts[0], relay.ledgers[0].stash_account) == (relay.era, False)
+
+    relay.new_era()
+    assert oracle_master.isReportedLastEra(accounts[0], relay.ledgers[0].stash_account) == (relay.era, True)

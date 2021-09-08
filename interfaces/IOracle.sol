@@ -11,4 +11,6 @@ interface IOracle {
     function softenQuorum(uint8 quorum, uint64 _eraId) external;
 
     function clearReporting() external;
+
+    function isReported(uint256 _index) external view returns (bool);
 }
