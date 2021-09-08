@@ -240,3 +240,43 @@ def test_multi_redeem_order_removal(lido, oracle_master, vKSM, accounts):
 
     assert vKSM.balanceOf(accounts[1]) == redeem_1 + balance_before_claim
     assert lido.getUnbonded(accounts[1]) == (redeem_2 + redeem_3, 0)
+
+
+def test_multi_redeem_mixed_timeout(lido, oracle_master, vKSM, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11", 100)
+    relay_spec_raw = lido.RELAY_SPEC()
+    relay_spec_array = [relay_spec_raw[0], relay_spec_raw[1], relay_spec_raw[2], relay_spec_raw[3], relay_spec_raw[4]]
+
+    deposit = 20 * 10**18
+    lido.deposit(deposit, {'from': accounts[1]})
+
+    redeem_1 = 5 * 10**18
+    redeem_2 = 6 * 10**18
+    redeem_3 = 7 * 10**18
+
+    relay_spec_array[2] = 12000 # change unbonding peroid to 1000 secs
+    lido.setRelaySpec(relay_spec_array, {'from': accounts[0]})
+    lido.redeem(redeem_1, {'from': accounts[1]})
+
+    relay_spec_array[2] = 8000
+    lido.setRelaySpec(relay_spec_array, {'from': accounts[0]})
+    lido.redeem(redeem_2, {'from': accounts[1]})
+
+    relay_spec_array[2] = 2000
+    lido.setRelaySpec(relay_spec_array, {'from': accounts[0]})
+    lido.redeem(redeem_3, {'from': accounts[1]})
+    chain.mine()
+
+    assert lido.claimOrders(accounts[1], 0)[1] > lido.claimOrders(accounts[1], 1)[1]
+    assert lido.claimOrders(accounts[1], 1)[1] > lido.claimOrders(accounts[1], 2)[1]
+    assert lido.getUnbonded(accounts[1]) == (redeem_1 + redeem_2 + redeem_3, 0)
+
+    chain.sleep(9000) # after that we can claim redeem_2, redeem_3
+    chain.mine()
+    assert lido.getUnbonded(accounts[1]) == (redeem_1, redeem_2 + redeem_3)
+    lido.claimUnbonded({'from': accounts[1]})
+    assert lido.getUnbonded(accounts[1]) == (redeem_1, 0) # redeem_2, redeem_3 are claimed, redeem_1 is remaining
+    assert lido.claimOrders(accounts[1], 0)[0] == redeem_1

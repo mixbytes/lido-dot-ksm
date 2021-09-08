@@ -54,7 +54,7 @@ contract Lido is LKSM {
         uint128 timeout;
     }
     // one claim for account
-    mapping(address => Claim[]) private claimOrders;
+    mapping(address => Claim[]) public claimOrders;
 
     // Ledger accounts 
     EnumerableMap.UintToAddressMap private ledgers;
@@ -390,7 +390,6 @@ contract Lido is LKSM {
                 readyToClaimCount += 1;
             }
             else {
-                // shift unclaimed items to begin (orders always sorted by timeout)
                 orders[i - readyToClaimCount] = orders[i];
             }
         }
