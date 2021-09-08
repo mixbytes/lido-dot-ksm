@@ -12,9 +12,9 @@ contract vAccounts_mock is IvAccounts {
     );
 
     event RelayCallAll (
-        bytes32 relayChainAccount, 
-        bytes32 guarantor, 
-        uint256 feeCredit, 
+        bytes32 relayChainAccount,
+        bytes32 guarantor,
+        uint256 feeCredit,
         bytes[] calls
     );
 

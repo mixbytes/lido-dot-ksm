@@ -24,7 +24,7 @@ contract Oracle {
 
     // oracle master contract address
     address public ORACLE_MASTER;
-    
+
     // linked ledger contract address
     address public LEDGER;
 
@@ -95,7 +95,7 @@ contract Oracle {
 
     /**
     * @notice Change quorum threshold, allowed to call only by oracle master contract
-    * @dev Method can trigger to pushing data to ledger if quorum threshold decreased and 
+    * @dev Method can trigger to pushing data to ledger if quorum threshold decreased and
            now for contract already reached new threshold.
     * @param _quorum new quorum threshold
     * @param _eraId current era id

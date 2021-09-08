@@ -172,7 +172,7 @@ contract Ledger {
     /**
     * @notice Provide portion of relaychain data about current ledger, allowed to call only by oracle contract
     * @dev Basically, ledger can obtain data from any source, but for now it allowed to recieve only from oracle.
-           Method perform calculation of current state based on report data and saved state and expose 
+           Method perform calculation of current state based on report data and saved state and expose
            required instructions(relaychain pallet calls) via xcm to adjust bonded amount to required target stake.
     * @param _eraId - reporting era id
     * @param _report - data that represent state of ledger on relaychain for `_eraId`
@@ -182,7 +182,7 @@ contract Ledger {
 
         status = _report.stakeStatus;
         activeBalance = _report.activeBalance;
-        
+
         (uint128 unlockingBalance, uint128 withdrawableBalance) = _report.getTotalUnlocking(_eraId);
         uint128 nonWithdrawableBalance = unlockingBalance - withdrawableBalance;
 
@@ -209,7 +209,7 @@ contract Ledger {
 
         bytes[] memory calls = new bytes[](5);
         uint16 calls_counter = 0;
-            
+
         // relay deficit or bonding
         if (_report.stashBalance <= targetStake) {
             //    Staking strategy:
@@ -251,7 +251,7 @@ contract Ledger {
             //     - if we still have deficit try to withdraw already unlocked tokens
             //     - if we still have deficit initiate unbond for remain deficit
 
-            // if ledger is in the deadpool we need to put it to chill 
+            // if ledger is in the deadpool we need to put it to chill
             if (targetStake < MIN_NOMINATOR_BALANCE && status != Types.LedgerStatus.Idle) {
                 calls[calls_counter++] = AUX.buildChill();
             }
@@ -267,9 +267,9 @@ contract Ledger {
                 deficit -= forTransfer;
                 relayFreeBalance -= forTransfer;
             }
-            
+
             // withdraw if we have some unlocked
-            if (deficit > 0 && withdrawableBalance > 0) { 
+            if (deficit > 0 && withdrawableBalance > 0) {
                 calls[calls_counter++] = AUX.buildWithdraw();
                 deficit -= withdrawableBalance > deficit ? deficit : withdrawableBalance;
             }

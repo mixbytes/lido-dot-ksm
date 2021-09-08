@@ -18,7 +18,7 @@ import "./LKSM.sol";
 contract Lido is LKSM {
     using Clones for address;
     using EnumerableMap for EnumerableMap.UintToAddressMap;
-    
+
     // Records a deposit made by a user
     event Submitted(address indexed sender, uint256 amount);
 
@@ -61,7 +61,7 @@ contract Lido is LKSM {
     // one claim for account
     mapping(address => Claim[]) public claimOrders;
 
-    // Ledger accounts 
+    // Ledger accounts
     EnumerableMap.UintToAddressMap private ledgers;
 
     // Map to check ledger existence by address
@@ -93,10 +93,10 @@ contract Lido is LKSM {
 
     // fee interest in basis points
     uint16 public FEE_BP = 200;
-    
+
     // ledger clone template contract
     address public LEDGER_CLONE;
-    
+
     // oracle master contract
     address public ORACLE_MASTER;
 
@@ -169,7 +169,7 @@ contract Lido is LKSM {
     /**
     * @notice Return unbonded tokens amount for user
     * @param _holder - user account for whom need to calculate unbonding
-    * @return waiting - amount of tokens which are not unbonded yet 
+    * @return waiting - amount of tokens which are not unbonded yet
     * @return unbonded - amount of token which unbonded and ready to claim
     */
     function getUnbonded(address _holder) external view returns (uint256 waiting, uint256 unbonded) {
@@ -229,7 +229,7 @@ contract Lido is LKSM {
     }
 
     /**
-    * @notice Set relay chain spec, allowed to call only by ROLE_SPEC_MANAGER 
+    * @notice Set relay chain spec, allowed to call only by ROLE_SPEC_MANAGER
     * @dev if some params are changed function will iterate over oracles and ledgers, be careful
     * @param _relaySpec - new relaychain spec
     */
@@ -274,7 +274,7 @@ contract Lido is LKSM {
         FEE_BP = _feeBP;
         emit FeeSet(_feeBP);
     }
-    
+
     /**
     * @notice Stop pool routine operations (deposit, redeem, claimUnbonded),
     *         allowed to call only by ROLE_PAUSE_MANAGER
@@ -302,13 +302,13 @@ contract Lido is LKSM {
     * @return created ledger address
     */
     function addLedger(
-        bytes32 _stashAccount, 
-        bytes32 _controllerAccount, 
+        bytes32 _stashAccount,
+        bytes32 _controllerAccount,
         uint256 _share
-    ) 
-        external 
-        auth(ROLE_LEDGER_MANAGER) 
-        returns(address) 
+    )
+        external
+        auth(ROLE_LEDGER_MANAGER)
+        returns(address)
     {
         require(LEDGER_CLONE != address(0), "LIDO: UNSPECIFIED_LEDGER_CLONE");
         require(ORACLE_MASTER != address(0), "LIDO: NO_ORACLE_MASTER");
@@ -318,8 +318,8 @@ contract Lido is LKSM {
         address ledger = LEDGER_CLONE.cloneDeterministic(_stashAccount);
         // skip one era before commissioning
         ILedger(ledger).initialize(
-            _stashAccount, 
-            _controllerAccount, 
+            _stashAccount,
+            _controllerAccount,
             address(vKSM),
             AUX,
             vAccounts,
@@ -366,7 +366,7 @@ contract Lido is LKSM {
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
         require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
         require(ledgerShares[_ledgerAddress] == 0, "LIDO: LEGDER_HAS_NON_ZERO_SHARE");
-        
+
         ILedger ledger = ILedger(_ledgerAddress);
         require(ledger.status() == Types.LedgerStatus.Idle, "LIDO: LEDGER_NOT_IDLE");
 
@@ -409,7 +409,7 @@ contract Lido is LKSM {
     }
 
     /**
-    * @notice Create request to redeem vKSM in exchange of LKSM. LKSM will be instantly burned and 
+    * @notice Create request to redeem vKSM in exchange of LKSM. LKSM will be instantly burned and
               created claim order, (see `getUnbonded` method).
               User can have up to 10 redeem requests in parallel.
     * @param _amount - amount of LKSM tokens to be redeemed
@@ -429,7 +429,7 @@ contract Lido is LKSM {
     }
 
     /**
-    * @notice Claim all unbonded tokens at this point of time. Executed redeem requests will be removed 
+    * @notice Claim all unbonded tokens at this point of time. Executed redeem requests will be removed
               and approproate amount of vKSM transferred to calling account.
     */
     function claimUnbonded() external whenNotPaused {
@@ -450,7 +450,7 @@ contract Lido is LKSM {
         // remove claimed items
         for (uint256 i = 0; i < readyToClaimCount; ++i) { orders.pop(); }
 
-        if (readyToClaim > 0) { 
+        if (readyToClaim > 0) {
             vKSM.transfer(msg.sender, readyToClaim);
         }
     }
@@ -467,7 +467,7 @@ contract Lido is LKSM {
 
         uint256 shares2mint = (
             _totalRewards * feeBasis * _getTotalShares()
-                / 
+                /
             (_getTotalPooledKSM() * 10000 - (feeBasis * _totalRewards))
         );
 
@@ -479,7 +479,7 @@ contract Lido is LKSM {
 
     /**
     * @notice Force rebalance stake accross ledgers, allowed to call only by ROLE_STAKE_MANAGER
-    * @dev In some cases(due to rewards distribution) real ledger stakes can become different 
+    * @dev In some cases(due to rewards distribution) real ledger stakes can become different
            from stakes calculated around ledger shares, so that method fixes that lag.
     */
     function forceRebalanceStake() external auth(ROLE_STAKE_MANAGER) {

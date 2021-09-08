@@ -32,7 +32,7 @@ contract OracleMaster is Pausable {
 
     // address of oracle clone template contract
     address public ORACLE_CLONE;
-    
+
     // Lido smart contract
     address public LIDO;
 
@@ -57,7 +57,7 @@ contract OracleMaster is Pausable {
 
     // Oracle members manager role
     bytes32 internal constant ROLE_ORACLE_MEMBERS_MANAGER = keccak256("ROLE_ORACLE_MEMBERS_MANAGER");
-    
+
     // Oracle members manager role
     bytes32 internal constant ROLE_ORACLE_QUORUM_MANAGER = keccak256("ROLE_ORACLE_QUORUM_MANAGER");
 
