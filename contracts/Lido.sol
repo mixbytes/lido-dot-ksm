@@ -54,7 +54,7 @@ contract Lido is LKSM {
         uint128 timeout;
     }
     // one claim for account
-    mapping(address => Claim) private claimOrders;
+    mapping(address => Claim[]) public claimOrders;
 
     // Ledger accounts 
     EnumerableMap.UintToAddressMap private ledgers;
@@ -123,6 +123,9 @@ contract Lido is LKSM {
     // Stake manager role
     bytes32 internal constant ROLE_STAKE_MANAGER = keccak256("ROLE_STAKE_MANAGER");
 
+    // max amount of claims in parallel
+    uint16 internal constant MAX_CLAIMS = 10;
+
 
     modifier auth(bytes32 role) {
         require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "UNAUTHORIZED");
@@ -160,12 +163,20 @@ contract Lido is LKSM {
     /**
     * @dev Return caller unbonding balance and balance that is ready for claim
     */
-    function getUnbonded(address holder) external view returns (uint256, uint256){
-        uint256 _balance = claimOrders[holder].balance;
-        if (claimOrders[holder].timeout < block.timestamp) {
-            return (_balance, _balance);
+    function getUnbonded(address _holder) external view returns (uint256, uint256) {
+        uint256 waitingToUnbonding = 0;
+        uint256 readyToClaim = 0;
+        Claim[] storage orders = claimOrders[_holder];
+
+        for (uint256 i = 0; i < orders.length; ++i) {
+            if (orders[i].timeout < block.timestamp) {
+                readyToClaim += orders[i].balance;
+            }
+            else {
+                waitingToUnbonding += orders[i].balance;
+            }
         }
-        return (_balance, 0);
+        return (waitingToUnbonding, readyToClaim);
     }
 
     /**
@@ -348,37 +359,46 @@ contract Lido is LKSM {
     /**
     * @dev Redeem LKSM in exchange for vKSM. LKSM will be locked until unbonded term ends
     */
-    function redeem(uint256 amount) external whenNotPaused {
-        assert( amount< type(uint128).max );
-        uint256 _shares = getSharesByPooledKSM(amount);
+    function redeem(uint256 _amount) external whenNotPaused {
+        assert( _amount< type(uint128).max );
+        uint256 _shares = getSharesByPooledKSM(_amount);
         require(_shares <= _sharesOf(msg.sender), "REDEEM_AMOUNT_EXCEEDS_BALANCE");
+        require(claimOrders[msg.sender].length < MAX_CLAIMS, "MAX_CLAIMS_EXCEEDS");
+
+        uint128 amount = uint128(_amount);
 
         _burnShares(msg.sender, _shares);
+        fundRaisedBalance -= amount;
 
-        Claim memory _claim = claimOrders[msg.sender];
-        uint128 _amount = uint128(amount);
-        _claim.balance += _amount;
-        _claim.timeout = uint128(block.timestamp) + RELAY_SPEC.unbondingPeriod;
+        Claim memory newClaim = Claim(amount, uint128(block.timestamp) + RELAY_SPEC.unbondingPeriod);
+        claimOrders[msg.sender].push(newClaim);
 
-        fundRaisedBalance -= uint128(amount);
-        claimOrders[msg.sender] = _claim;
-
-        _distributeUnstake(_amount);
+        _distributeUnstake(amount);
     }
 
     /**
     * @dev Claim unbonded vKSM burning locked LKSM
     */
     function claimUnbonded() external whenNotPaused {
-        uint128 amount = claimOrders[msg.sender].balance;
-        require(amount > 0, "CLAIM_NOT_FOUND");
-        if (claimOrders[msg.sender].timeout < block.timestamp) {
-            uint128 _buffered = uint128(vKSM.balanceOf(address(this)));
-            require(_buffered >= amount, "CLAIM_BALANCE_ERROR");
+        uint256 readyToClaim = 0;
+        uint256 readyToClaimCount = 0;
+        Claim[] storage orders = claimOrders[msg.sender];
 
-            delete claimOrders[msg.sender];
+        for (uint256 i = 0; i < orders.length; ++i) {
+            if (orders[i].timeout < block.timestamp) {
+                readyToClaim += orders[i].balance;
+                readyToClaimCount += 1;
+            }
+            else {
+                orders[i - readyToClaimCount] = orders[i];
+            }
+        }
 
-            vKSM.transfer(msg.sender, amount);
+        // remove claimed items
+        for (uint256 i = 0; i < readyToClaimCount; ++i) { orders.pop(); }
+
+        if (readyToClaim > 0) { 
+            vKSM.transfer(msg.sender, readyToClaim);
         }
     }
 
