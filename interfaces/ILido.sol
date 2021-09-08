@@ -6,7 +6,7 @@ import "./Types.sol";
 interface ILido {
     function distributeRewards(uint256 _totalRewards) external;
 
-    function getStashAccounts() external view returns (Types.Stash[] memory);
+    function getStashAccounts() external view returns (bytes32[] memory);
 
     function getLedgerAddresses() external view returns (address[] memory);
 
