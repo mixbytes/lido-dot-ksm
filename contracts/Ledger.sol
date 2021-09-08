@@ -112,16 +112,19 @@ contract Ledger {
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
     }
 
-    function exactStake(uint128 _amount) external onlyLido {
-        targetStake = _amount;
+    function exactStake(uint256 _amount) external onlyLido {
+        require(_amount < type(uint128).max, "L: AMOUNT SHOULD BE LESS THAN UINT128_MAX");
+        targetStake = uint128(_amount);
     }
 
-    function stake(uint128 _amount) external onlyLido {
-        targetStake += _amount;
+    function increaseStake(uint256 _amount) external onlyLido {
+        require(_amount < type(uint128).max, "L: AMOUNT SHOULD BE LESS THAN UINT128_MAX");
+        targetStake += uint128(_amount);
     }
 
-    function unstake(uint128 _amount) external onlyLido {
-        targetStake -= _amount;
+    function decreaseStake(uint256 _amount) external onlyLido {
+        require(_amount < type(uint128).max, "L: AMOUNT SHOULD BE LESS THAN UINT128_MAX");
+        targetStake -= uint128(_amount);
     }
 
     function nominate(bytes32[] calldata validators) external onlyLido {

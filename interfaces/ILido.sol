@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "./Types.sol";
 
 interface ILido {
-    function distributeRewards(uint128 _totalRewards) external;
+    function distributeRewards(uint256 _totalRewards) external;
 
     function getStashAccounts() external view returns (Types.Stash[] memory);
 
