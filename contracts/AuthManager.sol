@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+
 import "../interfaces/IAuthManager.sol";
 
 
-contract AuthManager is IAuthManager {
+contract AuthManager is IAuthManager, Initializable {
     mapping(address => bytes32[])  internal members;
     uint256 internal constant NOTFOUND = type(uint256).max;
     bytes32 public constant SUPER_ROLE = keccak256("SUPER_ROLE");
@@ -12,7 +14,7 @@ contract AuthManager is IAuthManager {
     event AddMember(address);
     event RemoveMember(address);
 
-    constructor(address superior) {
+    function initialize(address superior) external initializer {
         if (superior == address(0)) {
             members[msg.sender] = [SUPER_ROLE];
         } else {

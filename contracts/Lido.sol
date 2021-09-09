@@ -4,6 +4,7 @@ pragma abicoder v2;
 
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 import "../interfaces/IOracleMaster.sol";
 import "../interfaces/ILedger.sol";
@@ -13,7 +14,7 @@ import "../interfaces/IAuthManager.sol";
 import "./LKSM.sol";
 
 
-contract Lido is LKSM {
+contract Lido is LKSM, Initializable {
     using Clones for address;
     using SafeCast for uint256;
 
@@ -108,13 +109,13 @@ contract Lido is LKSM {
     address public AUTH_MANAGER;
 
     // Maximum number of ledgers
-    uint256 public MAX_LEDGERS_AMOUNT = 200;
+    uint256 public MAX_LEDGERS_AMOUNT;
 
     // Who pay off relay chain transaction fees
-    bytes32 public GARANTOR = 0x00;
+    bytes32 public GARANTOR;
 
     // fee interest in basis points
-    uint16 public FEE_BP = 200;
+    uint16 public FEE_BP;
 
     // ledger clone template contract
     address public LEDGER_CLONE;
@@ -171,14 +172,15 @@ contract Lido is LKSM {
         address _vKSM,
         address _AUX,
         address _vAccounts
-    ) external {
-        if (_vKSM != address(0x0)) { //TODO remove after tests
-            vKSM = IvKSM(_vKSM);
-            AUX = _AUX;
-            vAccounts = _vAccounts;
-        }
-
+    ) external initializer {
+        vKSM = IvKSM(_vKSM);
+        AUX = _AUX;
+        vAccounts = _vAccounts;
         AUTH_MANAGER = _authManager;
+
+        MAX_LEDGERS_AMOUNT = 200;
+        FEE_BP = 200;
+        GARANTOR = 0x00;
     }
 
     /**

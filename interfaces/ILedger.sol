@@ -5,14 +5,15 @@ import "./Types.sol";
 
 interface ILedger {
     function initialize(
-        bytes32 _stashAccount,
-        bytes32 _controllerAccount,
-        address _vKSM,
-        address _AUX,
-        address _vAccounts,
-        uint128 _minNominatorBalance
+        bytes32 stashAccount,
+        bytes32 controllerAccount,
+        address vKSM,
+        address AUX,
+        address vAccounts,
+        uint128 minNominatorBalance
     ) external;
-    function pushData(uint64 _eraId, Types.OracleData calldata staking) external;
+
+    function pushData(uint64 eraId, Types.OracleData calldata staking) external;
 
     function nominate(bytes32[] calldata validators) external;
 

@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "./Types.sol";
 
 interface ILido {
-    function distributeRewards(uint256 _totalRewards) external;
+    function distributeRewards(uint256 totalRewards) external;
 
     function distributeLosses(uint256 _totalLosses) external;
 
@@ -18,7 +18,7 @@ interface ILido {
 
     function flushStakes() external;
 
-    function findLedger(bytes32 _stash) external view returns (address);
+    function findLedger(bytes32 stash) external view returns (address);
 
     function AUTH_MANAGER() external returns(address);
 
