@@ -10,6 +10,8 @@ interface ILido {
 
     function getLedgerAddresses() external view returns (address[] memory);
 
+    function targetStake(address ledger) external view returns (uint256);
+
     function findLedger(bytes32 _stash) external view returns (address);
 
     function AUTH_MANAGER() external returns(address);

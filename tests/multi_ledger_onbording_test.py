@@ -4,10 +4,13 @@ from helpers import RelayChain, distribute_initial_tokens
 
 def check_distribution(lido, stashes, shares, total_deposit):
     total_shares = sum(i for i in shares)
+    stakes_sum = 0
     for i in range(len(stashes)):
         stash = hex(stashes[i])
         ledger = Ledger.at(lido.findLedger(stash))
-        assert ledger.targetStake() == total_deposit * shares[i] // total_shares
+        stakes_sum += ledger.targetStake()
+        assert abs(ledger.targetStake() - total_deposit * shares[i] // total_shares) < total_shares
+    assert stakes_sum == total_deposit
 
 
 def test_add_ledger_slowly(lido, oracle_master, vKSM, accounts):
@@ -34,7 +37,7 @@ def test_add_ledger_slowly(lido, oracle_master, vKSM, accounts):
     stashes.append(0x20)
     shares.append(50)
     relay.new_ledger(hex(stashes[1]), hex(stashes[1]+1), shares[1])
-  
+
     # check target stake distribution
     check_distribution(lido, stashes, shares, total_deposit + relay.total_rewards)
     relay.new_era() # send unbond for first ledger
@@ -67,12 +70,12 @@ def test_remove_ledger_slowly(lido, oracle_master, vKSM, accounts):
     relay.new_era([rewards, rewards]) # upward transfer
     relay.new_era([rewards, rewards]) # bond
 
-    assert relay.ledgers[0].active_balance == total_deposit * 100 // 150 + 2*rewards
+    assert abs(relay.ledgers[0].active_balance - (total_deposit * 100 // 150 + 2*rewards)) < shares[0] + shares[1]
 
     # set zero share for ledger
     shares[1] = 0
     lido.setLedgerShare(relay.ledgers[1].ledger_address, 0, {'from': accounts[0]})
-  
+
     # check target stake distribution
     check_distribution(lido, stashes, shares, total_deposit + relay.total_rewards)
 

@@ -17,10 +17,13 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, accounts):
     total_deposit = 0
 
     def check_distribution():
+        stakes_sum = 0
         for i in range(len(stashes)):
             stash = hex(stashes[i])
             ledger = Ledger.at(lido.findLedger(stash))
-            assert ledger.targetStake() == total_deposit * shares[i] // total_shares
+            stakes_sum += ledger.targetStake()
+            assert abs(ledger.targetStake() - total_deposit * shares[i] // total_shares) < total_shares
+        assert stakes_sum == total_deposit
 
     for i in range(len(stashes)):
         stash = stashes[i]
@@ -41,7 +44,7 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, accounts):
     check_distribution()
 
     #change ledgers shares
-    shares = [10, 500, 100]    
+    shares = [10, 500, 100]
     total_shares = sum(i for i in shares)
     for i in range(len(stashes)):
         stash = stashes[i]
@@ -56,10 +59,13 @@ def test_change_shares_distribution(lido, oracle_master, vKSM, Ledger, accounts)
     total_deposit = 0
 
     def check_distribution():
+        stakes_sum = 0
         for i in range(len(stashes)):
             stash = hex(stashes[i])
             ledger = Ledger.at(lido.findLedger(stash))
-            assert ledger.targetStake() == total_deposit * shares[i] // total_shares
+            stakes_sum += ledger.targetStake()
+            assert abs(ledger.targetStake() - total_deposit * shares[i] // total_shares) < total_shares
+        assert stakes_sum == total_deposit
 
     for i in range(len(stashes)):
         stash = stashes[i]
@@ -74,7 +80,7 @@ def test_change_shares_distribution(lido, oracle_master, vKSM, Ledger, accounts)
     check_distribution()
 
     #change ledgers shares
-    shares = [10, 500, 100]    
+    shares = [10, 500, 100]
     total_shares = sum(i for i in shares)
     for i in range(len(stashes)):
         stash = stashes[i]
@@ -89,10 +95,13 @@ def test_redeem_distribution(lido, oracle_master, vKSM, Ledger, accounts):
     total_deposit = 0
 
     def check_distribution():
+        stakes_sum = 0
         for i in range(len(stashes)):
             stash = hex(stashes[i])
             ledger = Ledger.at(lido.findLedger(stash))
-            assert ledger.targetStake() == total_deposit * shares[i] // total_shares
+            stakes_sum += ledger.targetStake()
+            assert abs(ledger.targetStake() - total_deposit * shares[i] // total_shares) < total_shares
+        assert stakes_sum == total_deposit
 
     for i in range(len(stashes)):
         stash = stashes[i]

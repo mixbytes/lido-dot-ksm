@@ -2,6 +2,8 @@
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+
 import "../interfaces/IOracleMaster.sol";
 import "../interfaces/ILido.sol";
 import "../interfaces/IAUX.sol";
@@ -16,6 +18,7 @@ import "./utils/ReportUtils.sol";
 
 contract Ledger {
     using LedgerUtils for Types.OracleData;
+    using SafeCast for uint256;
 
     event DownwardComplete(uint128 amount);
     event UpwardComplete(uint128 amount);
@@ -42,9 +45,6 @@ contract Ledger {
 
     // Cached stash balance. Need to calculate rewards between successfull up/down transfers
     uint128 public cachedTotalBalance;
-
-    // total users deposits + rewards - slashes (so just actual target stake amount)
-    uint128 public targetStake;
 
     // Pending transfers
     uint128 public transferUpwardBalance;
@@ -126,35 +126,11 @@ contract Ledger {
     }
 
     /**
-    * @notice Set exact target stake amount, allowed to call only by lido contract
-    * @dev Ledger is designed to always follow target stake amount era by era.
-           Real bonded amount on the relaychain side can be different from target stake, but
-           it will always try to align exactly to that value.
-    * @param _amount - target stake amount
+    * @notice Return target stake amount for this ledger
+    * @return target stake amount
     */
-    function exactStake(uint256 _amount) external onlyLido {
-        require(_amount < type(uint128).max, "LEDGED: AMOUNT SHOULD BE LESS THAN UINT128_MAX");
-        targetStake = uint128(_amount);
-    }
-
-    /**
-    * @notice Increase target stake amount, allowed to call only by lido contract
-    * @dev see `exactStake` method description
-    * @param _amount - increasing amount
-    */
-    function increaseStake(uint256 _amount) external onlyLido {
-        require(_amount < type(uint128).max, "LEDGED: AMOUNT SHOULD BE LESS THAN UINT128_MAX");
-        targetStake += uint128(_amount);
-    }
-
-    /**
-    * @notice Decrease target stake amount, allowed to call only by lido contract
-    * @dev see `exactStake` method description
-    * @param _amount - decreasing amount
-    */
-    function decreaseStake(uint256 _amount) external onlyLido {
-        require(_amount < type(uint128).max, "LEDGED: AMOUNT SHOULD BE LESS THAN UINT128_MAX");
-        targetStake -= uint128(_amount);
+    function targetStake() view public returns (uint256) {
+        return LIDO.targetStake(address(this));
     }
 
     /**
@@ -194,30 +170,27 @@ contract Ledger {
             uint128 reward = _report.stashBalance - cachedTotalBalance;
             LIDO.distributeRewards(reward);
 
-            // if targetStash is zero we need to keep it zero to drain all active balance
-            if (targetStake != 0) {
-                targetStake += reward;
-            }
             emit Rewards(reward);
         }
         else if (cachedTotalBalance > _report.stashBalance) {
             //TODO handle losses
             uint128 slash = cachedTotalBalance - _report.stashBalance;
             emit Slash(slash);
-            targetStake -= slash;
         }
 
         bytes[] memory calls = new bytes[](5);
         uint16 calls_counter = 0;
 
+        uint128 _targetStake = targetStake().toUint128();
+
         // relay deficit or bonding
-        if (_report.stashBalance <= targetStake) {
+        if (_report.stashBalance <= _targetStake) {
             //    Staking strategy:
             //     - upward transfer deficit tokens
             //     - rebond all unlocking tokens
             //     - bond_extra all free balance
 
-            uint128 deficit = targetStake - _report.stashBalance;
+            uint128 deficit = _targetStake - _report.stashBalance;
 
             // just upward transfer if we have deficit
             if (deficit > 0) {
@@ -245,18 +218,18 @@ contract Ledger {
             }
 
         }
-        else if (_report.stashBalance > targetStake) { // parachain deficit
+        else if (_report.stashBalance > _targetStake) { // parachain deficit
             //    Unstaking strategy:
             //     - try to downward transfer already free balance
             //     - if we still have deficit try to withdraw already unlocked tokens
             //     - if we still have deficit initiate unbond for remain deficit
 
             // if ledger is in the deadpool we need to put it to chill
-            if (targetStake < MIN_NOMINATOR_BALANCE && status != Types.LedgerStatus.Idle) {
+            if (_targetStake < MIN_NOMINATOR_BALANCE && status != Types.LedgerStatus.Idle) {
                 calls[calls_counter++] = AUX.buildChill();
             }
 
-            uint128 deficit = _report.stashBalance - targetStake;
+            uint128 deficit = _report.stashBalance - _targetStake;
             uint128 relayFreeBalance = _report.getFreeBalance();
 
             // need to downward transfer if we have some free
