@@ -291,7 +291,7 @@ def test_is_reported_indicator(lido, oracle_master, vKSM, accounts):
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
 
-    assert oracle_master.isReportedLastEra(accounts[0], relay.ledgers[0].stash_account) == (relay.era, False)
+    assert oracle_master.isReportedLastEra(accounts[0], relay.ledgers[0].stash_account) == (0, False)
 
     relay.new_era()
     assert oracle_master.isReportedLastEra(accounts[0], relay.ledgers[0].stash_account) == (relay.era, True)

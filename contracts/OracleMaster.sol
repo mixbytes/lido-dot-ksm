@@ -156,36 +156,33 @@ contract OracleMaster is Pausable {
     }
 
     /**
-    * @notice Return current era and oracle is already reported indicator
+    * @notice Return last reported era and oracle is already reported indicator
     * @param _oracleMember - oracle member address
     * @param _stash - stash account id
-    * @return currentEra - current era
+    * @return lastEra - last reported era
     * @return isReported - true if oracle member already reported for given stash, else false
     */
     function isReportedLastEra(address _oracleMember, bytes32 _stash)
         external
         view
         returns (
-            uint64 currentEra,
+            uint64 lastEra,
             bool isReported
         )
     {
-        uint64 currentEraId = _getCurrentEraId();
-        if (eraId != currentEraId) {
-            return (currentEraId, false);
-        }
+        uint64 lastEra = eraId;
 
         uint256 memberIdx = _getMemberId(_oracleMember);
         if (memberIdx == MEMBER_NOT_FOUND) {
-            return (currentEraId, false);
+            return (lastEra, false);
         }
 
         address ledger = ILido(LIDO).findLedger(_stash);
         if (ledger == address(0)) {
-            return (currentEraId, false);
+            return (lastEra, false);
         }
 
-        return (currentEraId, IOracle(oracleForLedger[ledger]).isReported(memberIdx));
+        return (lastEra, IOracle(oracleForLedger[ledger]).isReported(memberIdx));
     }
 
     /**
