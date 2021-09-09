@@ -28,15 +28,6 @@ contract AuthManager is IAuthManager {
         return _find(members[_member], role) != NOTFOUND;
     }
 
-    function _find(bytes32[] storage _roles, bytes32 _role) internal view returns (uint256) {
-        for (uint256 i = 0; i < _roles.length; ++i) {
-            if (_role == _roles[i]) {
-                return i;
-            }
-        }
-        return NOTFOUND;
-    }
-
     function add(bytes32 role, address member) external override {
         require(_find(members[msg.sender], SUPER_ROLE) != NOTFOUND, "FORBIDDEN");
 
@@ -78,4 +69,14 @@ contract AuthManager is IAuthManager {
 
         emit RemoveMember(member);
     }
+
+    function _find(bytes32[] storage _roles, bytes32 _role) internal view returns (uint256) {
+        for (uint256 i = 0; i < _roles.length; ++i) {
+            if (_role == _roles[i]) {
+                return i;
+            }
+        }
+        return NOTFOUND;
+    }
+
 }

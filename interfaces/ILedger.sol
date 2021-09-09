@@ -14,9 +14,9 @@ interface ILedger {
     ) external;
     function pushData(uint64 _eraId, Types.OracleData calldata staking) external;
 
-    function exactStake(uint128 _amount) external;
-    function stake(uint128 _amount) external;
-    function unstake(uint128 _amount) external;
+    function exactStake(uint256 _amount) external;
+    function increaseStake(uint256 _amount) external;
+    function decreaseStake(uint256 _amount) external;
     function nominate(bytes32[] calldata validators) external;
 
     function status() external view returns (Types.LedgerStatus);
