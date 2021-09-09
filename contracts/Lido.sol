@@ -20,7 +20,13 @@ contract Lido is LKSM {
     using EnumerableMap for EnumerableMap.UintToAddressMap;
 
     // Records a deposit made by a user
-    event Submitted(address indexed sender, uint256 amount);
+    event Deposited(address indexed sender, uint256 amount);
+
+    // Created redeem order
+    event Redeemed(address indexed receiver, uint256 amount);
+
+    // Claimed vKSM tokens back
+    event Claimed(address indexed receiver, uint256 amount);
 
     // Fee was updated
     event FeeSet(uint16 feeBasisPoints);
@@ -406,6 +412,8 @@ contract Lido is LKSM {
         _submit(_amount);
 
         _distributeStake(_amount);
+
+        emit Deposited(msg.sender, _amount);
     }
 
     /**
@@ -426,6 +434,12 @@ contract Lido is LKSM {
         claimOrders[msg.sender].push(newClaim);
 
         _distributeUnstake(_amount);
+
+        // emit event about burning (compatible with ERC20)
+        emit Transfer(msg.sender, address(0), _amount);
+
+        // lido event about redeemed
+        emit Redeemed(msg.sender, _amount);
     }
 
     /**
@@ -452,6 +466,7 @@ contract Lido is LKSM {
 
         if (readyToClaim > 0) {
             vKSM.transfer(msg.sender, readyToClaim);
+            emit Claimed(msg.sender, readyToClaim);
         }
     }
 
@@ -555,7 +570,6 @@ contract Lido is LKSM {
 
         fundRaisedBalance += _deposit;
         _mintShares(sender, sharesAmount);
-        emit Submitted(sender, _deposit);
 
         _emitTransferAfterMintingShares(sender, sharesAmount);
         return sharesAmount;
