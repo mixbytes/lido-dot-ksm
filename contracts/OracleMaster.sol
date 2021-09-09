@@ -170,12 +170,22 @@ contract OracleMaster is Pausable {
             bool isReported
         )
     {
-        uint64 _currentEraId = _getCurrentEraId();
-        if (eraId != _currentEraId) {
-            return (_currentEraId, false);
+        uint64 currentEraId = _getCurrentEraId();
+        if (eraId != currentEraId) {
+            return (currentEraId, false);
         }
+
+        uint256 memberIdx = _getMemberId(_oracleMember);
+        if (memberIdx == MEMBER_NOT_FOUND) {
+            return (currentEraId, false);
+        }
+
         address ledger = ILido(LIDO).findLedger(_stash);
-        return (_currentEraId, IOracle(oracleForLedger[ledger]).isReported(_getMemberId(_oracleMember)));
+        if (ledger == address(0)) {
+            return (currentEraId, false);
+        }
+
+        return (currentEraId, IOracle(oracleForLedger[ledger]).isReported(memberIdx));
     }
 
     /**
