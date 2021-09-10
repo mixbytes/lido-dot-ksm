@@ -28,6 +28,9 @@ contract Oracle {
     // linked ledger contract address
     address public LEDGER;
 
+    // is already pushed flag
+    bool public isPushed;
+
 
     modifier onlyOracleMaster() {
         require(msg.sender == ORACLE_MASTER);
@@ -75,6 +78,7 @@ contract Oracle {
         uint256 mask = 1 << _index;
         uint256 reportBitmask = currentReportBitmask;
         require(reportBitmask & mask == 0, "ORACLE: ALREADY_SUBMITTED");
+        require(!isPushed, "ORACLE: ALREADY_PUSHED");
         currentReportBitmask = (reportBitmask | mask);
 
         // convert staking report into 31 byte hash. The last byte is used for vote counting
@@ -87,7 +91,6 @@ contract Oracle {
         if (i < currentReportVariants.length) {
             if (currentReportVariants[i].getCount() + 1 >= _quorum) {
                 _push(_eraId, _staking);
-                _clearReporting();
             } else {
                 ++currentReportVariants[i];
                 // increment variant counter, see ReportUtils for details
@@ -116,7 +119,6 @@ contract Oracle {
             _push(
                 _eraId, report
             );
-            _clearReporting();
         }
     }
 
@@ -132,6 +134,7 @@ contract Oracle {
     */
     function _clearReporting() internal {
         currentReportBitmask = 0;
+        isPushed = false;
 
         delete currentReportVariants;
         delete currentReports;
@@ -142,6 +145,7 @@ contract Oracle {
     */
     function _push(uint64 _eraId, Types.OracleData memory report) internal {
         ILedger(LEDGER).pushData(_eraId, report);
+        isPushed = true;
     }
 
     /**

@@ -33,6 +33,9 @@ contract Lido is LKSM {
     // Rewards distributed
     event Rewards(address ledger, uint256 rewards);
 
+    // Rewards distributed
+    event Losses(address ledger, uint256 losses);
+
     // Added new ledger
     event LedgerAdd(
         address addr,
@@ -500,6 +503,20 @@ contract Lido is LKSM {
         //TODO mixbytes shares
 
         emit Rewards(msg.sender, _totalRewards);
+    }
+
+    /**
+    * @notice Distribute lossed by ledger, allowed to call only by ledger
+    */
+    function distributeLosses(uint256 _totalLosses) external {
+        require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
+
+        fundRaisedBalance -= _totalLosses;
+        if (ledgerShares[msg.sender] > 0) {
+            targetStake[msg.sender] -= _totalLosses;
+        }
+
+        emit Losses(msg.sender, _totalLosses);
     }
 
     /**

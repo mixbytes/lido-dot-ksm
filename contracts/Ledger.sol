@@ -173,8 +173,9 @@ contract Ledger {
             emit Rewards(reward);
         }
         else if (cachedTotalBalance > _report.stashBalance) {
-            //TODO handle losses
             uint128 slash = cachedTotalBalance - _report.stashBalance;
+            LIDO.distributeLosses(slash);
+
             emit Slash(slash);
         }
 
