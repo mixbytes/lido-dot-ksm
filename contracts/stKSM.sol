@@ -5,11 +5,11 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 
-abstract contract LKSM is IERC20, Pausable {
+abstract contract stKSM is IERC20, Pausable {
     using SafeMath for uint256;
 
     /**
-     * @dev LKSM balances are dynamic and are calculated based on the accounts' shares
+     * @dev stKSM balances are dynamic and are calculated based on the accounts' shares
      * and the total amount of KSM controlled by the protocol. Account shares aren't
      * normalized, so the contract also stores the sum of all shares to calculate
      * each account's token balance which equals to:
@@ -50,7 +50,7 @@ abstract contract LKSM is IERC20, Pausable {
      * name.
      */
     function symbol() public pure returns (string memory) {
-        return "LKSM";
+        return "stKSM";
     }
 
     /**

@@ -11,10 +11,10 @@ import "../interfaces/ILedger.sol";
 import "../interfaces/IvKSM.sol";
 import "../interfaces/IAuthManager.sol";
 
-import "./LKSM.sol";
+import "./stKSM.sol";
 
 
-contract Lido is LKSM, Initializable {
+contract Lido is stKSM, Initializable {
     using Clones for address;
     using SafeCast for uint256;
 
@@ -422,7 +422,7 @@ contract Lido is LKSM, Initializable {
     }
 
     /**
-    * @notice Deposit vKSM tokens to the pool and recieve LKSM(liquid staked tokens) instead.
+    * @notice Deposit vKSM tokens to the pool and recieve stKSM(liquid staked tokens) instead.
               User should approve tokens before executing this call.
     * @dev Method accoumulate vKSMs on contract
     * @param _amount - amount of vKSM tokens to be deposited
@@ -436,10 +436,10 @@ contract Lido is LKSM, Initializable {
     }
 
     /**
-    * @notice Create request to redeem vKSM in exchange of LKSM. LKSM will be instantly burned and
+    * @notice Create request to redeem vKSM in exchange of stKSM. stKSM will be instantly burned and
               created claim order, (see `getUnbonded` method).
               User can have up to 10 redeem requests in parallel.
-    * @param _amount - amount of LKSM tokens to be redeemed
+    * @param _amount - amount of stKSM tokens to be redeemed
     */
     function redeem(uint256 _amount) external whenNotPaused {
         uint256 _shares = getSharesByPooledKSM(_amount);
@@ -651,8 +651,8 @@ contract Lido is LKSM, Initializable {
     }
 
     /**
-    * @notice Process user deposit, mints LKSM and increase the pool buffer
-    * @return amount of LKSM shares generated
+    * @notice Process user deposit, mints stKSM and increase the pool buffer
+    * @return amount of stKSM shares generated
     */
     function _submit(uint256 _deposit) internal whenNotPaused returns (uint256) {
         address sender = msg.sender;

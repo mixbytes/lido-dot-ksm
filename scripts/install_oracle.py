@@ -31,7 +31,7 @@ MOONBEAM='F7fq1jSAsQD9BqmTx3UAhwpMNa9WJGMmru2o7Evn83gSgfb'
 
 VALIDATORS = [
     'GsvVmjr1CBHwQHw84pPHMDxgNY3iBLz6Qn7qS3CH8qPhrHz', # //Alice//stash
-    'JKspFU6ohf1Grg3Phdzj2pSgWvsYWzSfKghhfzMbdhNBWs5'  # //Bob//stash 
+    'JKspFU6ohf1Grg3Phdzj2pSgWvsYWzSfKghhfzMbdhNBWs5'  # //Bob//stash
 ]
 
 alith  = accounts.add(private_key=0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133)
@@ -65,7 +65,7 @@ assert( 1<=QUORUM<=2 , 'supported QUORUM of 1 or 2')
 
 def prompt():
     pass
-    
+
 def config(_lido=None):
     _lido = _lido or lido
 
@@ -114,29 +114,29 @@ def main():
     oracleMaster.addOracleMember( oracle1.address, {'from':alith})
     oracleMaster.addOracleMember( oracle2.address, {'from':alith})
 
-    # mint 
+    # mint
     x.mint( alith.address, 100 * UNIT , {'from': alith})
     x.mint( baltathar.address, 100 * UNIT, {'from': alith} )
-    
+
     config(lido)
     deposit(lido)
-    
+
 def new_proxy():
-    # send XCMP message to create anonimouse proxy accounts 
-    x.sendUmp("0x1e0400000000000000", {'from': alith})		
-    x.sendUmp("0x1e0400000000000000", {'from': alith})		
-	
+    # send XCMP message to create anonimouse proxy accounts
+    x.sendUmp("0x1e0400000000000000", {'from': alith})
+    x.sendUmp("0x1e0400000000000000", {'from': alith})
+
 
 def deposit(_lido = None):
     _lido = _lido or lido
 
     vKSM.approve(_lido.address, 20 * UNIT , {'from': alith})
     vKSM.approve(_lido.address, 30 * UNIT , {'from': baltathar})
-    
+
     _lido.deposit(20 * UNIT, {'from': alith})
     _lido.deposit(30 * UNIT, {'from': baltathar})
-    
-    
+
+
 def createReport(url, stashAddress):
     substrate = SubstrateInterface(
         url=url,
@@ -145,51 +145,51 @@ def createReport(url, stashAddress):
     )
 
     substrate.update_type_registry_presets()
-    
+
     result = substrate.query(
         module='Staking',
         storage_function='ActiveEra',
     )
-    
+
     eraId = result.value['index']
-    
+
     result = substrate.query(
         module='Staking',
         storage_function='Nominators',
         params=[stashAddress]
     )
-    
+
     isNominator = result.value is not None
-    
+
     #nominators = set(nominator.value for nominator, _ in result )
-            
+
     result = substrate.query(
         module='System',
         storage_function='Account',
         params=[stashAddress]
     )
-        
+
     free = result.value['data']['free']
-    
+
     result = substrate.query(
         module='Staking',
         storage_function='Bonded',
         params=[stashAddress],
     )
-    
+
     controller = result.value
-    
+
     if controller is not None:
-        
-         
+
+
         result = substrate.query(
             module='Staking',
             storage_function='Ledger',
             params=[controller],
-        )  
-        
+        )
+
         stash = result.value
-        
+
         return [
             eraId,
             ss58decode(stashAddress),
@@ -212,8 +212,8 @@ def createReport(url, stashAddress):
             [],
             [],
             free
-        ]        
-          
+        ]
+
 def nominate():
     lido.nominate(stash, [ss58decode(item) for item in VALIDATORS], {'from': alith})
 
