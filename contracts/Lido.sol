@@ -72,10 +72,13 @@ contract Lido is LKSM {
     mapping(address => Claim[]) public claimOrders;
 
     // Ledger accounts
-    EnumerableMap.UintToAddressMap private ledgers;
+    address[] private ledgers;
+
+    // Ledger address by stash account id
+    mapping(bytes32 => address) private ledgerByStash;
 
     // Map to check ledger existence by address
-    mapping(address => bool) private ledgerByAddress;
+    mapping(address => uint256) private ledgerByAddress;
 
     // Ledger shares map
     mapping(address => uint256) public ledgerShares;
@@ -212,11 +215,10 @@ contract Lido is LKSM {
     * @return Array of bytes32 relaychain stash accounts
     */
     function getStashAccounts() public view returns (bytes32[] memory) {
-        bytes32[] memory _stashes = new bytes32[](ledgers.length());
+        bytes32[] memory _stashes = new bytes32[](ledgers.length);
 
-        for (uint i = 0; i < ledgers.length(); i++) {
-            (uint256 key, ) = ledgers.at(i);
-            _stashes[i] = bytes32(key);
+        for (uint i = 0; i < ledgers.length; i++) {
+            _stashes[i] = bytes32(ILedger(ledgers[i]).stashAccount());
         }
         return _stashes;
     }
@@ -227,13 +229,7 @@ contract Lido is LKSM {
     * @return Array of ledger contract addresses
     */
     function getLedgerAddresses() public view returns (address[] memory) {
-        address[] memory _addrs = new address[](ledgers.length());
-
-        for (uint i = 0; i < ledgers.length(); i++) {
-            (, address ledger) = ledgers.at(i);
-            _addrs[i] = ledger;
-        }
-        return _addrs;
+        return ledgers;
     }
 
     /**
@@ -243,8 +239,7 @@ contract Lido is LKSM {
     * @return Linked ledger contract address
     */
     function findLedger(bytes32 _stashAccount) external view returns (address) {
-        (, address ledger) = ledgers.tryGet(uint256(_stashAccount));
-        return ledger;
+        return ledgerByStash[_stashAccount];
     }
 
     /**
@@ -331,8 +326,8 @@ contract Lido is LKSM {
     {
         require(LEDGER_CLONE != address(0), "LIDO: UNSPECIFIED_LEDGER_CLONE");
         require(ORACLE_MASTER != address(0), "LIDO: NO_ORACLE_MASTER");
-        require(ledgers.length() < MAX_LEDGERS_AMOUNT, "LIDO: LEDGERS_POOL_LIMIT");
-        require(!ledgers.contains(uint256(_stashAccount)), "LIDO: STASH_ALREADY_EXISTS");
+        require(ledgers.length < MAX_LEDGERS_AMOUNT, "LIDO: LEDGERS_POOL_LIMIT");
+        require(ledgerByStash[_stashAccount] == address(0), "LIDO: STASH_ALREADY_EXISTS");
 
         address ledger = LEDGER_CLONE.cloneDeterministic(_stashAccount);
         // skip one era before commissioning
@@ -344,8 +339,9 @@ contract Lido is LKSM {
             vAccounts,
             RELAY_SPEC.minNominatorBalance
         );
-        ledgers.set(uint256(_stashAccount), ledger);
-        ledgerByAddress[ledger] = true;
+        ledgers.push(ledger);
+        ledgerByStash[_stashAccount] = ledger;
+        ledgerByAddress[ledger] = ledgers.length;
         ledgerShares[ledger] = _share;
         ledgerSharesTotal += _share;
 
@@ -363,7 +359,7 @@ contract Lido is LKSM {
     * @param _newShare - new stare amount
     */
     function setLedgerShare(address _ledger, uint256 _newShare) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgerByAddress[_ledger], "LIDO: LEDGER_BOT_FOUND");
+        require(ledgerByAddress[_ledger] != 0, "LIDO: LEDGER_BOT_FOUND");
 
         ledgerSharesTotal -= ledgerShares[_ledger];
         ledgerShares[_ledger] = _newShare;
@@ -379,14 +375,16 @@ contract Lido is LKSM {
     * @param _ledgerAddress - target ledger address
     */
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
+        require(ledgerByAddress[_ledgerAddress] != 0, "LIDO: LEDGER_NOT_FOUND");
         require(ledgerShares[_ledgerAddress] == 0, "LIDO: LEGDER_HAS_NON_ZERO_SHARE");
 
         ILedger ledger = ILedger(_ledgerAddress);
         require(ledger.totalBalance() == 0, "LIDO: LEDGER_BALANCE_NON_ZERO");
 
-        ledgers.remove(uint256(ledger.stashAccount()));
+        ledgers[ledgerByAddress[_ledgerAddress] - 1] = ledgers[ledgers.length - 1];
+        ledgers.pop();
         delete ledgerByAddress[_ledgerAddress];
+        delete ledgerByStash[ledger.stashAccount()];
         delete ledgerShares[_ledgerAddress];
 
         IOracleMaster(ORACLE_MASTER).removeLedger(_ledgerAddress);
@@ -403,9 +401,9 @@ contract Lido is LKSM {
     * @param _validators - validators set to be nominated
     */
     function nominate(bytes32 _stashAccount, bytes32[] calldata _validators) external auth(ROLE_STAKE_MANAGER) {
-        address ledger = ledgers.get(uint256(_stashAccount), "UNKNOWN_STASH_ACCOUNT");
+        require(ledgerByStash[_stashAccount] != address(0),  "UNKNOWN_STASH_ACCOUNT");
 
-        ILedger(ledger).nominate(_validators);
+        ILedger(ledgerByStash[_stashAccount]).nominate(_validators);
     }
 
     /**
@@ -479,7 +477,7 @@ contract Lido is LKSM {
     * @notice Distribute rewards earned by ledger, allowed to call only by ledger
     */
     function distributeRewards(uint256 _totalRewards) external {
-        require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
+        require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
 
         uint256 feeBasis = uint256(FEE_BP);
 
@@ -505,7 +503,7 @@ contract Lido is LKSM {
     * @notice Distribute lossed by ledger, allowed to call only by ledger
     */
     function distributeLosses(uint256 _totalLosses) external {
-        require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
+        require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
 
         fundRaisedBalance -= _totalLosses;
         if (ledgerShares[msg.sender] > 0) {
@@ -538,9 +536,8 @@ contract Lido is LKSM {
     * @notice Refresh allowance for each ledger, allowed to call only by ROLE_LEDGER_MANAGER
     */
     function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
-        for (uint i = 0; i < ledgers.length(); i++) {
-            (, address ledger) = ledgers.at(i);
-            vKSM.approve(ledger, type(uint256).max);
+        for (uint i = 0; i < ledgers.length; i++) {
+            vKSM.approve(ledgers[i], type(uint256).max);
         }
     }
 
@@ -553,16 +550,15 @@ contract Lido is LKSM {
         uint256 stakesSum = 0;
         address nonZeroLedged = address(0);
 
-        for (uint i = 0; i < ledgers.length(); i++) {
-            (, address ledger) = ledgers.at(i);
-            uint256 share = ledgerShares[ledger];
+        for (uint i = 0; i < ledgers.length; i++) {
+            uint256 share = ledgerShares[ledgers[i]];
             uint256 stake = totalStake * share / ledgerSharesTotal;
 
             stakesSum += stake;
-            ledgerStake[ledger] = stake;
+            ledgerStake[ledgers[i]] = stake;
 
             if (share > 0 && nonZeroLedged == address(0)) {
-                nonZeroLedged = ledger;
+                nonZeroLedged = ledgers[i];
             }
         }
 
@@ -588,44 +584,44 @@ contract Lido is LKSM {
 
     function _distribute(int256 _stake) internal {
         uint256 totalStake = getTotalPooledKSM();
-        uint256 ledgersLength = ledgers.length();
+        uint256 ledgersLength = ledgers.length;
 
         int256[] memory diffs = new int256[](ledgersLength);
+        address[] memory ledgersCache = new address[](ledgersLength);
+        int256[] memory ledgerStakesCache = new int256[](ledgersLength);
+
         int256 minDiff = 0;
         int256 diffsSum = 0;
+        int256 tmp = 0;
         for (uint256 i = 0; i < ledgersLength; ++i) {
-            (, address ledger) = ledgers.at(i);
-            uint256 targetStakes = totalStake * ledgerShares[ledger] / ledgerSharesTotal;
-            int256 diff = targetStakes.toInt256() - ledgerStake[ledger].toInt256();
-            if (_stake < 0) {
-                diff = -diff;
-            }
-            diffs[i] = diff;
-            diffsSum += diff;
-            if (minDiff > diff) {
-                minDiff = diff;
+            ledgersCache[i] = ledgers[i];
+            ledgerStakesCache[i] = int256(ledgerStake[ledgersCache[i]]);
+
+            uint256 targetStakes = totalStake * ledgerShares[ledgersCache[i]] / ledgerSharesTotal;
+            tmp = int256(targetStakes) - int256(ledgerStakesCache[i]);
+            diffs[i] = tmp;
+            diffsSum += tmp;
+            if (minDiff > tmp) {
+                minDiff = tmp;
             }
         }
 
         // if stake is positiv we align diffs to 1 to avoid unbondings
         // otherwise no need to align
         int256 shift = _stake > 0 ? -minDiff + 1 : int256(0);
-        int256 shiftedDiffsSum = diffsSum + shift * ledgersLength.toInt256();
+        int256 shiftedDiffsSum = diffsSum + shift * int256(ledgersLength);
 
         // then we need fill ledgers proportionally their shifted diffs
         uint256 stakesSum = 0;
         address nonZeroLedger = address(0);
         for (uint256 i = 0; i < ledgersLength; ++i) {
-            (, address ledger) = ledgers.at(i);
-            int256 shiftedDiff = diffs[i] + shift;
-            int256 stakeDiff = _stake * shiftedDiff / shiftedDiffsSum;
+            tmp = ledgerStakesCache[i] +
+                (_stake * (diffs[i] + shift) / shiftedDiffsSum);
+            ledgerStake[ledgersCache[i]] = uint256(tmp);
+            stakesSum += uint256(tmp);
 
-            uint256 newStake = uint256(ledgerStake[ledger].toInt256() + stakeDiff);
-            ledgerStake[ledger] = newStake;
-            stakesSum += newStake;
-
-            if (nonZeroLedger == address(0) && ledgerShares[ledger] > 0) {
-                nonZeroLedger = ledger;
+            if (nonZeroLedger == address(0) && ledgerShares[ledgersCache[i]] > 0) {
+                nonZeroLedger = ledgersCache[i];
             }
         }
 
