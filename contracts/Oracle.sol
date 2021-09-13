@@ -78,8 +78,12 @@ contract Oracle {
         uint256 mask = 1 << _index;
         uint256 reportBitmask = currentReportBitmask;
         require(reportBitmask & mask == 0, "ORACLE: ALREADY_SUBMITTED");
-        require(!isPushed, "ORACLE: ALREADY_PUSHED");
         currentReportBitmask = (reportBitmask | mask);
+
+        // return instantly if already got quorum and pushed data
+        if (isPushed) {
+            return;
+        }
 
         // convert staking report into 31 byte hash. The last byte is used for vote counting
         uint256 variant = uint256(keccak256(abi.encode(_staking))) & ReportUtils.COUNT_OUTMASK;
