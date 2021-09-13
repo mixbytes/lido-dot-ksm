@@ -3,9 +3,7 @@ pragma solidity ^0.8.0;
 pragma abicoder v2;
 
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
 import "../interfaces/IOracleMaster.sol";
 import "../interfaces/ILedger.sol";
@@ -17,7 +15,6 @@ import "./LKSM.sol";
 
 contract Lido is LKSM {
     using Clones for address;
-    using EnumerableMap for EnumerableMap.UintToAddressMap;
     using SafeCast for uint256;
 
     // Records a deposit made by a user
