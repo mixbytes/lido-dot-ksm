@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
@@ -17,6 +18,7 @@ import "./LKSM.sol";
 contract Lido is LKSM {
     using Clones for address;
     using EnumerableMap for EnumerableMap.UintToAddressMap;
+    using SafeCast for uint256;
 
     // Records a deposit made by a user
     event Deposited(address indexed sender, uint256 amount);
@@ -81,8 +83,14 @@ contract Lido is LKSM {
     // Sum of all ledger shares
     uint256 public ledgerSharesTotal;
 
-    // Ledger target stakes
-    mapping(address => uint256) public targetStake;
+    // haven't executed buffrered deposits
+    uint256 public bufferedDeposits;
+
+    // haven't executed buffrered redeems
+    uint256 public bufferedRedeems;
+
+    // Ledger stakes
+    mapping(address => uint256) public ledgerStake;
 
 
     // vKSM precompile
@@ -345,16 +353,12 @@ contract Lido is LKSM {
 
         vKSM.approve(ledger, type(uint256).max);
 
-        _rebalanceStakes();
-
         emit LedgerAdd(ledger, _stashAccount, _controllerAccount, _share);
         return ledger;
     }
 
     /**
     * @notice Set new share for existing ledger, allowed to call only by ROLE_LEDGER_MANAGER
-    * @dev That method triggers rebalancing stakes accross ledgers,
-           recommended to carefully calculate share value to avoid significant rebalancing.
     * @param _ledger - target ledger address
     * @param _newShare - new stare amount
     */
@@ -364,8 +368,6 @@ contract Lido is LKSM {
         ledgerSharesTotal -= ledgerShares[_ledger];
         ledgerShares[_ledger] = _newShare;
         ledgerSharesTotal += _newShare;
-
-        _rebalanceStakes();
 
         emit LedgerSetShare(_ledger, _newShare);
     }
@@ -389,8 +391,6 @@ contract Lido is LKSM {
 
         IOracleMaster(ORACLE_MASTER).removeLedger(_ledgerAddress);
 
-        _rebalanceStakes();
-
         vKSM.approve(address(ledger), 0);
 
         emit LedgerRemove(_ledgerAddress);
@@ -411,16 +411,13 @@ contract Lido is LKSM {
     /**
     * @notice Deposit vKSM tokens to the pool and recieve LKSM(liquid staked tokens) instead.
               User should approve tokens before executing this call.
-    * @dev Method accoumulate vKSMs on contract and calculate new stake amounts for each ledger.
-    *      No one xcm calls spawns here.
+    * @dev Method accoumulate vKSMs on contract
     * @param _amount - amount of vKSM tokens to be deposited
     */
     function deposit(uint256 _amount) external whenNotPaused {
         vKSM.transferFrom(msg.sender, address(this), _amount);
 
         _submit(_amount);
-
-        _rebalanceStakes();
 
         emit Deposited(msg.sender, _amount);
     }
@@ -438,11 +435,10 @@ contract Lido is LKSM {
 
         _burnShares(msg.sender, _shares);
         fundRaisedBalance -= _amount;
+        bufferedRedeems += _amount;
 
         Claim memory newClaim = Claim(_amount, uint64(block.timestamp) + RELAY_SPEC.unbondingPeriod);
         claimOrders[msg.sender].push(newClaim);
-
-        _rebalanceStakes();
 
         // emit event about burning (compatible with ERC20)
         emit Transfer(msg.sender, address(0), _amount);
@@ -490,7 +486,7 @@ contract Lido is LKSM {
         fundRaisedBalance += _totalRewards;
 
         if (ledgerShares[msg.sender] > 0) {
-            targetStake[msg.sender] += _totalRewards;
+            ledgerStake[msg.sender] += _totalRewards;
         }
 
         uint256 shares2mint = (
@@ -513,10 +509,20 @@ contract Lido is LKSM {
 
         fundRaisedBalance -= _totalLosses;
         if (ledgerShares[msg.sender] > 0) {
-            targetStake[msg.sender] -= _totalLosses;
+            ledgerStake[msg.sender] -= _totalLosses;
         }
 
         emit Losses(msg.sender, _totalLosses);
+    }
+
+    /**
+    * @notice Flush stakes, allowed to call only by oracle master
+    * @dev This method distributes buffered stakes between ledgers by soft manner
+    */
+    function flushStakes() external {
+        require(msg.sender == ORACLE_MASTER, "LIDO: NOT_FROM_ORACLE_MASTER");
+
+        _softRebalanceStakes();
     }
 
     /**
@@ -525,7 +531,7 @@ contract Lido is LKSM {
            from stakes calculated around ledger shares, so that method fixes that lag.
     */
     function forceRebalanceStake() external auth(ROLE_STAKE_MANAGER) {
-        _rebalanceStakes();
+        _forceRebalanceStakes();
     }
 
     /**
@@ -541,7 +547,7 @@ contract Lido is LKSM {
     /**
     * @notice Rebalance stake accross ledgers according their shares.
     */
-    function _rebalanceStakes() internal {
+    function _forceRebalanceStakes() internal {
         uint256 totalStake = getTotalPooledKSM();
 
         uint256 stakesSum = 0;
@@ -553,7 +559,7 @@ contract Lido is LKSM {
             uint256 stake = totalStake * share / ledgerSharesTotal;
 
             stakesSum += stake;
-            targetStake[ledger] = stake;
+            ledgerStake[ledger] = stake;
 
             if (share > 0 && nonZeroLedged == address(0)) {
                 nonZeroLedged = ledger;
@@ -564,7 +570,70 @@ contract Lido is LKSM {
         // if we have at least one non zero ledger
         uint256 remainingDust = totalStake - stakesSum;
         if (remainingDust > 0 && nonZeroLedged != address(0)) {
-            targetStake[nonZeroLedged] += remainingDust;
+            ledgerStake[nonZeroLedged] += remainingDust;
+        }
+    }
+
+    /**
+    * @notice Rebalance stake accross ledgers according their shares.
+    */
+    function _softRebalanceStakes() internal {
+        if (bufferedDeposits > 0 || bufferedRedeems > 0) {
+            _distribute(bufferedDeposits.toInt256() - bufferedRedeems.toInt256());
+
+            bufferedDeposits = 0;
+            bufferedRedeems = 0;
+        }
+    }
+
+    function _distribute(int256 _stake) internal {
+        uint256 totalStake = getTotalPooledKSM();
+        uint256 ledgersLength = ledgers.length();
+
+        int256[] memory diffs = new int256[](ledgersLength);
+        int256 minDiff = 0;
+        int256 diffsSum = 0;
+        for (uint256 i = 0; i < ledgersLength; ++i) {
+            (, address ledger) = ledgers.at(i);
+            uint256 targetStakes = totalStake * ledgerShares[ledger] / ledgerSharesTotal;
+            int256 diff = targetStakes.toInt256() - ledgerStake[ledger].toInt256();
+            if (_stake < 0) {
+                diff = -diff;
+            }
+            diffs[i] = diff;
+            diffsSum += diff;
+            if (minDiff > diff) {
+                minDiff = diff;
+            }
+        }
+
+        // if stake is positiv we align diffs to 1 to avoid unbondings
+        // otherwise no need to align
+        int256 shift = _stake > 0 ? -minDiff + 1 : int256(0);
+        int256 shiftedDiffsSum = diffsSum + shift * ledgersLength.toInt256();
+
+        // then we need fill ledgers proportionally their shifted diffs
+        uint256 stakesSum = 0;
+        address nonZeroLedger = address(0);
+        for (uint256 i = 0; i < ledgersLength; ++i) {
+            (, address ledger) = ledgers.at(i);
+            int256 shiftedDiff = diffs[i] + shift;
+            int256 stakeDiff = _stake * shiftedDiff / shiftedDiffsSum;
+
+            uint256 newStake = uint256(ledgerStake[ledger].toInt256() + stakeDiff);
+            ledgerStake[ledger] = newStake;
+            stakesSum += newStake;
+
+            if (nonZeroLedger == address(0) && ledgerShares[ledger] > 0) {
+                nonZeroLedger = ledger;
+            }
+        }
+
+        // need to compensate remainder of integer division
+        // if we have at least one non zero ledger
+        uint256 remainingDust = totalStake - stakesSum;
+        if (nonZeroLedger != address(0) && remainingDust > 0) {
+            ledgerStake[nonZeroLedger] += remainingDust;
         }
     }
 
@@ -585,6 +654,7 @@ contract Lido is LKSM {
         }
 
         fundRaisedBalance += _deposit;
+        bufferedDeposits += _deposit;
         _mintShares(sender, sharesAmount);
 
         _emitTransferAfterMintingShares(sender, sharesAmount);

@@ -129,8 +129,8 @@ contract Ledger {
     * @notice Return target stake amount for this ledger
     * @return target stake amount
     */
-    function targetStake() view public returns (uint256) {
-        return LIDO.targetStake(address(this));
+    function ledgerStake() view public returns (uint256) {
+        return LIDO.ledgerStake(address(this));
     }
 
     /**
@@ -182,16 +182,16 @@ contract Ledger {
         bytes[] memory calls = new bytes[](5);
         uint16 calls_counter = 0;
 
-        uint128 _targetStake = targetStake().toUint128();
+        uint128 _ledgerStake = ledgerStake().toUint128();
 
         // relay deficit or bonding
-        if (_report.stashBalance <= _targetStake) {
+        if (_report.stashBalance <= _ledgerStake) {
             //    Staking strategy:
             //     - upward transfer deficit tokens
             //     - rebond all unlocking tokens
             //     - bond_extra all free balance
 
-            uint128 deficit = _targetStake - _report.stashBalance;
+            uint128 deficit = _ledgerStake - _report.stashBalance;
 
             // just upward transfer if we have deficit
             if (deficit > 0) {
@@ -219,18 +219,18 @@ contract Ledger {
             }
 
         }
-        else if (_report.stashBalance > _targetStake) { // parachain deficit
+        else if (_report.stashBalance > _ledgerStake) { // parachain deficit
             //    Unstaking strategy:
             //     - try to downward transfer already free balance
             //     - if we still have deficit try to withdraw already unlocked tokens
             //     - if we still have deficit initiate unbond for remain deficit
 
             // if ledger is in the deadpool we need to put it to chill
-            if (_targetStake < MIN_NOMINATOR_BALANCE && status != Types.LedgerStatus.Idle) {
+            if (_ledgerStake < MIN_NOMINATOR_BALANCE && status != Types.LedgerStatus.Idle) {
                 calls[calls_counter++] = AUX.buildChill();
             }
 
-            uint128 deficit = _report.stashBalance - _targetStake;
+            uint128 deficit = _report.stashBalance - _ledgerStake;
             uint128 relayFreeBalance = _report.getFreeBalance();
 
             // need to downward transfer if we have some free

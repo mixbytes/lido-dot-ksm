@@ -21,8 +21,8 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, accounts):
         for i in range(len(stashes)):
             stash = hex(stashes[i])
             ledger = Ledger.at(lido.findLedger(stash))
-            stakes_sum += ledger.targetStake()
-            assert abs(ledger.targetStake() - total_deposit * shares[i] // total_shares) < total_shares
+            stakes_sum += ledger.ledgerStake()
+            assert abs(ledger.ledgerStake() - total_deposit * shares[i] // total_shares) < total_shares
         assert stakes_sum == total_deposit
 
     for i in range(len(stashes)):
@@ -35,20 +35,14 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, accounts):
     deposit = 1000 * 10**18
     total_deposit += deposit
     lido.deposit(deposit, {'from': accounts[0]})
+    lido.flushStakes({'from': oracle_master})
     check_distribution()
 
     #one another deposit
     deposit = 9905 * 10**18
     total_deposit += deposit
     lido.deposit(deposit, {'from': accounts[1]})
-    check_distribution()
-
-    #change ledgers shares
-    shares = [10, 500, 100]
-    total_shares = sum(i for i in shares)
-    for i in range(len(stashes)):
-        stash = stashes[i]
-        lido.setLedgerShare(lido.findLedger(hex(stashes[i])), shares[i])
+    lido.flushStakes({'from': oracle_master})
     check_distribution()
 
 
@@ -63,8 +57,8 @@ def test_change_shares_distribution(lido, oracle_master, vKSM, Ledger, accounts)
         for i in range(len(stashes)):
             stash = hex(stashes[i])
             ledger = Ledger.at(lido.findLedger(stash))
-            stakes_sum += ledger.targetStake()
-            assert abs(ledger.targetStake() - total_deposit * shares[i] // total_shares) < total_shares
+            stakes_sum += ledger.ledgerStake()
+            assert abs(ledger.ledgerStake() - total_deposit * shares[i] // total_shares) < total_shares
         assert stakes_sum == total_deposit
 
     for i in range(len(stashes)):
@@ -77,6 +71,7 @@ def test_change_shares_distribution(lido, oracle_master, vKSM, Ledger, accounts)
     deposit = 1000 * 10**18
     total_deposit += deposit
     lido.deposit(deposit, {'from': accounts[0]})
+    lido.flushStakes({'from': oracle_master})
     check_distribution()
 
     #change ledgers shares
@@ -85,6 +80,11 @@ def test_change_shares_distribution(lido, oracle_master, vKSM, Ledger, accounts)
     for i in range(len(stashes)):
         stash = stashes[i]
         lido.setLedgerShare(lido.findLedger(hex(stashes[i])), shares[i])
+
+    deposit = 1000000 * 10**18
+    total_deposit += deposit
+    lido.deposit(deposit, {'from': accounts[0]})
+    lido.flushStakes({'from': oracle_master})
     check_distribution()
 
 
@@ -99,8 +99,8 @@ def test_redeem_distribution(lido, oracle_master, vKSM, Ledger, accounts):
         for i in range(len(stashes)):
             stash = hex(stashes[i])
             ledger = Ledger.at(lido.findLedger(stash))
-            stakes_sum += ledger.targetStake()
-            assert abs(ledger.targetStake() - total_deposit * shares[i] // total_shares) < total_shares
+            stakes_sum += ledger.ledgerStake()
+            assert abs(ledger.ledgerStake() - total_deposit * shares[i] // total_shares) < total_shares
         assert stakes_sum == total_deposit
 
     for i in range(len(stashes)):
@@ -113,8 +113,10 @@ def test_redeem_distribution(lido, oracle_master, vKSM, Ledger, accounts):
     deposit = 1000 * 10**18
     total_deposit += deposit
     lido.deposit(deposit, {'from': accounts[0]})
+    lido.flushStakes({'from': oracle_master})
     check_distribution()
 
     total_deposit -= deposit // 2
     lido.redeem(deposit // 2, {'from': accounts[0]})
+    lido.flushStakes({'from': oracle_master})
     check_distribution()
