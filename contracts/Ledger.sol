@@ -195,13 +195,15 @@ contract Ledger {
 
             // just upward transfer if we have deficit
             if (deficit > 0) {
-                uint128 lidoBalance = uint128(vKSM.balanceOf(address(LIDO)));
+                uint128 lidoBalance = uint128(LIDO.avaliableForStake());
                 uint128 forTransfer = lidoBalance > deficit ? deficit : lidoBalance;
 
-                vKSM.transferFrom(address(LIDO), address(this), forTransfer);
-                vKSM.relayTransferTo(_report.stashAccount, forTransfer);
-                transferUpwardBalance += forTransfer;
-                deficit -= forTransfer;
+                if (forTransfer > 0) {
+                    vKSM.transferFrom(address(LIDO), address(this), forTransfer);
+                    vKSM.relayTransferTo(_report.stashAccount, forTransfer);
+                    transferUpwardBalance += forTransfer;
+                    deficit -= forTransfer;
+                }
             }
 
             // rebond all always

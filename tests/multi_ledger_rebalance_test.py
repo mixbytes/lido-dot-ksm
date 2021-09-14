@@ -151,3 +151,37 @@ def test_huge_amount_ledgers(lido, oracle_master, vKSM, Ledger, accounts):
     tx = lido.flushStakes({'from': oracle_master})
     print('GAS USED:', tx.gas_used)
     check_distribution()
+
+
+def test_available_for_stake(lido, oracle_master, vKSM, Ledger, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+    stashes = [0x10, 0x20]
+    shares = [100, 100]
+    total_deposit = 0
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger(hex(stashes[0]), hex(stashes[0]+1), shares[0])
+    relay.new_ledger(hex(stashes[1]), hex(stashes[1]+1), shares[1])
+
+    deposit = 1000 * 10**18
+    total_deposit += deposit
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    rewards = 200 * 10**18
+    relay.new_era([rewards * 2, rewards]) # upward transfer
+    relay.new_era([rewards * 2, rewards]) # bond
+
+    deposit = 100 * 10**18
+    total_deposit += deposit
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    redeem = 200 * 10**18
+    total_deposit -= redeem
+    lido.redeem(redeem, {'from': accounts[0]})
+
+    relay.new_era() # execute rebalance & up/down transfers
+    relay.new_era() # complete bonding/unbonding
+
+    # ledegers shouldn't bond
+    expected_total_ledgers_balance =  1000 * 10**18 + rewards * 6
+    assert(relay.ledgers[0].total_balance() + relay.ledgers[1].total_balance() == expected_total_ledgers_balance)

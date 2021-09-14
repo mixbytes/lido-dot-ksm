@@ -68,6 +68,9 @@ contract Lido is LKSM {
     // one claim for account
     mapping(address => Claim[]) public claimOrders;
 
+    // pending claims total
+    uint256 private pendingClaimsTotal;
+
     // Ledger accounts
     address[] private ledgers;
 
@@ -237,6 +240,16 @@ contract Lido is LKSM {
     */
     function findLedger(bytes32 _stashAccount) external view returns (address) {
         return ledgerByStash[_stashAccount];
+    }
+
+    /**
+    * @notice Return vKSM amount available for stake by ledger
+    * @dev If we have balance less than pendingClaimsTotal that means
+    *      that ledgers already have locked KSMs
+    */
+    function avaliableForStake() external view returns(uint256) {
+        uint256 freeBalance = vKSM.balanceOf(address(this));
+        return freeBalance < pendingClaimsTotal ? 0 : freeBalance - pendingClaimsTotal;
     }
 
     /**
@@ -434,6 +447,7 @@ contract Lido is LKSM {
 
         Claim memory newClaim = Claim(_amount, uint64(block.timestamp) + RELAY_SPEC.unbondingPeriod);
         claimOrders[msg.sender].push(newClaim);
+        pendingClaimsTotal += _amount;
 
         // emit event about burning (compatible with ERC20)
         emit Transfer(msg.sender, address(0), _amount);
@@ -466,6 +480,7 @@ contract Lido is LKSM {
 
         if (readyToClaim > 0) {
             vKSM.transfer(msg.sender, readyToClaim);
+            pendingClaimsTotal -= readyToClaim;
             emit Claimed(msg.sender, readyToClaim);
         }
     }

@@ -159,11 +159,15 @@ for i in range(1000):
 
     after_stakes = lido.ledger_stakes.copy()
     unbondings = 0
+    bondings = 0
     for i in range(len(prev_stakes)):
         if after_stakes[i] < prev_stakes[i] + rewards[i]:
             unbondings += 1
+        elif after_stakes[i] > prev_stakes[i] + rewards[i]:
+            bondings += 1
 
-    print('UNBONDINGS AMOUNT: ', unbondings, "\n\n")
+    print('UNBONDINGS AMOUNT: ', unbondings)
+    print('BONDINGS AMOUNT:   ', bondings, "\n\n")
     assert(not (stake > 0 and unbondings > 0))
     assert(sum(lido.ledger_stakes) == sum(lido.target_stakes()))
     assert(sum(lido.ledger_stakes) == stake_sum)
