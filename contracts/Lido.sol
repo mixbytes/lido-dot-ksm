@@ -389,9 +389,12 @@ contract Lido is LKSM {
         require(ledgerShares[_ledgerAddress] == 0, "LIDO: LEGDER_HAS_NON_ZERO_SHARE");
 
         ILedger ledger = ILedger(_ledgerAddress);
-        require(ledger.totalBalance() == 0, "LIDO: LEDGER_BALANCE_NON_ZERO");
+        require(ledger.isEmpty(), "LIDO: LEDGER_IS_NOT_EMPTY");
 
-        ledgers[ledgerByAddress[_ledgerAddress] - 1] = ledgers[ledgers.length - 1];
+        address lastLedger = ledgers[ledgers.length - 1];
+        uint256 idxToRemove = ledgerByAddress[_ledgerAddress] - 1;
+        ledgers[idxToRemove] = lastLedger; // put last ledger to removing ledger position
+        ledgerByAddress[lastLedger] = idxToRemove + 1; // fix last ledger index after swap
         ledgers.pop();
         delete ledgerByAddress[_ledgerAddress];
         delete ledgerByStash[ledger.stashAccount()];

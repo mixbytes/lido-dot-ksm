@@ -134,6 +134,13 @@ contract Ledger {
     }
 
     /**
+    * @notice Return true if ledger doesn't have any funds
+    */
+    function isEmpty() view external returns (bool) {
+        return totalBalance == 0 && transferUpwardBalance == 0 && transferDownwardBalance == 0;
+    }
+
+    /**
     * @notice Nominate on behalf of this ledger, allowed to call only by lido contract
     * @dev Method spawns xcm call to relaychain.
     * @param _validators - array of choosen validator to be nominated
