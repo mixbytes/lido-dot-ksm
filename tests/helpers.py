@@ -23,6 +23,9 @@ class RelayLedger:
         self.validators = 0
         self.status = None
 
+    def total_balance(self):
+        return self.active_balance + self._unlocking_sum() + self.free_balance
+
     def unbond(self, amount):
         assert self.active_balance >= amount
         self.active_balance -= amount
@@ -65,17 +68,17 @@ class RelayLedger:
             return 2
         else:
             return 3
-    
+
     def get_report_data(self):
         return (
-            self.stash_account, 
+            self.stash_account,
             self.controller_account,
             self._status_num(),
-            self.active_balance, 
-            self.active_balance + self._unlocking_sum(), 
-            self.unlocking_chunks, 
-            [], 
-            self.active_balance + self._unlocking_sum() + self.free_balance
+            self.active_balance,
+            self.active_balance + self._unlocking_sum(),
+            self.unlocking_chunks,
+            [],
+            self.total_balance()
         )
 
 
@@ -113,7 +116,7 @@ class RelayChain:
             if self.ledgers[i].stash_account == stash_account:
                 return i
         assert False, "not found ledger"
-    
+
     def _ledger_idx_by_controller_account(self, stash_account):
         for i in range(len(self.ledgers)):
             if self.ledgers[i].stash_account == stash_account:

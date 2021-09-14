@@ -14,11 +14,13 @@ interface ILedger {
     ) external;
     function pushData(uint64 _eraId, Types.OracleData calldata staking) external;
 
-    function exactStake(uint256 _amount) external;
-    function increaseStake(uint256 _amount) external;
-    function decreaseStake(uint256 _amount) external;
     function nominate(bytes32[] calldata validators) external;
 
     function status() external view returns (Types.LedgerStatus);
+
+    function isEmpty() external view returns (bool);
+
     function stashAccount() external view returns (bytes32);
+
+    function totalBalance() external view returns (uint128);
 }

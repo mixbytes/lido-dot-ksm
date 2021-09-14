@@ -263,10 +263,12 @@ contract OracleMaster is Pausable {
         require(oracle != address(0), "OM: ORACLE_FOR_LEDGER_NOT_FOUND");
         require(_eraId >= eraId, "OM: ERA_TOO_OLD");
 
+        // new era
         if (_eraId > eraId) {
             require(_eraId <= _getCurrentEraId(), "OM: UNEXPECTED_NEW_ERA");
             eraId = _eraId;
             _clearReporting();
+            ILido(LIDO).flushStakes();
         }
 
         IOracle(oracle).reportRelay(memberIndex, QUORUM, _eraId, _report);
