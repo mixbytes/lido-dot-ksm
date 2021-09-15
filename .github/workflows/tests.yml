@@ -46,9 +46,9 @@ jobs:
       with:
         path: |
           ${{ steps.pip-cache-dir-path.outputs.dir }}
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements-dev.txt') }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-${{ hashFiles('**/requirements-dev.txt') }}
+          ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
           ${{ runner.os }}-pip-
 
     - name: Install python dependencies
@@ -58,4 +58,4 @@ jobs:
       run: brownie compile --size
 
     - name: Run Tests
-      run: brownie test --coverage --gas
+      run: brownie test --gas
