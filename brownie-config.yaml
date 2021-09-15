@@ -20,8 +20,11 @@ compiler:
 reports:
   exclude_contracts:
     - Clones
-    - EnumerableSet
-    - EnumerableMap
     - vAccounts_mock
     - vKSM_mock
     - AUX_mock
+    - TransparentUpgradeableProxy
+    - ProxyAdmin
+    - SafeCast
+    - SafeMath
+    - Address

@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from brownie import project, config, Contract
+from brownie import project, config, network, Contract
 
 # import oz project
 project.load(Path.home() / ".brownie" / "packages" / config["dependencies"][0])
@@ -11,7 +11,7 @@ def deploy_with_proxy(contract, proxy_admin, *args):
     owner = proxy_admin.owner()
     logic_instance = contract.deploy({'from': owner})
     encoded_inputs = logic_instance.initialize.encode_input(*args)
-    contract_name = contract.get_verification_info()['contract_name']
+    contract_name = contract._name
 
     proxy_instance = TransparentUpgradeableProxy.deploy(
         logic_instance,
@@ -20,7 +20,12 @@ def deploy_with_proxy(contract, proxy_admin, *args):
         {'from': owner, 'gas_limit': 10**6}
     )
 
-    return Contract.from_abi(contract_name, proxy_instance, contract.abi, owner)
+    # dirty hack to replace cached contract abi inside brownie state
+    network.__dict__['state'].__dict__['_remove_contract'](proxy_instance)
+    with_proxy = Contract.from_abi(contract_name, proxy_instance, contract.abi, owner)
+    network.__dict__['state'].__dict__['_add_contract'](with_proxy)
+
+    return with_proxy
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -51,8 +56,6 @@ def aux(AUX_mock, accounts):
 
 @pytest.fixture(scope="module")
 def auth_manager(AuthManager, proxy_admin, accounts):
-    #am = AuthManager.deploy({'from': accounts[0]})
-    #am.initialize(accounts[0], {'from': accounts[0]})
     am = deploy_with_proxy(AuthManager, proxy_admin, accounts[0])
     am.addByString('ROLE_SPEC_MANAGER', accounts[0], {'from': accounts[0]})
     am.addByString('ROLE_PAUSE_MANAGER', accounts[0], {'from': accounts[0]})
@@ -77,8 +80,6 @@ def oracle_master(Oracle, OracleMaster, Ledger, accounts, chain):
 def lido(Lido, vKSM, vAccounts, aux, auth_manager, oracle_master, proxy_admin, chain, Ledger, accounts):
     lc = Ledger.deploy({'from': accounts[0]})
     l = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, aux, vAccounts)
-    #l = Lido.deploy({'from': accounts[0]})
-    #l.initialize(auth_manager, vKSM, aux, vAccounts, {'from': accounts[0]})
     l.setLedgerClone(lc)
     oracle_master.setLido(l)
     l.setOracleMaster(oracle_master)

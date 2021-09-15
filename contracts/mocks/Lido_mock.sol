@@ -11,7 +11,7 @@ contract LidoMock is ERC20 {
 
     event NewStake(uint64, uint256);
 
-    constructor() ERC20("KSM liquid token", "LKSM") {
+    constructor() ERC20("KSM liquid token", "stKSM") {
         owner = msg.sender;
     }
 
