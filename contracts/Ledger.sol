@@ -22,8 +22,8 @@ contract Ledger {
 
     event DownwardComplete(uint128 amount);
     event UpwardComplete(uint128 amount);
-    event Rewards(uint128 amount);
-    event Slash(uint128 amount);
+    event Rewards(uint128 amount, uint128 balance);
+    event Slash(uint128 amount, uint128 balance);
 
     // ledger stash account
     bytes32 public stashAccount;
@@ -177,13 +177,13 @@ contract Ledger {
             uint128 reward = _report.stashBalance - cachedTotalBalance;
             LIDO.distributeRewards(reward);
 
-            emit Rewards(reward);
+            emit Rewards(reward, _report.stashBalance);
         }
         else if (cachedTotalBalance > _report.stashBalance) {
             uint128 slash = cachedTotalBalance - _report.stashBalance;
             LIDO.distributeLosses(slash);
 
-            emit Slash(slash);
+            emit Slash(slash, _report.stashBalance);
         }
 
         bytes[] memory calls = new bytes[](5);
