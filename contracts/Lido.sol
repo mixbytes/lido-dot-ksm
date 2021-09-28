@@ -55,10 +55,6 @@ contract Lido is stKSM, Initializable {
         uint256 share
     );
 
-
-    // sum of all losses
-    uint256 private lossBalance;
-
     // sum of all deposits and rewards
     uint256 private fundRaisedBalance;
 
@@ -70,7 +66,7 @@ contract Lido is stKSM, Initializable {
     mapping(address => Claim[]) public claimOrders;
 
     // pending claims total
-    uint256 private pendingClaimsTotal;
+    uint256 public pendingClaimsTotal;
 
     // Ledger accounts
     address[] private ledgers;
@@ -687,6 +683,6 @@ contract Lido is stKSM, Initializable {
     * @return amount of pooled vKSM in contract
     */
     function _getTotalPooledKSM() internal view override returns (uint256) {
-        return fundRaisedBalance - lossBalance;
+        return fundRaisedBalance;
     }
 }
