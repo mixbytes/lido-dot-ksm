@@ -11,14 +11,16 @@ contract AuthManager is IAuthManager, Initializable {
     uint256 internal constant NOTFOUND = type(uint256).max;
     bytes32 public constant SUPER_ROLE = keccak256("SUPER_ROLE");
 
-    event AddMember(address);
-    event RemoveMember(address);
+    event AddMember(address member, bytes32 role);
+    event RemoveMember(address member, bytes32 role);
 
     function initialize(address superior) external initializer {
         if (superior == address(0)) {
             members[msg.sender] = [SUPER_ROLE];
+            emit AddMember(msg.sender, SUPER_ROLE);
         } else {
             members[superior] = [SUPER_ROLE];
+            emit AddMember(msg.sender, SUPER_ROLE);
         }
     }
 
@@ -37,7 +39,7 @@ contract AuthManager is IAuthManager, Initializable {
 
         require(_find(_roles, role) == NOTFOUND, "ALREADY_MEMBER");
         _roles.push(role);
-        emit AddMember(member);
+        emit AddMember(member, role);
     }
 
     function addByString(string calldata roleString, address member) external {
@@ -48,7 +50,7 @@ contract AuthManager is IAuthManager, Initializable {
 
         require(_find(_roles, role) == NOTFOUND, "ALREADY_MEMBER");
         _roles.push(role);
-        emit AddMember(member);
+        emit AddMember(member, role);
     }
 
     function remove(bytes32 role, address member) external override {
@@ -69,7 +71,7 @@ contract AuthManager is IAuthManager, Initializable {
             _roles.pop();
         }
 
-        emit RemoveMember(member);
+        emit RemoveMember(member, role);
     }
 
     function _find(bytes32[] storage _roles, bytes32 _role) internal view returns (uint256) {

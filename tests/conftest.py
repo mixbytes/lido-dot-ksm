@@ -4,10 +4,13 @@ from brownie import project, config, network, Contract
 
 # import oz project
 project.load(Path.home() / ".brownie" / "packages" / config["dependencies"][0])
-
+if hasattr(project,'OpenzeppelinContracts410Project'):
+    OpenzeppelinContractsProject = project.OpenzeppelinContracts410Project
+else:
+    OpenzeppelinContractsProject = project.OpenzeppelinContractsProject
 
 def deploy_with_proxy(contract, proxy_admin, *args):
-    TransparentUpgradeableProxy = project.OpenzeppelinContractsProject.TransparentUpgradeableProxy
+    TransparentUpgradeableProxy = OpenzeppelinContractsProject.TransparentUpgradeableProxy
     owner = proxy_admin.owner()
     logic_instance = contract.deploy({'from': owner})
     encoded_inputs = logic_instance.initialize.encode_input(*args)
@@ -35,7 +38,7 @@ def isolate(fn_isolation):
 
 @pytest.fixture(scope="module")
 def proxy_admin(accounts):
-    ProxyAdmin = project.OpenzeppelinContractsProject.ProxyAdmin
+    ProxyAdmin = OpenzeppelinContractsProject.ProxyAdmin
     return ProxyAdmin.deploy({'from': accounts[0]})
 
 
