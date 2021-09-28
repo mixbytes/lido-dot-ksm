@@ -1,6 +1,7 @@
 import random
 import numpy as np
 
+
 class Lido:
     ledger_shares = []
     ledger_stakes = []
@@ -28,7 +29,7 @@ class Lido:
         return self._distr_prop(arr, self.total_stake, self.ledger_shares, total_shares)
 
     def stake(self, amount):
-        self.buffered_stakes +=  amount
+        self.buffered_stakes += amount
         self.total_stake += amount
 
         print("+++STAKE+++", amount)
@@ -88,7 +89,7 @@ class Lido:
         if non_zero_ledger != -1 and dust > 0:
             self.ledger_stakes[non_zero_ledger] += dust
 
-    def _diffs(self, from_arr, to_arr, reverse = False):
+    def _diffs(self, from_arr, to_arr, reverse=False):
         assert len(from_arr) == len(to_arr)
         diffs = []
         for i in range(len(from_arr)):
