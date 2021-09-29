@@ -28,7 +28,7 @@ contract Lido is stKSM, Initializable {
     event Claimed(address indexed receiver, uint256 amount);
 
     // Fee was updated
-    event FeeSet(uint16 feeBasisPoints);
+    event FeeSet(uint16 fee, uint16 feeOperatorsBP, uint16 feeTreasuryBP,  uint16 feeDevelopersBP);
 
     // Rewards distributed
     event Rewards(address ledger, uint256 rewards);
@@ -111,7 +111,8 @@ contract Lido is stKSM, Initializable {
     bytes32 public GARANTOR;
 
     // fee interest in basis points
-    uint16 public FEE_BP;
+    // it consists of four uint16 values (total fee, operators fee, treasury fee, developers fee).
+    uint256 private FEE_BP;
 
     // ledger clone template contract
     address public LEDGER_CLONE;
@@ -122,9 +123,15 @@ contract Lido is stKSM, Initializable {
     // relay spec
     Types.RelaySpec public RELAY_SPEC;
 
+    // developers fund
+    address public developers;
 
-    // default interest value in base points
-    uint16 internal constant DEFAULT_FEE = 1000;
+    // treasury fund
+    address public treasury;
+
+    // default interest value in base points.
+    // 10% is split between operators 5%, treasury 4%, and developers 1%
+    uint256 internal constant DEFAULT_FEE = 0x3e813880fa003e8;
 
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
@@ -147,6 +154,12 @@ contract Lido is stKSM, Initializable {
     // Stake manager role
     bytes32 internal constant ROLE_STAKE_MANAGER = keccak256("ROLE_STAKE_MANAGER");
 
+    // Treasury manager role
+    bytes32 internal constant ROLE_TREASURY = keccak256("ROLE_SET_TREASURY");
+
+    // Developers address change role
+    bytes32 internal constant ROLE_DEVELOPERS = keccak256("ROLE_SET_DEVELOPERS");
+
     // max amount of claims in parallel
     uint16 internal constant MAX_CLAIMS = 10;
 
@@ -167,7 +180,9 @@ contract Lido is stKSM, Initializable {
         address _authManager,
         address _vKSM,
         address _AUX,
-        address _vAccounts
+        address _vAccounts,
+        address _developers,
+        address _treasury
     ) external initializer {
         vKSM = IvKSM(_vKSM);
         AUX = _AUX;
@@ -175,8 +190,11 @@ contract Lido is stKSM, Initializable {
         AUTH_MANAGER = _authManager;
 
         MAX_LEDGERS_AMOUNT = 200;
-        FEE_BP = 200;
+        FEE_BP = DEFAULT_FEE;
         GARANTOR = 0x00;
+
+        treasury = _treasury;
+        developers =_developers;
     }
 
     /**
@@ -184,6 +202,20 @@ contract Lido is stKSM, Initializable {
     */
     fallback() external {
         revert("FORBIDDEN");
+    }
+
+    /**
+    * @notice Set treasury address to '_treasury'
+    */
+    function setTreasury(address _treasury) external auth(ROLE_TREASURY) {
+        treasury = _treasury;
+    }
+
+    /**
+    * @notice Set developers address to '_developers'
+    */
+    function setDevelopers(address _developers) external auth(ROLE_DEVELOPERS) {
+        developers = _developers;
     }
 
     /**
@@ -290,11 +322,25 @@ contract Lido is stKSM, Initializable {
 
     /**
     * @notice Set new lido fee, allowed to call only by ROLE_FEE_MANAGER
-    * @param _feeBP - fee percent in basis amounts(10000)
+    * @param _feeBP - fee percent in basis points(10000)
+    * @param _feeOperators - Operators percentage in basis points
+    * @param _feeTreasury - Treasury fund percentage in basis points
+    * @param _feeDevelopers - Developers percentage in basis points
     */
-    function setFeeBP(uint16 _feeBP) external auth(ROLE_FEE_MANAGER) {
-        FEE_BP = _feeBP;
-        emit FeeSet(_feeBP);
+    function setFee(uint16 _feeBP, uint16 _feeOperators, uint16 _feeTreasury,  uint16 _feeDevelopers) external auth(ROLE_FEE_MANAGER) {
+        require((_feeTreasury + _feeOperators + _feeDevelopers) == 10000, "LIDO: FEES_DONT_ADD_UP");
+        require(_feeBP <= 1000, "LIDO: FEE_TOO_HIGH");
+
+        FEE_BP = (uint256(_feeBP)<<48) + (uint256(_feeOperators)<<32)
+           + (uint256(_feeTreasury)<<16) + (uint256(_feeDevelopers));
+        emit FeeSet(_feeBP, _feeOperators, _feeTreasury, _feeDevelopers);
+    }
+
+    /**
+    * @notice Returns fee basis points
+    */
+    function getFee() external view returns (uint16){
+        return (uint16(FEE_BP >> 48));
     }
 
     /**
@@ -492,7 +538,7 @@ contract Lido is stKSM, Initializable {
     function distributeRewards(uint256 _totalRewards) external {
         require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
 
-        uint256 feeBasis = uint256(FEE_BP);
+        uint256 feeBasis = FEE_BP >> 48;
 
         fundRaisedBalance += _totalRewards;
 
@@ -507,8 +553,16 @@ contract Lido is stKSM, Initializable {
         );
 
         _mintShares(address(this), shares2mint);
-        //TODO mixbytes shares
+        // distribute fee between operators, treasury and developers
+        feeBasis = FEE_BP;
+        uint256 _shares = (feeBasis & 0xFFFF) * shares2mint / 10000;
+        _transferShares(address(this), developers, _shares);
+        _emitTransferAfterMintingShares(developers, _shares);
+        feeBasis = feeBasis >> 16;
 
+        _shares = (feeBasis & 0xFFFF) * shares2mint / 10000;
+        _transferShares(address(this), treasury, _shares);
+        _emitTransferAfterMintingShares(treasury, _shares);
         emit Rewards(msg.sender, _totalRewards);
     }
 

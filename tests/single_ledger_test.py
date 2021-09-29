@@ -1,4 +1,4 @@
-from brownie import chain, accounts
+from brownie import chain
 from helpers import RelayChain, distribute_initial_tokens
 
 
@@ -55,7 +55,7 @@ def test_single_deposit(lido, oracle_master, vKSM, accounts):
     assert lido.getTotalPooledKSM() == deposit + reward
 
 
-def test_multi_deposit(lido, oracle_master, vKSM, accounts):
+def test_multi_deposit(lido, oracle_master, vKSM, accounts, developers, treasury):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
@@ -82,8 +82,14 @@ def test_multi_deposit(lido, oracle_master, vKSM, accounts):
     acc2_balance = lido.balanceOf(accounts[1])
     acc3_balance = lido.balanceOf(accounts[2])
     lido_rewards = lido.balanceOf(lido)
+    developers_rewards = lido.balanceOf(developers)
+    treasury_rewards = lido.balanceOf(treasury)
 
-    assert abs(acc1_balance + acc2_balance + acc3_balance + lido_rewards - lido.getTotalPooledKSM()) <= 1000
+    assert abs(
+        acc1_balance + acc2_balance + acc3_balance +
+        lido_rewards + developers_rewards + treasury_rewards -
+        lido.getTotalPooledKSM()
+    ) <= 1000
 
 
 def test_redeem(lido, oracle_master, vKSM, accounts):

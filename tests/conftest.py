@@ -64,6 +64,9 @@ def auth_manager(AuthManager, proxy_admin, accounts):
     am.addByString('ROLE_STAKE_MANAGER', accounts[0], {'from': accounts[0]})
     am.addByString('ROLE_ORACLE_MEMBERS_MANAGER', accounts[0], {'from': accounts[0]})
     am.addByString('ROLE_ORACLE_QUORUM_MANAGER', accounts[0], {'from': accounts[0]})
+
+    am.addByString('ROLE_SET_TREASURY', accounts[0], {'from': accounts[0]})
+    am.addByString('ROLE_SET_DEVELOPERS', accounts[0], {'from': accounts[0]})
     return am
 
 
@@ -76,12 +79,46 @@ def oracle_master(Oracle, OracleMaster, Ledger, accounts, chain):
 
 
 @pytest.fixture(scope="module")
-def lido(Lido, vKSM, vAccounts, aux, auth_manager, oracle_master, proxy_admin, chain, Ledger, accounts):
+def admin(accounts):
+    return accounts[0]
+
+
+@pytest.fixture(scope="module")
+def treasury(accounts):
+    return accounts.add()
+
+
+@pytest.fixture(scope="module")
+def developers(accounts):
+    return accounts.add()
+
+
+@pytest.fixture(scope="module")
+def lido(Lido, vKSM, vAccounts, aux, auth_manager, oracle_master, proxy_admin, chain, Ledger, accounts, developers, treasury):
     lc = Ledger.deploy({'from': accounts[0]})
-    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, aux, vAccounts)
+    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, aux, vAccounts, developers, treasury)
     _lido.setLedgerClone(lc)
     oracle_master.setLido(_lido)
     _lido.setOracleMaster(oracle_master)
     era_sec = 60 * 60 * 6
     _lido.setRelaySpec((chain.time(), era_sec, era_sec * 28, 16, 1))  # kusama settings except min nominator bond
     return _lido
+
+
+@pytest.fixture(scope="module")
+def mocklido(Lido, LedgerMock, vKSM, vAccounts, auth_manager, oracle_master, aux, Ledger, admin, developers, treasury):
+    lc = LedgerMock.deploy({'from': admin})
+    _lido = Lido.deploy({'from': admin})
+    _lido.initialize(auth_manager, vKSM, aux, vAccounts, developers, treasury, {'from': admin})
+    _lido.setLedgerClone(lc, {'from': admin})
+    _lido.setOracleMaster(oracle_master, {'from': admin})
+
+    oracle_master.setLido(_lido, {'from': admin})
+
+    return _lido
+
+
+@pytest.fixture(scope="module")
+def mockledger(mocklido, admin, LedgerMock):
+    mocklido.addLedger(0x01, 0x01, 100, {'from': admin})
+    return LedgerMock.at(mocklido.findLedger(0x01))
