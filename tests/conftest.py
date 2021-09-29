@@ -1,20 +1,20 @@
 import pytest
 from pathlib import Path
-from brownie import project, config, network, Contract
+from brownie import project, config
 
 # import oz project
 project.load(Path.home() / ".brownie" / "packages" / config["dependencies"][0])
-if hasattr(project,'OpenzeppelinContracts410Project'):
+if hasattr(project, 'OpenzeppelinContracts410Project'):
     OpenzeppelinContractsProject = project.OpenzeppelinContracts410Project
 else:
     OpenzeppelinContractsProject = project.OpenzeppelinContractsProject
+
 
 def deploy_with_proxy(contract, proxy_admin, *args):
     TransparentUpgradeableProxy = OpenzeppelinContractsProject.TransparentUpgradeableProxy
     owner = proxy_admin.owner()
     logic_instance = contract.deploy({'from': owner})
     encoded_inputs = logic_instance.initialize.encode_input(*args)
-    contract_name = contract._name
 
     proxy_instance = TransparentUpgradeableProxy.deploy(
         logic_instance,
@@ -23,12 +23,8 @@ def deploy_with_proxy(contract, proxy_admin, *args):
         {'from': owner, 'gas_limit': 10**6}
     )
 
-    # dirty hack to replace cached contract abi inside brownie state
-    network.__dict__['state'].__dict__['_remove_contract'](proxy_instance)
-    with_proxy = Contract.from_abi(contract_name, proxy_instance, contract.abi, owner)
-    network.__dict__['state'].__dict__['_add_contract'](with_proxy)
-
-    return with_proxy
+    TransparentUpgradeableProxy.remove(proxy_instance)
+    return contract.at(proxy_instance.address, owner=owner)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -82,12 +78,10 @@ def oracle_master(Oracle, OracleMaster, Ledger, accounts, chain):
 @pytest.fixture(scope="module")
 def lido(Lido, vKSM, vAccounts, aux, auth_manager, oracle_master, proxy_admin, chain, Ledger, accounts):
     lc = Ledger.deploy({'from': accounts[0]})
-    l = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, aux, vAccounts)
-    l.setLedgerClone(lc)
-    oracle_master.setLido(l)
-    l.setOracleMaster(oracle_master)
+    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, aux, vAccounts)
+    _lido.setLedgerClone(lc)
+    oracle_master.setLido(_lido)
+    _lido.setOracleMaster(oracle_master)
     era_sec = 60 * 60 * 6
-    l.setRelaySpec((chain.time(), era_sec, era_sec * 28, 16, 1)) # kusama settings except min nominator bond
-    return l
-
-
+    _lido.setRelaySpec((chain.time(), era_sec, era_sec * 28, 16, 1))  # kusama settings except min nominator bond
+    return _lido

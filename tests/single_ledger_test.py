@@ -1,5 +1,4 @@
-import pytest
-from brownie import chain
+from brownie import chain, accounts
 from helpers import RelayChain, distribute_initial_tokens
 
 
@@ -20,7 +19,6 @@ def test_downward_transfer_mock(vKSM, vAccounts, accounts):
     before = vKSM.balanceOf(accounts[0])
 
     tx = vAccounts.relayTransferFrom("123", 123, {'from': accounts[0]})
-    #tx.info()
 
     assert tx.events['DownwardTransfer'][0]['amount'] == 123
     assert tx.events['DownwardTransfer'][0]['from'] == "0x123"
@@ -115,9 +113,9 @@ def test_redeem(lido, oracle_master, vKSM, accounts):
     # travel for 29 eras
     relay.timetravel(29)
 
-    relay.new_era([reward]) # should send 'withdraw'
-    relay.new_era([reward]) # should downward transfer
-    relay.new_era([reward]) # should downward transfer got completed
+    relay.new_era([reward])  # should send 'withdraw'
+    relay.new_era([reward])  # should downward transfer
+    relay.new_era([reward])  # should downward transfer got completed
 
     balance_before_claim = vKSM.balanceOf(accounts[1])
     lido.claimUnbonded({'from': accounts[1]})
@@ -176,9 +174,9 @@ def test_multi_redeem(lido, oracle_master, vKSM, accounts):
     assert lido.getUnbonded(accounts[1]) == (0, redeem_1 + redeem_2 + redeem_3)
 
     relay.new_era([reward])
-    relay.new_era([reward]) # should send 'withdraw'
-    relay.new_era([reward]) # should downward transfer
-    relay.new_era([reward]) # should downward transfer got completed
+    relay.new_era([reward])  # should send 'withdraw'
+    relay.new_era([reward])  # should downward transfer
+    relay.new_era([reward])  # should downward transfer got completed
 
     balance_before_claim = vKSM.balanceOf(accounts[1])
     lido.claimUnbonded({'from': accounts[1]})
@@ -231,9 +229,9 @@ def test_multi_redeem_order_removal(lido, oracle_master, vKSM, accounts):
     assert lido.getUnbonded(accounts[1]) == (redeem_2 + redeem_3, redeem_1)
 
     relay.new_era([reward])
-    relay.new_era([reward]) # should send 'withdraw'
-    relay.new_era([reward]) # should downward transfer
-    relay.new_era([reward]) # should downward transfer got completed
+    relay.new_era([reward])  # should send 'withdraw'
+    relay.new_era([reward])  # should downward transfer
+    relay.new_era([reward])  # should downward transfer got completed
 
     balance_before_claim = vKSM.balanceOf(accounts[1])
     lido.claimUnbonded({'from': accounts[1]})
@@ -257,7 +255,7 @@ def test_multi_redeem_mixed_timeout(lido, oracle_master, vKSM, accounts):
     redeem_2 = 6 * 10**18
     redeem_3 = 7 * 10**18
 
-    relay_spec_array[2] = 12000 # change unbonding peroid to 1000 secs
+    relay_spec_array[2] = 12000  # change unbonding peroid to 1000 secs
     lido.setRelaySpec(relay_spec_array, {'from': accounts[0]})
     lido.redeem(redeem_1, {'from': accounts[1]})
 
@@ -274,11 +272,11 @@ def test_multi_redeem_mixed_timeout(lido, oracle_master, vKSM, accounts):
     assert lido.claimOrders(accounts[1], 1)[1] > lido.claimOrders(accounts[1], 2)[1]
     assert lido.getUnbonded(accounts[1]) == (redeem_1 + redeem_2 + redeem_3, 0)
 
-    chain.sleep(9000) # after that we can claim redeem_2, redeem_3
+    chain.sleep(9000)  # after that we can claim redeem_2, redeem_3
     chain.mine()
     assert lido.getUnbonded(accounts[1]) == (redeem_1, redeem_2 + redeem_3)
     lido.claimUnbonded({'from': accounts[1]})
-    assert lido.getUnbonded(accounts[1]) == (redeem_1, 0) # redeem_2, redeem_3 are claimed, redeem_1 is remaining
+    assert lido.getUnbonded(accounts[1]) == (redeem_1, 0)  # redeem_2, redeem_3 are claimed, redeem_1 is remaining
     assert lido.claimOrders(accounts[1], 0)[0] == redeem_1
 
 

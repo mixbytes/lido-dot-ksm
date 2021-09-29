@@ -175,7 +175,7 @@ class RelayChain:
             else:
                 self._process_call(name, event)
 
-    def new_era(self, rewards = []):
+    def new_era(self, rewards=[]):
         self.era += 1
         self.chain.sleep(6 * 60 * 60)
         for i in range(len(self.ledgers)):
@@ -190,7 +190,6 @@ class RelayChain:
         self.chain.sleep(6 * 60 * 60 * eras)
         self.era += eras
         self.chain.mine()
-
 
 
 def distribute_initial_tokens(vKSM, lido, accounts):
