@@ -309,6 +309,7 @@ contract Lido is stKSM, Initializable {
     function setOracleMaster(address _oracleMaster) external auth(ROLE_ORACLE_MANAGER) {
         require(ORACLE_MASTER == address(0), "LIDO: ORACLE_MASTER_ALREADY_DEFINED");
         ORACLE_MASTER = _oracleMaster;
+        IOracleMaster(ORACLE_MASTER).setLido(address(this));
     }
 
     /**
@@ -413,7 +414,7 @@ contract Lido is stKSM, Initializable {
     * @param _newShare - new stare amount
     */
     function setLedgerShare(address _ledger, uint256 _newShare) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgerByAddress[_ledger] != 0, "LIDO: LEDGER_BOT_FOUND");
+        require(ledgerByAddress[_ledger] != 0, "LIDO: LEDGER_NOT_FOUND");
 
         ledgerSharesTotal -= ledgerShares[_ledger];
         ledgerShares[_ledger] = _newShare;
@@ -430,7 +431,7 @@ contract Lido is stKSM, Initializable {
     */
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
         require(ledgerByAddress[_ledgerAddress] != 0, "LIDO: LEDGER_NOT_FOUND");
-        require(ledgerShares[_ledgerAddress] == 0, "LIDO: LEGDER_HAS_NON_ZERO_SHARE");
+        require(ledgerShares[_ledgerAddress] == 0, "LIDO: LEDGER_HAS_NON_ZERO_SHARE");
 
         ILedger ledger = ILedger(_ledgerAddress);
         require(ledger.isEmpty(), "LIDO: LEDGER_IS_NOT_EMPTY");
@@ -603,7 +604,8 @@ contract Lido is stKSM, Initializable {
     * @notice Refresh allowance for each ledger, allowed to call only by ROLE_LEDGER_MANAGER
     */
     function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
-        for (uint i = 0; i < ledgers.length; i++) {
+        uint _length = ledgers.length;
+        for (uint i = 0; i < _length; i++) {
             vKSM.approve(ledgers[i], type(uint256).max);
         }
     }
@@ -616,8 +618,8 @@ contract Lido is stKSM, Initializable {
 
         uint256 stakesSum = 0;
         address nonZeroLedged = address(0);
-
-        for (uint i = 0; i < ledgers.length; i++) {
+        uint _length = ledgers.length;
+        for (uint i = 0; i < _length; i++) {
             uint256 share = ledgerShares[ledgers[i]];
             uint256 stake = totalStake * share / ledgerSharesTotal;
 
@@ -704,7 +706,7 @@ contract Lido is stKSM, Initializable {
     * @notice Process user deposit, mints stKSM and increase the pool buffer
     * @return amount of stKSM shares generated
     */
-    function _submit(uint256 _deposit) internal whenNotPaused returns (uint256) {
+    function _submit(uint256 _deposit) internal returns (uint256) {
         address sender = msg.sender;
 
         require(_deposit != 0, "LIDO: ZERO_DEPOSIT");

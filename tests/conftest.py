@@ -98,7 +98,6 @@ def lido(Lido, vKSM, vAccounts, aux, auth_manager, oracle_master, proxy_admin, c
     lc = Ledger.deploy({'from': accounts[0]})
     _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, aux, vAccounts, developers, treasury)
     _lido.setLedgerClone(lc)
-    oracle_master.setLido(_lido)
     _lido.setOracleMaster(oracle_master)
     era_sec = 60 * 60 * 6
     _lido.setRelaySpec((chain.time(), era_sec, era_sec * 28, 16, 1))  # kusama settings except min nominator bond
@@ -112,8 +111,6 @@ def mocklido(Lido, LedgerMock, vKSM, vAccounts, auth_manager, oracle_master, aux
     _lido.initialize(auth_manager, vKSM, aux, vAccounts, developers, treasury, {'from': admin})
     _lido.setLedgerClone(lc, {'from': admin})
     _lido.setOracleMaster(oracle_master, {'from': admin})
-
-    oracle_master.setLido(_lido, {'from': admin})
 
     return _lido
 

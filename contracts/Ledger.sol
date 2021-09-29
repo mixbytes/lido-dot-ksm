@@ -129,14 +129,14 @@ contract Ledger {
     * @notice Return target stake amount for this ledger
     * @return target stake amount
     */
-    function ledgerStake() view public returns (uint256) {
+    function ledgerStake() public view returns (uint256) {
         return LIDO.ledgerStake(address(this));
     }
 
     /**
     * @notice Return true if ledger doesn't have any funds
     */
-    function isEmpty() view external returns (bool) {
+    function isEmpty() external view returns (bool) {
         return totalBalance == 0 && transferUpwardBalance == 0 && transferDownwardBalance == 0;
     }
 
@@ -172,15 +172,15 @@ contract Ledger {
         if (!_processRelayTransfers(_report)) {
             return;
         }
-
-        if (cachedTotalBalance < _report.stashBalance) { // if cached balance > real => we have reward
-            uint128 reward = _report.stashBalance - cachedTotalBalance;
+        uint128 _cachedTotalBalance = cachedTotalBalance;
+        if (_cachedTotalBalance < _report.stashBalance) { // if cached balance > real => we have reward
+            uint128 reward = _report.stashBalance - _cachedTotalBalance;
             LIDO.distributeRewards(reward);
 
             emit Rewards(reward, _report.stashBalance);
         }
-        else if (cachedTotalBalance > _report.stashBalance) {
-            uint128 slash = cachedTotalBalance - _report.stashBalance;
+        else if (_cachedTotalBalance > _report.stashBalance) {
+            uint128 slash = _cachedTotalBalance - _report.stashBalance;
             LIDO.distributeLosses(slash);
 
             emit Slash(slash, _report.stashBalance);
@@ -209,7 +209,6 @@ contract Ledger {
                     vKSM.transferFrom(address(LIDO), address(this), forTransfer);
                     vKSM.relayTransferTo(_report.stashAccount, forTransfer);
                     transferUpwardBalance += forTransfer;
-                    deficit -= forTransfer;
                 }
             }
 
@@ -258,11 +257,12 @@ contract Ledger {
             }
 
             // need to unbond if we still have deficit
-            if (deficit > 0 && nonWithdrawableBalance < deficit) {
+            if (nonWithdrawableBalance < deficit) {
                 // todo drain stake if remaining balance is less than MIN_NOMINATOR_BALANCE
                 uint128 forUnbond = deficit - nonWithdrawableBalance;
-                calls[calls_counter++] = AUX.buildUnBond(deficit - nonWithdrawableBalance);
-                deficit -= forUnbond;
+                calls[calls_counter++] = AUX.buildUnBond(forUnbond);
+                // notice.
+                // deficit -= forUnbond;
             }
 
             // bond all remain free balance
