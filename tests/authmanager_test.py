@@ -4,14 +4,20 @@ from brownie import reverts, web3
 def test_add_remove(auth_manager, proxy_admin, accounts):
 
     role1 = web3.keccak(text='ROLE_SPEC_MANAGER').hex()
+
+    assert auth_manager.has(role1, accounts[0])
     auth_manager.remove(role1, accounts[0], {'from': accounts[0]})
 
     with reverts("MEMBER_NOT_FOUND"):
         auth_manager.remove(role1, accounts[0], {'from': accounts[0]})
 
+    assert not auth_manager.has(role1, accounts[0])
+
     auth_manager.add(role1, accounts[0], {'from': accounts[0]})
     with reverts("ALREADY_MEMBER"):
         auth_manager.add(role1, accounts[0], {'from': accounts[0]})
+
+    assert auth_manager.has(role1, accounts[0])
 
 
 def test_remove_superuser(auth_manager, proxy_admin, accounts):
