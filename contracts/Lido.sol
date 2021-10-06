@@ -564,6 +564,7 @@ contract Lido is stKSM, Initializable {
         _shares = (feeBasis & 0xFFFF) * shares2mint / 10000;
         _transferShares(address(this), treasury, _shares);
         _emitTransferAfterMintingShares(treasury, _shares);
+
         emit Rewards(msg.sender, _totalRewards);
     }
 
