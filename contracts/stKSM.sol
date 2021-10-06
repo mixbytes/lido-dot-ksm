@@ -2,11 +2,9 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 
 abstract contract stKSM is IERC20, Pausable {
-    using SafeMath for uint256;
 
     /**
      * @dev stKSM balances are dynamic and are calculated based on the accounts' shares
@@ -160,7 +158,7 @@ abstract contract stKSM is IERC20, Pausable {
         require(currentAllowance >= _amount, "TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
 
         _transfer(_sender, _recipient, _amount);
-        _approve(_sender, msg.sender, currentAllowance.sub(_amount));
+        _approve(_sender, msg.sender, currentAllowance -_amount);
         return true;
     }
 
@@ -178,7 +176,7 @@ abstract contract stKSM is IERC20, Pausable {
      * - the contract must not be paused.
      */
     function increaseAllowance(address _spender, uint256 _addedValue) public returns (bool) {
-        _approve(msg.sender, _spender, allowances[msg.sender][_spender].add(_addedValue));
+        _approve(msg.sender, _spender, allowances[msg.sender][_spender] + _addedValue);
         return true;
     }
 
@@ -199,7 +197,7 @@ abstract contract stKSM is IERC20, Pausable {
     function decreaseAllowance(address _spender, uint256 _subtractedValue) public returns (bool) {
         uint256 currentAllowance = allowances[msg.sender][_spender];
         require(currentAllowance >= _subtractedValue, "DECREASED_ALLOWANCE_BELOW_ZERO");
-        _approve(msg.sender, _spender, currentAllowance.sub(_subtractedValue));
+        _approve(msg.sender, _spender, currentAllowance-_subtractedValue);
         return true;
     }
 
@@ -228,9 +226,7 @@ abstract contract stKSM is IERC20, Pausable {
         if (totalPooledKSM == 0) {
             return 0;
         } else {
-            return _amount
-                .mul(_getTotalShares())
-                .div(totalPooledKSM);
+            return _amount * _getTotalShares() / totalPooledKSM;
         }
     }
 
@@ -242,9 +238,7 @@ abstract contract stKSM is IERC20, Pausable {
         if (totalShares == 0) {
             return 0;
         } else {
-            return _sharesAmount
-                .mul(_getTotalPooledKSM())
-                .div(_totalShares);
+            return _sharesAmount * _getTotalPooledKSM() / _totalShares;
         }
     }
 
@@ -315,8 +309,8 @@ abstract contract stKSM is IERC20, Pausable {
         uint256 currentSenderShares = shares[_sender];
         require(_sharesAmount <= currentSenderShares, "TRANSFER_AMOUNT_EXCEEDS_BALANCE");
 
-        shares[_sender] = currentSenderShares.sub(_sharesAmount);
-        shares[_recipient] = shares[_recipient].add(_sharesAmount);
+        shares[_sender] = currentSenderShares - _sharesAmount;
+        shares[_recipient] = shares[_recipient] + _sharesAmount;
     }
 
     /**
@@ -331,10 +325,10 @@ abstract contract stKSM is IERC20, Pausable {
     function _mintShares(address _recipient, uint256 _sharesAmount) internal whenNotPaused returns (uint256 newTotalShares) {
         require(_recipient != address(0), "MINT_TO_THE_ZERO_ADDRESS");
 
-        newTotalShares = _getTotalShares().add(_sharesAmount);
+        newTotalShares = _getTotalShares() + _sharesAmount;
         totalShares = newTotalShares;
 
-        shares[_recipient] = shares[_recipient].add(_sharesAmount);
+        shares[_recipient] = shares[_recipient] + _sharesAmount;
 
         // Notice: we're not emitting a Transfer event from the zero address here since shares mint
         // works by taking the amount of tokens corresponding to the minted shares from all other
@@ -360,10 +354,10 @@ abstract contract stKSM is IERC20, Pausable {
         uint256 accountShares = shares[_account];
         require(_sharesAmount <= accountShares, "BURN_AMOUNT_EXCEEDS_BALANCE");
 
-        newTotalShares = _getTotalShares().sub(_sharesAmount);
+        newTotalShares = _getTotalShares() - _sharesAmount;
         totalShares = newTotalShares;
 
-        shares[_account] = accountShares.sub(_sharesAmount);
+        shares[_account] = accountShares - _sharesAmount;
 
         // Notice: we're not emitting a Transfer event to the zero address here since shares burn
         // works by redistributing the amount of tokens corresponding to the burned shares between
