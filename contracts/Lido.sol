@@ -110,9 +110,11 @@ contract Lido is stKSM, Initializable {
     // Who pay off relay chain transaction fees
     bytes32 public GARANTOR;
 
-    // fee interest in basis points
-    // it consists of four uint16 values (total fee, operators fee, treasury fee, developers fee).
-    uint256 private FEE_BP;
+    /** fee interest in basis points.
+    It's packed uint256 consist of three uint16 (total_fee, treasury_fee, developers_fee).
+    where total_fee = treasury_fee + developers_fee + 3000 (3% operators fee)
+    */
+    uint256 public FEE_BP;
 
     // ledger clone template contract
     address public LEDGER_CLONE;
@@ -130,8 +132,8 @@ contract Lido is stKSM, Initializable {
     address public treasury;
 
     // default interest value in base points.
-    // 10% is split between operators 5%, treasury 4%, and developers 1%
-    uint256 internal constant DEFAULT_FEE = 0x3e813880fa003e8;
+    // 10% is split between operators 3%, treasury 5.6%, and developers 1.4%
+    uint256 internal constant DEFAULT_FEE = 0x3e802410090;
 
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
@@ -323,25 +325,25 @@ contract Lido is stKSM, Initializable {
 
     /**
     * @notice Set new lido fee, allowed to call only by ROLE_FEE_MANAGER
-    * @param _feeBP - fee percent in basis points(10000)
-    * @param _feeOperators - Operators percentage in basis points
+    * @param _feeOperators - Operators percentage in basis points. It's always 3%
     * @param _feeTreasury - Treasury fund percentage in basis points
     * @param _feeDevelopers - Developers percentage in basis points
     */
-    function setFee(uint16 _feeBP, uint16 _feeOperators, uint16 _feeTreasury,  uint16 _feeDevelopers) external auth(ROLE_FEE_MANAGER) {
-        require((_feeTreasury + _feeOperators + _feeDevelopers) == 10000, "LIDO: FEES_DONT_ADD_UP");
-        require(_feeBP <= 1000, "LIDO: FEE_TOO_HIGH");
+    function setFee(uint16 _feeOperators, uint16 _feeTreasury,  uint16 _feeDevelopers) external auth(ROLE_FEE_MANAGER) {
+        require(_feeOperators==300, "LIDO: FEE_OPERATORS_NOT_MATCH");
+        require((_feeTreasury + _feeOperators + _feeDevelopers) == 1000, "LIDO: FEE_DONT_ADD_UP");
 
-        FEE_BP = (uint256(_feeBP)<<48) + (uint256(_feeOperators)<<32)
-           + (uint256(_feeTreasury)<<16) + (uint256(_feeDevelopers));
-        emit FeeSet(_feeBP, _feeOperators, _feeTreasury, _feeDevelopers);
+        emit FeeSet(uint16(1000), _feeOperators, _feeTreasury, _feeDevelopers);
+        // pack fees in uint256 leading _feeDevelopers values to 97% basis
+        // the sum of _feeTreasury + _feeDevelopers is 700 (7%). It is 721 in 97% basis.
+        FEE_BP = (1000<<16) + (uint256(_feeDevelopers) * 10000 / 9700);
     }
 
     /**
     * @notice Returns fee basis points
     */
     function getFee() external view returns (uint16){
-        return (uint16(FEE_BP >> 48));
+        return (uint16(FEE_BP >> 32));
     }
 
     /**
@@ -539,7 +541,8 @@ contract Lido is stKSM, Initializable {
     function distributeRewards(uint256 _totalRewards) external {
         require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
 
-        uint256 feeBasis = FEE_BP >> 48;
+        uint256 feeDevelopers = (FEE_BP & 0xFFFF);
+        assert(feeDevelopers<=721);
 
         fundRaisedBalance += _totalRewards;
 
@@ -548,20 +551,19 @@ contract Lido is stKSM, Initializable {
         }
 
         uint256 shares2mint = (
-            _totalRewards * feeBasis * _getTotalShares()
+            _totalRewards * 721 * _getTotalShares()
                 /
-            (_getTotalPooledKSM() * 10000 - (feeBasis * _totalRewards))
+            (_getTotalPooledKSM() * 10000 - (721 * _totalRewards))
         );
 
         _mintShares(address(this), shares2mint);
-        // distribute fee between operators, treasury and developers
-        feeBasis = FEE_BP;
-        uint256 _shares = (feeBasis & 0xFFFF) * shares2mint / 10000;
+        // distribute fee between treasury and developers
+        uint256 _shares = feeDevelopers * shares2mint / 721;
         _transferShares(address(this), developers, _shares);
         _emitTransferAfterMintingShares(developers, _shares);
-        feeBasis = feeBasis >> 16;
 
-        _shares = (feeBasis & 0xFFFF) * shares2mint / 10000;
+        // all remaining transfer to the treasury
+        _shares = shares2mint - _shares;
         _transferShares(address(this), treasury, _shares);
         _emitTransferAfterMintingShares(treasury, _shares);
 

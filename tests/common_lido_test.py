@@ -5,6 +5,10 @@ UNIT = 1_000_000_000
 
 
 def test_fee_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, developers, admin):
+    '''
+    Use default fee distribution:
+    total 10% fee spleets between operators 3%, treasury 5.6%  and developers 1.4%
+    '''
     assert mocklido.balanceOf(admin) == 0
     vKSM.approve(mocklido, 10*UNIT, {'from': admin})
     mocklido.deposit(10 * UNIT, {'from': admin})
@@ -16,16 +20,17 @@ def test_fee_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, deve
 
     assert mocklido.getFee() == 1000
     # call lido.distributeRewards via mock Ledger
-    mockledger.distributeRewards(1*UNIT, {'from': admin})
+    t = mockledger.distributeRewards(1*UNIT, {'from': admin})
+    print(t.info())
 
     balance = mocklido.balanceOf(admin)
-    assert balance == 10_900 * MUNIT  # +900 MUNIT (90%)
+    assert balance == 10_927_900_000  # +927 MUNIT (90% gives ~92.78%)
     balance = mocklido.balanceOf(treasury)
-    assert balance == 39999999  # ~40 MUNIT (4%)
+    assert balance == 57_699_999  # ~57.7 MUNIT (fee 5.6% gives ~5.77% of rewards)
     balance = mocklido.balanceOf(developers)
-    assert balance == 9999998   # ~10 MUNIT (1%)
+    assert balance == 14_399_999   # ~14.3 MUNIT (fee 1.4% gives ~ 1.43%)
     balance = mocklido.balanceOf(mocklido)
-    assert balance == 50000001  # ~50 MUNIT (5%)
+    assert balance == 0  # remains unchanged
 
 
 def test_fee_change_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, developers, admin):
@@ -34,21 +39,26 @@ def test_fee_change_distribution(vKSM, LedgerMock, mocklido, mockledger, treasur
 
     assert mocklido.balanceOf(admin) == 10 * UNIT
     # call lido.distributeRewards via mock Ledger
-    mocklido.setFee(1000, 0, 0, 10000)
-    mockledger.distributeRewards(1*UNIT, {'from': admin})
+    mocklido.setFee(300, 0, 700)
+    # assert mocklido.FEE_BP() == 0x0
 
     assert mocklido.balanceOf(treasury) == 0
-    assert mocklido.balanceOf(developers) == 99999999  # ~100 MUNIT (10%)
+    t = mockledger.distributeRewards(1*UNIT, {'from': admin})
 
-    mocklido.setFee(1000, 0, 10000, 0)
+    print(t.info())
+
+    assert mocklido.balanceOf(treasury) == 0
+    assert mocklido.balanceOf(developers) == 72_099_999  # ~72.1 MUNIT (7% gives 7.21% of 97%)
+
+    mocklido.setFee(300, 700, 0)
     # call lido.distributeRewards via mock Ledger
     mockledger.distributeRewards(1*UNIT, {'from': admin})
 
-    assert mocklido.balanceOf(treasury) == 99999999     # ~100 MUNIT (10%)
-    assert mocklido.balanceOf(developers) == 108181817  # +~9%
+    assert mocklido.balanceOf(treasury) == 72_099_999    # ~72.1 MUNIT (7% gives 7.21% of 97%)
+    assert mocklido.balanceOf(developers) == 78_181_961
 
-    with reverts("LIDO: FEE_TOO_HIGH"):
-        mocklido.setFee(2000, 0, 10000, 0)
+    with reverts("LIDO: FEE_OPERATORS_NOT_MATCH"):
+        mocklido.setFee(200, 100, 700)
 
-    with reverts("LIDO: FEES_DONT_ADD_UP"):
-        mocklido.setFee(1000, 8000, 2000, 1000)
+    with reverts("LIDO: FEE_DONT_ADD_UP"):
+        mocklido.setFee(300, 300, 600)
