@@ -131,9 +131,14 @@ contract Lido is stKSM, Initializable {
     // treasury fund
     address public treasury;
 
-    // default interest value in base points.
-    // 10% is split between operators 3%, treasury 5.6%, and developers 1.4%
-    uint256 internal constant DEFAULT_FEE = 0x3e802410090;
+    /** default interest value in base points.
+    operators 3%, treasury 5.6%, and developers 1.4% as four parts:
+     1000 is 10% total fee
+     9700 is 100% - 3%
+     700  is 5.6% + 1.4%
+     140  is 1.4%
+    */
+    uint256 internal constant DEFAULT_FEE = 0x3e825e402bc008c;
 
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
@@ -330,20 +335,22 @@ contract Lido is stKSM, Initializable {
     * @param _feeDevelopers - Developers percentage in basis points
     */
     function setFee(uint16 _feeOperators, uint16 _feeTreasury,  uint16 _feeDevelopers) external auth(ROLE_FEE_MANAGER) {
-        require(_feeOperators==300, "LIDO: FEE_OPERATORS_NOT_MATCH");
-        require((_feeTreasury + _feeOperators + _feeDevelopers) == 1000, "LIDO: FEE_DONT_ADD_UP");
+        uint16 _fee = _feeTreasury + _feeOperators + _feeDevelopers;
+        require(_fee <= 10000 && (_feeTreasury > 0 || _feeDevelopers > 0) , "LIDO: FEE_DONT_ADD_UP");
 
-        emit FeeSet(uint16(1000), _feeOperators, _feeTreasury, _feeDevelopers);
-        // pack fees in uint256 leading _feeDevelopers values to 97% basis
-        // the sum of _feeTreasury + _feeDevelopers is 700 (7%). It is 721 in 97% basis.
-        FEE_BP = (1000<<16) + (uint256(_feeDevelopers) * 10000 / 9700);
+        emit FeeSet(_fee, _feeOperators, _feeTreasury, _feeDevelopers);
+        // pack fees parts into uint256 value
+        FEE_BP = (uint256(_fee) << 48)
+        + (uint256(10000 - _feeOperators) << 32)
+        + (uint256(_feeTreasury + _feeDevelopers) << 16)
+        + uint256(_feeDevelopers);
     }
 
     /**
     * @notice Returns fee basis points
     */
     function getFee() external view returns (uint16){
-        return (uint16(FEE_BP >> 32));
+        return (uint16(FEE_BP >> 48));
     }
 
     /**
@@ -541,8 +548,15 @@ contract Lido is stKSM, Initializable {
     function distributeRewards(uint256 _totalRewards) external {
         require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
 
-        uint256 feeDevelopers = (FEE_BP & 0xFFFF);
-        assert(feeDevelopers<=721);
+        uint256 _fee = FEE_BP;
+
+        uint256 _feeDev = (_fee & 0xFFFF);
+        _fee = _fee >> 16;
+        // it's `feeDevelopers` + `feeTreasure`
+        uint256 _feeDevTreasure = (_fee & 0xFFFF);
+        assert(_feeDevTreasure>0);
+        // it's 10000 - `feeOperators`
+        _fee = (_fee >> 16 ) & 0xFFFF;
 
         fundRaisedBalance += _totalRewards;
 
@@ -550,22 +564,15 @@ contract Lido is stKSM, Initializable {
             ledgerStake[msg.sender] += _totalRewards;
         }
 
-        uint256 shares2mint = (
-            _totalRewards * 721 * _getTotalShares()
-                /
-            (_getTotalPooledKSM() * 10000 - (721 * _totalRewards))
-        );
+        uint256 _rewards = _totalRewards * _feeDevTreasure / _fee;
+        uint256 shares2mint = _rewards * _getTotalShares() / (_getTotalPooledKSM()  - _rewards);
 
-        _mintShares(address(this), shares2mint);
-        // distribute fee between treasury and developers
-        uint256 _shares = feeDevelopers * shares2mint / 721;
-        _transferShares(address(this), developers, _shares);
-        _emitTransferAfterMintingShares(developers, _shares);
+        _mintShares(treasury, shares2mint);
 
-        // all remaining transfer to the treasury
-        _shares = shares2mint - _shares;
-        _transferShares(address(this), treasury, _shares);
-        _emitTransferAfterMintingShares(treasury, _shares);
+        uint256 _devShares = shares2mint *  _feeDev / _feeDevTreasure;
+        _transferShares(treasury, developers, _devShares);
+        _emitTransferAfterMintingShares(developers, _devShares);
+        _emitTransferAfterMintingShares(treasury, shares2mint - _devShares);
 
         emit Rewards(msg.sender, _totalRewards);
     }
