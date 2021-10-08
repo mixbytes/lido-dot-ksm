@@ -55,7 +55,7 @@ contract AuthManager is IAuthManager, Initializable {
 
     function remove(bytes32 role, address member) external override {
         require(_find(members[msg.sender], SUPER_ROLE) != NOTFOUND, "FORBIDDEN");
-        require(msg.sender!=member || role!=SUPER_ROLE, "INVALID");
+        require(msg.sender != member || role != SUPER_ROLE, "INVALID");
 
         bytes32[] storage _roles = members[member];
 
