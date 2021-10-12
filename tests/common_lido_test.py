@@ -53,7 +53,6 @@ def test_fee_change_distribution(vKSM, LedgerMock, mocklido, mockledger, treasur
     t = mockledger.distributeRewards(1*UNIT, {'from': admin})
 
     print(t.info())
-    assert False
 
     assert mocklido.balanceOf(treasury) == 0
     assert mocklido.balanceOf(developers) == 72_164_947  # ~72.1 MUNIT (7% gives 7.21% of 97%)
