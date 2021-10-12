@@ -3,6 +3,12 @@ from brownie import reverts
 MUNIT = 1_000_000
 UNIT = 1_000_000_000
 
+def test_default_fees(lido):
+    assert lido.getFee() == 1000
+    assert lido.getOperatorsFee() == 300
+    assert lido.getDevelopersFee() == 140
+    assert lido.getTreasuryFee() == 560
+
 
 def test_fee_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, developers, admin):
     '''

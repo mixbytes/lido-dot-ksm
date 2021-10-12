@@ -105,12 +105,16 @@ def lido(Lido, vKSM, vAccounts, aux, auth_manager, oracle_master, proxy_admin, c
 
 
 @pytest.fixture(scope="module")
-def mocklido(Lido, LedgerMock, vKSM, vAccounts, auth_manager, oracle_master, aux, Ledger, admin, developers, treasury):
+def mocklido(Lido, LedgerMock, Oracle, OracleMaster, vKSM, vAccounts, auth_manager, aux, admin, developers, treasury):
     lc = LedgerMock.deploy({'from': admin})
+    o = Oracle.deploy({'from': admin})
+    om = OracleMaster.deploy({'from': admin})
+    om.initialize(o, 1, {'from': admin})
+
     _lido = Lido.deploy({'from': admin})
     _lido.initialize(auth_manager, vKSM, aux, vAccounts, developers, treasury, {'from': admin})
     _lido.setLedgerClone(lc, {'from': admin})
-    _lido.setOracleMaster(oracle_master, {'from': admin})
+    _lido.setOracleMaster(om, {'from': admin})
 
     return _lido
 

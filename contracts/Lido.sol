@@ -347,10 +347,32 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
-    * @notice Returns fee basis points
+    * @notice Returns total fee basis points
     */
     function getFee() external view returns (uint16){
-        return (uint16(FEE_BP >> 48));
+        return uint16(FEE_BP >> 48);
+    }
+
+    /**
+    * @notice Returns operators fee basis points
+    */
+    function getOperatorsFee() external view returns (uint16){
+        return ( 10000 - uint16(FEE_BP >> 32));
+    }
+
+    /**
+    * @notice Returns treasury fee basis points
+    */
+    function getTreasuryFee() external view returns (uint16){
+        uint256 _fee = FEE_BP;
+        return  uint16((_fee >> 16) - (0xFFFF & _fee));
+    }
+
+    /**
+    * @notice Returns developers fee basis points
+    */
+    function getDevelopersFee() external view returns (uint16){
+        return uint16(FEE_BP);
     }
 
     /**
