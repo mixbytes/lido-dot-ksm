@@ -114,7 +114,10 @@ contract Lido is stKSM, Initializable {
     It's packed uint256 consist of three uint16 (total_fee, treasury_fee, developers_fee).
     where total_fee = treasury_fee + developers_fee + 3000 (3% operators fee)
     */
-    uint256 public FEE_BP;
+    uint16 public FEE;
+    uint16 public OPERATORS_FEE;
+    uint16 public TREASURY_FEE;
+    uint16 public DEVELOPERS_FEE;
 
     // ledger clone template contract
     address public LEDGER_CLONE;
@@ -132,13 +135,10 @@ contract Lido is stKSM, Initializable {
     address public treasury;
 
     /** default interest value in base points.
-    operators 3%, treasury 5.6%, and developers 1.4% as four parts:
-     1000 is 10% total fee
-     9700 is 100% - 3%
-     700  is 5.6% + 1.4%
-     140  is 1.4%
     */
-    uint256 internal constant DEFAULT_FEE = 0x3e825e402bc008c;
+    uint16 internal constant DEFAULT_DEVELOPERS_FEE = 140;
+    uint16 internal constant DEFAULT_OPERATORS_FEE = 300;
+    uint16 internal constant DEFAULT_TREASURY_FEE = 560;
 
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
@@ -197,7 +197,10 @@ contract Lido is stKSM, Initializable {
         AUTH_MANAGER = _authManager;
 
         MAX_LEDGERS_AMOUNT = 200;
-        FEE_BP = DEFAULT_FEE;
+        FEE = DEFAULT_OPERATORS_FEE + DEFAULT_DEVELOPERS_FEE + DEFAULT_TREASURY_FEE;
+        OPERATORS_FEE = DEFAULT_OPERATORS_FEE;
+        DEVELOPERS_FEE = DEFAULT_DEVELOPERS_FEE;
+        TREASURY_FEE = DEFAULT_TREASURY_FEE;
         GARANTOR = 0x00;
 
         treasury = _treasury;
@@ -339,40 +342,39 @@ contract Lido is stKSM, Initializable {
         require(_fee <= 10000 && (_feeTreasury > 0 || _feeDevelopers > 0) , "LIDO: FEE_DONT_ADD_UP");
 
         emit FeeSet(_fee, _feeOperators, _feeTreasury, _feeDevelopers);
-        // pack fees parts into uint256 value
-        FEE_BP = (uint256(_fee) << 48)
-        + (uint256(10000 - _feeOperators) << 32)
-        + (uint256(_feeTreasury + _feeDevelopers) << 16)
-        + uint256(_feeDevelopers);
+
+        FEE = _fee;
+        DEVELOPERS_FEE = _feeDevelopers;
+        OPERATORS_FEE = _feeOperators;
+        TREASURY_FEE = _feeTreasury;
     }
 
     /**
     * @notice Returns total fee basis points
     */
     function getFee() external view returns (uint16){
-        return uint16(FEE_BP >> 48);
+        return FEE;
     }
 
     /**
     * @notice Returns operators fee basis points
     */
     function getOperatorsFee() external view returns (uint16){
-        return ( 10000 - uint16(FEE_BP >> 32));
+        return OPERATORS_FEE;
     }
 
     /**
     * @notice Returns treasury fee basis points
     */
     function getTreasuryFee() external view returns (uint16){
-        uint256 _fee = FEE_BP;
-        return  uint16((_fee >> 16) - (0xFFFF & _fee));
+       return TREASURY_FEE;
     }
 
     /**
     * @notice Returns developers fee basis points
     */
     function getDevelopersFee() external view returns (uint16){
-        return uint16(FEE_BP);
+        return DEVELOPERS_FEE;
     }
 
     /**
@@ -570,15 +572,13 @@ contract Lido is stKSM, Initializable {
     function distributeRewards(uint256 _totalRewards) external {
         require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
 
-        uint256 _fee = FEE_BP;
+        uint256 _feeDev = uint256(DEVELOPERS_FEE);
 
-        uint256 _feeDev = (_fee & 0xFFFF);
-        _fee = _fee >> 16;
         // it's `feeDevelopers` + `feeTreasure`
-        uint256 _feeDevTreasure = (_fee & 0xFFFF);
+        uint256 _feeDevTreasure = uint256(_feeDev + TREASURY_FEE);
         assert(_feeDevTreasure>0);
         // it's 10000 - `feeOperators`
-        _fee = (_fee >> 16 ) & 0xFFFF;
+        uint256 _fee = uint256(10000 - OPERATORS_FEE);
 
         fundRaisedBalance += _totalRewards;
 
