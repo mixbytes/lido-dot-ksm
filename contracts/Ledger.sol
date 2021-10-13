@@ -284,35 +284,39 @@ contract Ledger {
 
     function _processRelayTransfers(Types.OracleData memory _report) internal returns(bool) {
         // wait for the downward transfer to complete
-        if (transferDownwardBalance > 0) {
+        uint128 _transferDownwardBalance = transferDownwardBalance;
+        if (_transferDownwardBalance > 0) {
             uint128 totalDownwardTransferred = uint128(vKSM.balanceOf(address(this)));
 
-            if (totalDownwardTransferred >= transferDownwardBalance ) {
+            if (totalDownwardTransferred >= _transferDownwardBalance ) {
                 // take transferred funds into buffered balance
-                vKSM.transfer(address(LIDO), transferDownwardBalance);
+                vKSM.transfer(address(LIDO), _transferDownwardBalance);
 
                 // Clear transfer flag
-                cachedTotalBalance -= transferDownwardBalance;
+                cachedTotalBalance -= _transferDownwardBalance;
                 transferDownwardBalance = 0;
 
-                emit DownwardComplete(transferDownwardBalance);
+                emit DownwardComplete(_transferDownwardBalance);
+                _transferDownwardBalance = 0;
             }
         }
 
         // wait for the upward transfer to complete
-        if (transferUpwardBalance > 0) {
+        uint128 _transferUpwardBalance = transferUpwardBalance;
+        if (_transferUpwardBalance > 0) {
             uint128 ledgerFreeBalance = (totalBalance - lockedBalance);
             uint128 freeBalanceIncrement = _report.getFreeBalance() - ledgerFreeBalance;
 
-            if (freeBalanceIncrement >= transferUpwardBalance) {
-                cachedTotalBalance += transferUpwardBalance;
+            if (freeBalanceIncrement >= _transferUpwardBalance) {
+                cachedTotalBalance += _transferUpwardBalance;
 
-                emit UpwardComplete(transferUpwardBalance);
                 transferUpwardBalance = 0;
+                emit UpwardComplete(_transferUpwardBalance);
+                _transferUpwardBalance = 0;
             }
         }
 
-        if (transferDownwardBalance == 0 && transferUpwardBalance == 0) {
+        if (_transferDownwardBalance == 0 && _transferUpwardBalance == 0) {
             // update ledger data from oracle report
             totalBalance = _report.stashBalance;
             lockedBalance = _report.totalBalance;
