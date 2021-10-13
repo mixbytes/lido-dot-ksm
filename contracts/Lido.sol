@@ -649,9 +649,10 @@ contract Lido is stKSM, Initializable {
         uint256 stakesSum = 0;
         address nonZeroLedged = address(0);
         uint _length = ledgers.length;
+        uint256 _ledgerSharesTotal = ledgerSharesTotal;
         for (uint i = 0; i < _length; i++) {
             uint256 share = ledgerShares[ledgers[i]];
-            uint256 stake = totalStake * share / ledgerSharesTotal;
+            uint256 stake = totalStake * share / _ledgerSharesTotal;
 
             stakesSum += stake;
             ledgerStake[ledgers[i]] = stake;
@@ -689,38 +690,46 @@ contract Lido is stKSM, Initializable {
         address[] memory ledgersCache = new address[](ledgersLength);
         int256[] memory ledgerStakesCache = new int256[](ledgersLength);
 
-        int256 minDiff = 0;
-        int256 diffsSum = 0;
-        int256 tmp = 0;
-        for (uint256 i = 0; i < ledgersLength; ++i) {
-            ledgersCache[i] = ledgers[i];
-            ledgerStakesCache[i] = int256(ledgerStake[ledgersCache[i]]);
+        int256 shift;
+        int256 shiftedDiffsSum;
+        {
+            int256 minDiff = 0;
+            int256 diffsSum = 0;
+            int256 tmp;
 
-            uint256 targetStakes = totalStake * ledgerShares[ledgersCache[i]] / ledgerSharesTotal;
-            tmp = int256(targetStakes) - int256(ledgerStakesCache[i]);
-            diffs[i] = tmp;
-            diffsSum += tmp;
-            if (minDiff > tmp) {
-                minDiff = tmp;
+            uint256 _ledgerSharesTotal = ledgerSharesTotal;
+            for (uint256 i = 0; i < ledgersLength; ++i) {
+                ledgersCache[i] = ledgers[i];
+                ledgerStakesCache[i] = int256(ledgerStake[ledgersCache[i]]);
+
+                uint256 targetStakes = totalStake * ledgerShares[ledgersCache[i]] / _ledgerSharesTotal;
+                tmp = int256(targetStakes) - int256(ledgerStakesCache[i]);
+                diffs[i] = tmp;
+                diffsSum += tmp;
+                if (minDiff > tmp) {
+                    minDiff = tmp;
+                }
             }
+
+            // if stake is positiv we align diffs to 1 to avoid unbondings
+            // otherwise no need to align
+            shift = _stake > 0 ? -minDiff + 1 : int256(0);
+            shiftedDiffsSum = diffsSum + shift * int256(ledgersLength);
         }
-
-        // if stake is positiv we align diffs to 1 to avoid unbondings
-        // otherwise no need to align
-        int256 shift = _stake > 0 ? -minDiff + 1 : int256(0);
-        int256 shiftedDiffsSum = diffsSum + shift * int256(ledgersLength);
-
         // then we need fill ledgers proportionally their shifted diffs
         uint256 stakesSum = 0;
         address nonZeroLedger = address(0);
-        for (uint256 i = 0; i < ledgersLength; ++i) {
-            tmp = ledgerStakesCache[i] +
-                (_stake * (diffs[i] + shift) / shiftedDiffsSum);
-            ledgerStake[ledgersCache[i]] = uint256(tmp);
-            stakesSum += uint256(tmp);
+        {
+            int256 tmp;
+            for (uint256 i = 0; i < ledgersLength; ++i) {
+                tmp = ledgerStakesCache[i] +
+                    (_stake * (diffs[i] + shift) / shiftedDiffsSum);
+                ledgerStake[ledgersCache[i]] = uint256(tmp);
+                stakesSum += uint256(tmp);
 
-            if (nonZeroLedger == address(0) && ledgerShares[ledgersCache[i]] > 0) {
-                nonZeroLedger = ledgersCache[i];
+                if (nonZeroLedger == address(0) && ledgerShares[ledgersCache[i]] > 0) {
+                    nonZeroLedger = ledgersCache[i];
+                }
             }
         }
 
