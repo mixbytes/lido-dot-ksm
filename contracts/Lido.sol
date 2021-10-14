@@ -94,11 +94,11 @@ contract Lido is stKSM, Initializable {
 
 
     // vKSM precompile
-    IvKSM internal vKSM = IvKSM(0x0000000000000000000000000000000000000801);
+    IvKSM internal vKSM;
     // AUX relay call builder precompile
-    address internal AUX = 0x0000000000000000000000000000000000000801;
+    address internal AUX;
     // Virtual accounts precompile
-    address internal vAccounts = 0x0000000000000000000000000000000000000801;
+    address internal vAccounts;
 
 
     // auth manager contract address
