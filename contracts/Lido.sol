@@ -588,7 +588,13 @@ contract Lido is stKSM, Initializable {
     */
     function _softRebalanceStakes() internal {
         if (bufferedDeposits > 0 || bufferedRedeems > 0) {
-            _distribute(bufferedDeposits.toInt256() - bufferedRedeems.toInt256());
+            // XXX HOT FIX: underflow in `_distribute`
+            if (bufferedDeposits < bufferedRedeems) {
+                _forceRebalanceStakes();
+            }
+            else {
+                _distribute(bufferedDeposits.toInt256() - bufferedRedeems.toInt256());
+            }
 
             bufferedDeposits = 0;
             bufferedRedeems = 0;
