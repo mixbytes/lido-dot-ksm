@@ -2,6 +2,13 @@
 pragma solidity ^0.8.0;
 
 interface Types {
+    struct Fee{
+        uint16 total;
+        uint16 operators;
+        uint16 developers;
+        uint16 treasury;
+    }
+
     struct Stash {
         bytes32 stashAccount;
         uint64  eraId;

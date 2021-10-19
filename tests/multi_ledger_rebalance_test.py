@@ -1,4 +1,4 @@
-from brownie import chain, accounts
+from brownie import chain
 from helpers import RelayChain, distribute_initial_tokens
 
 

@@ -129,14 +129,14 @@ contract Ledger {
     * @notice Return target stake amount for this ledger
     * @return target stake amount
     */
-    function ledgerStake() view public returns (uint256) {
+    function ledgerStake() public view returns (uint256) {
         return LIDO.ledgerStake(address(this));
     }
 
     /**
     * @notice Return true if ledger doesn't have any funds
     */
-    function isEmpty() view external returns (bool) {
+    function isEmpty() external view returns (bool) {
         return totalBalance == 0 && transferUpwardBalance == 0 && transferDownwardBalance == 0;
     }
 
@@ -172,15 +172,15 @@ contract Ledger {
         if (!_processRelayTransfers(_report)) {
             return;
         }
-
-        if (cachedTotalBalance < _report.stashBalance) { // if cached balance > real => we have reward
-            uint128 reward = _report.stashBalance - cachedTotalBalance;
+        uint128 _cachedTotalBalance = cachedTotalBalance;
+        if (_cachedTotalBalance < _report.stashBalance) { // if cached balance > real => we have reward
+            uint128 reward = _report.stashBalance - _cachedTotalBalance;
             LIDO.distributeRewards(reward);
 
             emit Rewards(reward, _report.stashBalance);
         }
-        else if (cachedTotalBalance > _report.stashBalance) {
-            uint128 slash = cachedTotalBalance - _report.stashBalance;
+        else if (_cachedTotalBalance > _report.stashBalance) {
+            uint128 slash = _cachedTotalBalance - _report.stashBalance;
             LIDO.distributeLosses(slash);
 
             emit Slash(slash, _report.stashBalance);
@@ -209,7 +209,6 @@ contract Ledger {
                     vKSM.transferFrom(address(LIDO), address(this), forTransfer);
                     vKSM.relayTransferTo(_report.stashAccount, forTransfer);
                     transferUpwardBalance += forTransfer;
-                    deficit -= forTransfer;
                 }
             }
 
@@ -258,11 +257,12 @@ contract Ledger {
             }
 
             // need to unbond if we still have deficit
-            if (deficit > 0 && nonWithdrawableBalance < deficit) {
+            if (nonWithdrawableBalance < deficit) {
                 // todo drain stake if remaining balance is less than MIN_NOMINATOR_BALANCE
                 uint128 forUnbond = deficit - nonWithdrawableBalance;
-                calls[calls_counter++] = AUX.buildUnBond(deficit - nonWithdrawableBalance);
-                deficit -= forUnbond;
+                calls[calls_counter++] = AUX.buildUnBond(forUnbond);
+                // notice.
+                // deficit -= forUnbond;
             }
 
             // bond all remain free balance
@@ -284,35 +284,39 @@ contract Ledger {
 
     function _processRelayTransfers(Types.OracleData memory _report) internal returns(bool) {
         // wait for the downward transfer to complete
-        if (transferDownwardBalance > 0) {
+        uint128 _transferDownwardBalance = transferDownwardBalance;
+        if (_transferDownwardBalance > 0) {
             uint128 totalDownwardTransferred = uint128(vKSM.balanceOf(address(this)));
 
-            if (totalDownwardTransferred >= transferDownwardBalance ) {
+            if (totalDownwardTransferred >= _transferDownwardBalance ) {
                 // take transferred funds into buffered balance
-                vKSM.transfer(address(LIDO), transferDownwardBalance);
+                vKSM.transfer(address(LIDO), _transferDownwardBalance);
 
                 // Clear transfer flag
-                cachedTotalBalance -= transferDownwardBalance;
+                cachedTotalBalance -= _transferDownwardBalance;
                 transferDownwardBalance = 0;
 
-                emit DownwardComplete(transferDownwardBalance);
+                emit DownwardComplete(_transferDownwardBalance);
+                _transferDownwardBalance = 0;
             }
         }
 
         // wait for the upward transfer to complete
-        if (transferUpwardBalance > 0) {
+        uint128 _transferUpwardBalance = transferUpwardBalance;
+        if (_transferUpwardBalance > 0) {
             uint128 ledgerFreeBalance = (totalBalance - lockedBalance);
             uint128 freeBalanceIncrement = _report.getFreeBalance() - ledgerFreeBalance;
 
-            if (freeBalanceIncrement >= transferUpwardBalance) {
-                cachedTotalBalance += transferUpwardBalance;
+            if (freeBalanceIncrement >= _transferUpwardBalance) {
+                cachedTotalBalance += _transferUpwardBalance;
 
-                emit UpwardComplete(transferUpwardBalance);
                 transferUpwardBalance = 0;
+                emit UpwardComplete(_transferUpwardBalance);
+                _transferUpwardBalance = 0;
             }
         }
 
-        if (transferDownwardBalance == 0 && transferUpwardBalance == 0) {
+        if (_transferDownwardBalance == 0 && _transferUpwardBalance == 0) {
             // update ledger data from oracle report
             totalBalance = _report.stashBalance;
             lockedBalance = _report.totalBalance;

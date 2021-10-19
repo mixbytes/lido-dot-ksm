@@ -136,8 +136,8 @@ def main():
 
     lido.setLedgerClone(lc, {'from': alith})
 
-    print("setLido for oracleMaster")
-    oracleMaster.setLido(lido, {'from': alith})
+    #print("setLido for oracleMaster")
+    #oracleMaster.setLido(lido, {'from': alith})
     lido.setOracleMaster(oracleMaster, {'from': alith, 'required_confs': 2})
     # Dev Kusama has 3 min era
     era_sec = 60 * 3

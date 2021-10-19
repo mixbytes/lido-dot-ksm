@@ -28,7 +28,7 @@ contract Lido is stKSM, Initializable {
     event Claimed(address indexed receiver, uint256 amount);
 
     // Fee was updated
-    event FeeSet(uint16 feeBasisPoints);
+    event FeeSet(uint16 fee, uint16 feeOperatorsBP, uint16 feeTreasuryBP,  uint16 feeDevelopersBP);
 
     // Rewards distributed
     event Rewards(address ledger, uint256 rewards);
@@ -94,11 +94,11 @@ contract Lido is stKSM, Initializable {
 
 
     // vKSM precompile
-    IvKSM internal vKSM = IvKSM(0x0000000000000000000000000000000000000801);
+    IvKSM internal vKSM;
     // AUX relay call builder precompile
-    address internal AUX = 0x0000000000000000000000000000000000000801;
+    address internal AUX;
     // Virtual accounts precompile
-    address internal vAccounts = 0x0000000000000000000000000000000000000801;
+    address internal vAccounts;
 
 
     // auth manager contract address
@@ -110,8 +110,11 @@ contract Lido is stKSM, Initializable {
     // Who pay off relay chain transaction fees
     bytes32 public GARANTOR;
 
-    // fee interest in basis points
-    uint16 public FEE_BP;
+    /** fee interest in basis points.
+    It's packed uint256 consist of three uint16 (total_fee, treasury_fee, developers_fee).
+    where total_fee = treasury_fee + developers_fee + 3000 (3% operators fee)
+    */
+    Types.Fee private FEE;
 
     // ledger clone template contract
     address public LEDGER_CLONE;
@@ -122,9 +125,17 @@ contract Lido is stKSM, Initializable {
     // relay spec
     Types.RelaySpec public RELAY_SPEC;
 
+    // developers fund
+    address public developers;
 
-    // default interest value in base points
-    uint16 internal constant DEFAULT_FEE = 1000;
+    // treasury fund
+    address public treasury;
+
+    /** default interest value in base points.
+    */
+    uint16 internal constant DEFAULT_DEVELOPERS_FEE = 140;
+    uint16 internal constant DEFAULT_OPERATORS_FEE = 300;
+    uint16 internal constant DEFAULT_TREASURY_FEE = 560;
 
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
@@ -147,6 +158,12 @@ contract Lido is stKSM, Initializable {
     // Stake manager role
     bytes32 internal constant ROLE_STAKE_MANAGER = keccak256("ROLE_STAKE_MANAGER");
 
+    // Treasury manager role
+    bytes32 internal constant ROLE_TREASURY = keccak256("ROLE_SET_TREASURY");
+
+    // Developers address change role
+    bytes32 internal constant ROLE_DEVELOPERS = keccak256("ROLE_SET_DEVELOPERS");
+
     // max amount of claims in parallel
     uint16 internal constant MAX_CLAIMS = 10;
 
@@ -167,7 +184,9 @@ contract Lido is stKSM, Initializable {
         address _authManager,
         address _vKSM,
         address _AUX,
-        address _vAccounts
+        address _vAccounts,
+        address _developers,
+        address _treasury
     ) external initializer {
         vKSM = IvKSM(_vKSM);
         AUX = _AUX;
@@ -175,8 +194,16 @@ contract Lido is stKSM, Initializable {
         AUTH_MANAGER = _authManager;
 
         MAX_LEDGERS_AMOUNT = 200;
-        FEE_BP = 200;
+        Types.Fee memory _fee;
+        _fee.total = DEFAULT_OPERATORS_FEE + DEFAULT_DEVELOPERS_FEE + DEFAULT_TREASURY_FEE;
+        _fee.operators = DEFAULT_OPERATORS_FEE;
+        _fee.developers = DEFAULT_DEVELOPERS_FEE;
+        _fee.treasury = DEFAULT_TREASURY_FEE;
+        FEE = _fee;
         GARANTOR = 0x00;
+
+        treasury = _treasury;
+        developers =_developers;
     }
 
     /**
@@ -184,6 +211,20 @@ contract Lido is stKSM, Initializable {
     */
     fallback() external {
         revert("FORBIDDEN");
+    }
+
+    /**
+    * @notice Set treasury address to '_treasury'
+    */
+    function setTreasury(address _treasury) external auth(ROLE_TREASURY) {
+        treasury = _treasury;
+    }
+
+    /**
+    * @notice Set developers address to '_developers'
+    */
+    function setDevelopers(address _developers) external auth(ROLE_DEVELOPERS) {
+        developers = _developers;
     }
 
     /**
@@ -277,6 +318,7 @@ contract Lido is stKSM, Initializable {
     function setOracleMaster(address _oracleMaster) external auth(ROLE_ORACLE_MANAGER) {
         require(ORACLE_MASTER == address(0), "LIDO: ORACLE_MASTER_ALREADY_DEFINED");
         ORACLE_MASTER = _oracleMaster;
+        IOracleMaster(ORACLE_MASTER).setLido(address(this));
     }
 
     /**
@@ -290,11 +332,49 @@ contract Lido is stKSM, Initializable {
 
     /**
     * @notice Set new lido fee, allowed to call only by ROLE_FEE_MANAGER
-    * @param _feeBP - fee percent in basis amounts(10000)
+    * @param _feeOperators - Operators percentage in basis points. It's always 3%
+    * @param _feeTreasury - Treasury fund percentage in basis points
+    * @param _feeDevelopers - Developers percentage in basis points
     */
-    function setFeeBP(uint16 _feeBP) external auth(ROLE_FEE_MANAGER) {
-        FEE_BP = _feeBP;
-        emit FeeSet(_feeBP);
+    function setFee(uint16 _feeOperators, uint16 _feeTreasury,  uint16 _feeDevelopers) external auth(ROLE_FEE_MANAGER) {
+        Types.Fee memory _fee;
+        _fee.total = _feeTreasury + _feeOperators + _feeDevelopers;
+        require(_fee.total <= 10000 && (_feeTreasury > 0 || _feeDevelopers > 0) , "LIDO: FEE_DONT_ADD_UP");
+
+        emit FeeSet(_fee.total, _feeOperators, _feeTreasury, _feeDevelopers);
+
+        _fee.developers = _feeDevelopers;
+        _fee.operators = _feeOperators;
+        _fee.treasury = _feeTreasury;
+        FEE = _fee;
+    }
+
+    /**
+    * @notice Returns total fee basis points
+    */
+    function getFee() external view returns (uint16){
+        return FEE.total;
+    }
+
+    /**
+    * @notice Returns operators fee basis points
+    */
+    function getOperatorsFee() external view returns (uint16){
+        return FEE.operators;
+    }
+
+    /**
+    * @notice Returns treasury fee basis points
+    */
+    function getTreasuryFee() external view returns (uint16){
+       return FEE.treasury;
+    }
+
+    /**
+    * @notice Returns developers fee basis points
+    */
+    function getDevelopersFee() external view returns (uint16){
+        return FEE.developers;
     }
 
     /**
@@ -367,7 +447,7 @@ contract Lido is stKSM, Initializable {
     * @param _newShare - new stare amount
     */
     function setLedgerShare(address _ledger, uint256 _newShare) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgerByAddress[_ledger] != 0, "LIDO: LEDGER_BOT_FOUND");
+        require(ledgerByAddress[_ledger] != 0, "LIDO: LEDGER_NOT_FOUND");
 
         ledgerSharesTotal -= ledgerShares[_ledger];
         ledgerShares[_ledger] = _newShare;
@@ -384,7 +464,7 @@ contract Lido is stKSM, Initializable {
     */
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
         require(ledgerByAddress[_ledgerAddress] != 0, "LIDO: LEDGER_NOT_FOUND");
-        require(ledgerShares[_ledgerAddress] == 0, "LIDO: LEGDER_HAS_NON_ZERO_SHARE");
+        require(ledgerShares[_ledgerAddress] == 0, "LIDO: LEDGER_HAS_NON_ZERO_SHARE");
 
         ILedger ledger = ILedger(_ledgerAddress);
         require(ledger.isEmpty(), "LIDO: LEDGER_IS_NOT_EMPTY");
@@ -492,7 +572,11 @@ contract Lido is stKSM, Initializable {
     function distributeRewards(uint256 _totalRewards) external {
         require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
 
-        uint256 feeBasis = uint256(FEE_BP);
+        Types.Fee memory _fee = FEE;
+
+        // it's `feeDevelopers` + `feeTreasure`
+        uint256 _feeDevTreasure = uint256(_fee.developers + _fee.treasury);
+        assert(_feeDevTreasure>0);
 
         fundRaisedBalance += _totalRewards;
 
@@ -500,14 +584,15 @@ contract Lido is stKSM, Initializable {
             ledgerStake[msg.sender] += _totalRewards;
         }
 
-        uint256 shares2mint = (
-            _totalRewards * feeBasis * _getTotalShares()
-                /
-            (_getTotalPooledKSM() * 10000 - (feeBasis * _totalRewards))
-        );
+        uint256 _rewards = _totalRewards * _feeDevTreasure / uint256(10000 - _fee.operators);
+        uint256 shares2mint = _rewards * _getTotalShares() / (_getTotalPooledKSM()  - _rewards);
 
-        _mintShares(address(this), shares2mint);
-        //TODO mixbytes shares
+        _mintShares(treasury, shares2mint);
+
+        uint256 _devShares = shares2mint *  uint256(_fee.developers) / _feeDevTreasure;
+        _transferShares(treasury, developers, _devShares);
+        _emitTransferAfterMintingShares(developers, _devShares);
+        _emitTransferAfterMintingShares(treasury, shares2mint - _devShares);
 
         emit Rewards(msg.sender, _totalRewards);
     }
@@ -549,7 +634,8 @@ contract Lido is stKSM, Initializable {
     * @notice Refresh allowance for each ledger, allowed to call only by ROLE_LEDGER_MANAGER
     */
     function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
-        for (uint i = 0; i < ledgers.length; i++) {
+        uint _length = ledgers.length;
+        for (uint i = 0; i < _length; i++) {
             vKSM.approve(ledgers[i], type(uint256).max);
         }
     }
@@ -562,10 +648,11 @@ contract Lido is stKSM, Initializable {
 
         uint256 stakesSum = 0;
         address nonZeroLedged = address(0);
-
-        for (uint i = 0; i < ledgers.length; i++) {
+        uint _length = ledgers.length;
+        uint256 _ledgerSharesTotal = ledgerSharesTotal;
+        for (uint i = 0; i < _length; i++) {
             uint256 share = ledgerShares[ledgers[i]];
-            uint256 stake = totalStake * share / ledgerSharesTotal;
+            uint256 stake = totalStake * share / _ledgerSharesTotal;
 
             stakesSum += stake;
             ledgerStake[ledgers[i]] = stake;
@@ -603,38 +690,46 @@ contract Lido is stKSM, Initializable {
         address[] memory ledgersCache = new address[](ledgersLength);
         int256[] memory ledgerStakesCache = new int256[](ledgersLength);
 
-        int256 minDiff = 0;
-        int256 diffsSum = 0;
-        int256 tmp = 0;
-        for (uint256 i = 0; i < ledgersLength; ++i) {
-            ledgersCache[i] = ledgers[i];
-            ledgerStakesCache[i] = int256(ledgerStake[ledgersCache[i]]);
+        int256 shift;
+        int256 shiftedDiffsSum;
+        {
+            int256 minDiff = 0;
+            int256 diffsSum = 0;
+            int256 tmp;
 
-            uint256 targetStakes = totalStake * ledgerShares[ledgersCache[i]] / ledgerSharesTotal;
-            tmp = int256(targetStakes) - int256(ledgerStakesCache[i]);
-            diffs[i] = tmp;
-            diffsSum += tmp;
-            if (minDiff > tmp) {
-                minDiff = tmp;
+            uint256 _ledgerSharesTotal = ledgerSharesTotal;
+            for (uint256 i = 0; i < ledgersLength; ++i) {
+                ledgersCache[i] = ledgers[i];
+                ledgerStakesCache[i] = int256(ledgerStake[ledgersCache[i]]);
+
+                uint256 targetStakes = totalStake * ledgerShares[ledgersCache[i]] / _ledgerSharesTotal;
+                tmp = int256(targetStakes) - int256(ledgerStakesCache[i]);
+                diffs[i] = tmp;
+                diffsSum += tmp;
+                if (minDiff > tmp) {
+                    minDiff = tmp;
+                }
             }
+
+            // if stake is positiv we align diffs to 1 to avoid unbondings
+            // otherwise no need to align
+            shift = _stake > 0 ? -minDiff + 1 : int256(0);
+            shiftedDiffsSum = diffsSum + shift * int256(ledgersLength);
         }
-
-        // if stake is positiv we align diffs to 1 to avoid unbondings
-        // otherwise no need to align
-        int256 shift = _stake > 0 ? -minDiff + 1 : int256(0);
-        int256 shiftedDiffsSum = diffsSum + shift * int256(ledgersLength);
-
         // then we need fill ledgers proportionally their shifted diffs
         uint256 stakesSum = 0;
         address nonZeroLedger = address(0);
-        for (uint256 i = 0; i < ledgersLength; ++i) {
-            tmp = ledgerStakesCache[i] +
-                (_stake * (diffs[i] + shift) / shiftedDiffsSum);
-            ledgerStake[ledgersCache[i]] = uint256(tmp);
-            stakesSum += uint256(tmp);
+        {
+            int256 tmp;
+            for (uint256 i = 0; i < ledgersLength; ++i) {
+                tmp = ledgerStakesCache[i] +
+                    (_stake * (diffs[i] + shift) / shiftedDiffsSum);
+                ledgerStake[ledgersCache[i]] = uint256(tmp);
+                stakesSum += uint256(tmp);
 
-            if (nonZeroLedger == address(0) && ledgerShares[ledgersCache[i]] > 0) {
-                nonZeroLedger = ledgersCache[i];
+                if (nonZeroLedger == address(0) && ledgerShares[ledgersCache[i]] > 0) {
+                    nonZeroLedger = ledgersCache[i];
+                }
             }
         }
 
@@ -650,7 +745,7 @@ contract Lido is stKSM, Initializable {
     * @notice Process user deposit, mints stKSM and increase the pool buffer
     * @return amount of stKSM shares generated
     */
-    function _submit(uint256 _deposit) internal whenNotPaused returns (uint256) {
+    function _submit(uint256 _deposit) internal returns (uint256) {
         address sender = msg.sender;
 
         require(_deposit != 0, "LIDO: ZERO_DEPOSIT");

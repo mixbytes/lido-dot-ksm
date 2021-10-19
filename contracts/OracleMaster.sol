@@ -120,7 +120,8 @@ contract OracleMaster is Pausable {
         // If the QUORUM value lowered, check existing reports whether it is time to push
         if (oldQuorum > _quorum) {
             address[] memory ledgers = ILido(LIDO).getLedgerAddresses();
-            for (uint256 i = 0; i < ledgers.length; ++i) {
+            uint256 _length = ledgers.length;
+            for (uint256 i = 0; i < _length; ++i) {
                 address oracle = oracleForLedger[ledgers[i]];
                 if (oracle != address(0)) {
                     IOracle(oracle).softenQuorum(_quorum, eraId);
@@ -303,7 +304,8 @@ contract OracleMaster is Pausable {
     */
     function _clearReporting() internal {
         address[] memory ledgers = ILido(LIDO).getLedgerAddresses();
-        for (uint256 i = 0; i < ledgers.length; ++i) {
+        uint256 _length = ledgers.length;
+        for (uint256 i = 0; i < _length; ++i) {
             address oracle = oracleForLedger[ledgers[i]];
             if (oracle != address(0)) {
                 IOracle(oracle).clearReporting();

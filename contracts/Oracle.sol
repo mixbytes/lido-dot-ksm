@@ -75,11 +75,12 @@ contract Oracle {
     * @param _staking report data
     */
     function reportRelay(uint256 _index, uint256 _quorum, uint64 _eraId, Types.OracleData calldata _staking) external onlyOracleMaster {
-        uint256 mask = 1 << _index;
-        uint256 reportBitmask = currentReportBitmask;
-        require(reportBitmask & mask == 0, "ORACLE: ALREADY_SUBMITTED");
-        currentReportBitmask = (reportBitmask | mask);
-
+        {
+            uint256 mask = 1 << _index;
+            uint256 reportBitmask = currentReportBitmask;
+            require(reportBitmask & mask == 0, "ORACLE: ALREADY_SUBMITTED");
+            currentReportBitmask = (reportBitmask | mask);
+        }
         // return instantly if already got quorum and pushed data
         if (isPushed) {
             return;
@@ -89,10 +90,10 @@ contract Oracle {
         uint256 variant = uint256(keccak256(abi.encode(_staking))) & ReportUtils.COUNT_OUTMASK;
 
         uint256 i = 0;
-
+        uint256 _length = currentReportVariants.length;
         // iterate on all report variants we already have, limited by the oracle members maximum
-        while (i < currentReportVariants.length && currentReportVariants[i].isDifferent(variant)) ++i;
-        if (i < currentReportVariants.length) {
+        while (i < _length && currentReportVariants[i].isDifferent(variant)) ++i;
+        if (i < _length) {
             if (currentReportVariants[i].getCount() + 1 >= _quorum) {
                 _push(_eraId, _staking);
             } else {
@@ -155,11 +156,12 @@ contract Oracle {
     /**
     * @notice Return whether the `_quorum` is reached and the final report can be pushed
     */
-    function _getQuorumReport(uint256 _quorum) internal view returns (bool isQuorum, uint256 reportIndex) {
+    function _getQuorumReport(uint256 _quorum) internal view returns (bool, uint256) {
         // check most frequent cases first: all reports are the same or no reports yet
-        if (currentReportVariants.length == 1) {
+        uint256 _length = currentReportVariants.length;
+        if (_length == 1) {
             return (currentReportVariants[0].getCount() >= _quorum, 0);
-        } else if (currentReportVariants.length == 0) {
+        } else if (_length == 0) {
             return (false, type(uint256).max);
         }
 
@@ -168,7 +170,7 @@ contract Oracle {
         uint256 repeat = 0;
         uint16 maxval = 0;
         uint16 cur = 0;
-        for (uint256 i = 0; i < currentReportVariants.length; ++i) {
+        for (uint256 i = 0; i < _length; ++i) {
             cur = currentReportVariants[i].getCount();
             if (cur >= maxval) {
                 if (cur == maxval) {

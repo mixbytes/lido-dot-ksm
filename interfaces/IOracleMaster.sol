@@ -11,4 +11,6 @@ interface IOracleMaster {
     function eraId() view external returns (uint64);
 
     function setRelayParams(uint64 relayGenesisTs, uint64 relaySecondsPerEra) external;
+
+    function setLido(address lido) external;
 }
