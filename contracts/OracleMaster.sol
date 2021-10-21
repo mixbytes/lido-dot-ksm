@@ -167,8 +167,8 @@ contract OracleMaster is Pausable {
         external
         view
         returns (
-            uint64 lastEra,
-            bool isReported
+            uint64,
+            bool
         )
     {
         uint64 lastEra = eraId;

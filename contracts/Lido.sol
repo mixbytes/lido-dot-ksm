@@ -13,6 +13,10 @@ import "../interfaces/IAuthManager.sol";
 
 import "./stKSM.sol";
 
+contract Distribute {
+
+
+}
 
 contract Lido is stKSM, Initializable {
     using Clones for address;
@@ -56,7 +60,7 @@ contract Lido is stKSM, Initializable {
     );
 
     // sum of all deposits and rewards
-    uint256 private fundRaisedBalance;
+    uint256 internal fundRaisedBalance;
 
     struct Claim {
         uint256 balance;
@@ -69,13 +73,13 @@ contract Lido is stKSM, Initializable {
     uint256 public pendingClaimsTotal;
 
     // Ledger accounts
-    address[] private ledgers;
+    address[] internal ledgers;
 
     // Ledger address by stash account id
     mapping(bytes32 => address) private ledgerByStash;
 
     // Map to check ledger existence by address
-    mapping(address => uint256) private ledgerByAddress;
+    mapping(address => uint256) internal ledgerByAddress;
 
     // Ledger shares map
     mapping(address => uint256) public ledgerShares;
@@ -168,7 +172,7 @@ contract Lido is stKSM, Initializable {
     uint16 internal constant MAX_CLAIMS = 10;
 
 
-    modifier auth(bytes32 role) {
+    modifier auth(bytes32 role) virtual {
         require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "LIDO: UNAUTHORIZED");
         _;
     }
@@ -187,7 +191,7 @@ contract Lido is stKSM, Initializable {
         address _vAccounts,
         address _developers,
         address _treasury
-    ) external initializer {
+    ) public initializer {
         vKSM = IvKSM(_vKSM);
         AUX = _AUX;
         vAccounts = _vAccounts;
@@ -204,13 +208,6 @@ contract Lido is stKSM, Initializable {
 
         treasury = _treasury;
         developers =_developers;
-    }
-
-    /**
-    * @notice Stub fallback for native token, always reverting
-    */
-    fallback() external {
-        revert("FORBIDDEN");
     }
 
     /**
@@ -294,20 +291,30 @@ contract Lido is stKSM, Initializable {
     /**
     * @notice Set relay chain spec, allowed to call only by ROLE_SPEC_MANAGER
     * @dev if some params are changed function will iterate over oracles and ledgers, be careful
-    * @param _relaySpec - new relaychain spec
     */
-    function setRelaySpec(Types.RelaySpec calldata _relaySpec) external auth(ROLE_SPEC_MANAGER) {
+    function setRelaySpec(
+        uint64 _genesisTimestamp,
+        uint64 _secondsPerEra,
+        uint64 _unbondingPeriod,
+        uint16 _maxValidatorsPerLedger,
+        uint128 _minNominatorBalance
+    ) external auth(ROLE_SPEC_MANAGER) {
         require(ORACLE_MASTER != address(0), "LIDO: ORACLE_MASTER_UNDEFINED");
-        require(_relaySpec.genesisTimestamp > 0, "LIDO: BAD_GENESIS_TIMESTAMP");
-        require(_relaySpec.secondsPerEra > 0, "LIDO: BAD_SECONDS_PER_ERA");
-        require(_relaySpec.unbondingPeriod > 0, "LIDO: BAD_UNBONDING_PERIOD");
-        require(_relaySpec.maxValidatorsPerLedger > 0, "LIDO: BAD_MAX_VALIDATORS_PER_LEDGER");
+        require(_genesisTimestamp > 0, "LIDO: BAD_GENESIS_TIMESTAMP");
+        require(_secondsPerEra > 0, "LIDO: BAD_SECONDS_PER_ERA");
+        require(_unbondingPeriod > 0, "LIDO: BAD_UNBONDING_PERIOD");
+        require(_maxValidatorsPerLedger > 0, "LIDO: BAD_MAX_VALIDATORS_PER_LEDGER");
 
         //TODO loop through ledgerByAddress and oracles if some params changed
-
+        Types.RelaySpec memory _relaySpec;
+        _relaySpec.genesisTimestamp = _genesisTimestamp;
+        _relaySpec.secondsPerEra = _secondsPerEra;
+        _relaySpec.unbondingPeriod = _unbondingPeriod;
+        _relaySpec.maxValidatorsPerLedger = _maxValidatorsPerLedger;
+        _relaySpec.minNominatorBalance = _minNominatorBalance;
         RELAY_SPEC = _relaySpec;
 
-        IOracleMaster(ORACLE_MASTER).setRelayParams(_relaySpec.genesisTimestamp, _relaySpec.secondsPerEra);
+        IOracleMaster(ORACLE_MASTER).setRelayParams(_genesisTimestamp, _secondsPerEra);
     }
 
     /**
