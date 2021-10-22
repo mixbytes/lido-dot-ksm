@@ -1,5 +1,6 @@
 from brownie import chain
 from helpers import RelayChain, distribute_initial_tokens
+import pytest
 
 
 def test_add_multi_ledgers(lido, oracle_master, vKSM, Ledger, accounts):
@@ -121,6 +122,7 @@ def test_redeem_distribution(lido, oracle_master, vKSM, Ledger, accounts):
     check_distribution()
 
 
+@pytest.mark.skip_coverage
 def test_huge_amount_ledgers(lido, oracle_master, vKSM, Ledger, accounts):
     LEDGER_AMOUNT = 60
     stashes = [i for i in range(LEDGER_AMOUNT)]
