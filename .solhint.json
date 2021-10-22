@@ -10,6 +10,7 @@
     "reason-string": "off",
     "no-empty-blocks": "off",
     "func-name-mixedcase": "off",
+    "contract-name-camelcase": "off",
     "func-visibility": ["warn",{"ignoreConstructors":true}]
   }
 }

@@ -100,7 +100,7 @@ def lido(Lido, vKSM, vAccounts, aux, auth_manager, oracle_master, proxy_admin, c
     _lido.setLedgerClone(lc)
     _lido.setOracleMaster(oracle_master)
     era_sec = 60 * 60 * 6
-    _lido.setRelaySpec((chain.time(), era_sec, era_sec * 28, 16, 1))  # kusama settings except min nominator bond
+    _lido.setRelaySpec(chain.time(), era_sec, era_sec * 28, 16, 1)  # kusama settings except min nominator bond
     return _lido
 
 

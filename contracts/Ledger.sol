@@ -293,11 +293,13 @@ contract Ledger {
                 vKSM.transfer(address(LIDO), _transferDownwardBalance);
 
                 // Clear transfer flag
+                /* solhint-disable reentrancy */
                 cachedTotalBalance -= _transferDownwardBalance;
                 transferDownwardBalance = 0;
 
-                emit DownwardComplete(_transferDownwardBalance);
                 _transferDownwardBalance = 0;
+                /* solhint-enable reentrancy */
+                emit DownwardComplete(_transferDownwardBalance);
             }
         }
 
@@ -308,18 +310,21 @@ contract Ledger {
             uint128 freeBalanceIncrement = _report.getFreeBalance() - ledgerFreeBalance;
 
             if (freeBalanceIncrement >= _transferUpwardBalance) {
+                /* solhint-disable reentrancy */
                 cachedTotalBalance += _transferUpwardBalance;
-
                 transferUpwardBalance = 0;
-                emit UpwardComplete(_transferUpwardBalance);
                 _transferUpwardBalance = 0;
+                /* solhint-enable reentrancy */
+                emit UpwardComplete(_transferUpwardBalance);
             }
         }
 
         if (_transferDownwardBalance == 0 && _transferUpwardBalance == 0) {
             // update ledger data from oracle report
+            /* solhint-disable reentrancy */
             totalBalance = _report.stashBalance;
             lockedBalance = _report.totalBalance;
+            /* solhint-enable reentrancy */
             return true;
         }
 

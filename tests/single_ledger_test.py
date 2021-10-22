@@ -262,15 +262,15 @@ def test_multi_redeem_mixed_timeout(lido, oracle_master, vKSM, accounts):
     redeem_3 = 7 * 10**18
 
     relay_spec_array[2] = 12000  # change unbonding peroid to 1000 secs
-    lido.setRelaySpec(relay_spec_array, {'from': accounts[0]})
+    lido.setRelaySpec(*relay_spec_array, {'from': accounts[0]})
     lido.redeem(redeem_1, {'from': accounts[1]})
 
     relay_spec_array[2] = 8000
-    lido.setRelaySpec(relay_spec_array, {'from': accounts[0]})
+    lido.setRelaySpec(*relay_spec_array, {'from': accounts[0]})
     lido.redeem(redeem_2, {'from': accounts[1]})
 
     relay_spec_array[2] = 2000
-    lido.setRelaySpec(relay_spec_array, {'from': accounts[0]})
+    lido.setRelaySpec(*relay_spec_array, {'from': accounts[0]})
     lido.redeem(redeem_3, {'from': accounts[1]})
     chain.mine()
 

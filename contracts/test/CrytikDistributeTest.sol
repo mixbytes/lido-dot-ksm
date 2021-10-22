@@ -4,66 +4,54 @@ pragma abicoder v2;
 
 import "../Lido.sol";
 
-contract Mock {
-    fallback() external {
-        revert();
-    }
-}
+contract Lido2Test is Distribute {
+    bool private distributeFail;
 
-contract Lido2Test is Lido {
-    //bool private distributeFail;
-
-    modifier auth(bytes32 role) override {
-        revert("AUTH");
-        _;
-    }
+    event DistributeFailed();
 
     constructor(){
-        ORACLE_MASTER = msg.sender;
-
-        address mock = address(0); //address(new Mock());
-        initialize(mock, mock, mock, mock, mock, mock);
-        configure(mock, 50_000_000_000_000);
+        test_configure(50_000_000_000_000);
     }
 
-    //function crytic_test_distribute() public view returns (bool){
-    //    return !distributeFail;
-    //}
+    function crytic_test_distribute() public view returns (bool){
+        return !distributeFail;
+    }
 
-    function crytic_balance_invariant() public view returns (bool){
+    function crytic_distribute_invariant() public view returns (bool){
         uint256 totalLedgerBalance = 0;
-        for(uint i=0; i<ledgers.length; i++){
+        for (uint i = 0; i < ledgers.length; i++) {
             address l = ledgers[i];
-            totalLedgerBalance+=ledgerStake[l];
+            totalLedgerBalance += ledgerStake[l];
         }
         return _getTotalPooledKSM() + bufferedRedeems - bufferedDeposits == totalLedgerBalance;
     }
 
-    function __redeem(uint256 amount) external {
-        require(amount <= _getTotalPooledKSM());
-
-        uint256 _shares = getSharesByPooledKSM(amount);
-        _burnShares(msg.sender, _shares);
-
-        fundRaisedBalance -= amount;
-        bufferedRedeems += amount;
+    function test__redeem(uint256 amount) external {
+        _burn(amount);
     }
 
-    function __deposit(uint256 amount) external {
+    function test__deposit(uint256 amount) external {
         _submit(amount);
     }
 
-    function __distribute() external {
-        (bool success, bytes memory data) = address(this).call(abi.encodeWithSelector(Lido2Test.softRebalanceStakes.selector));
-        assert(success);
+    function test__distribute() external {
+        (bool success,) = address(this).call(abi.encodeWithSelector(Lido2Test.softRebalanceStakes.selector));
+        if (!success) {
+            emit DistributeFailed();
+            distributeFail = true;
+        }
+    }
+
+    function echidna_test() public view returns (bool) {
+        return !distributeFail;
     }
 
     function softRebalanceStakes() external {
-        _softRebalanceStakes();
+        _distribute();
     }
 
-    function configure(address mock, uint256 totalStake) internal {
-        require(totalShares < uint256(type(uint128).max) );
+    function test_configure(uint256 totalStake) internal {
+        require(totalShares < uint256(type(uint128).max));
         // configuration of 4 ledgers with shares are equal to 100
         ledgers.push(address(0x01));
         ledgers.push(address(0x02));
@@ -96,29 +84,5 @@ contract Lido2Test is Lido {
         bufferedDeposits = 0;
         bufferedRedeems = 0;
     }
-}
-
-contract  Fake {
-    uint256 private inner;
-
-    function setInner(uint256 _inner) external{
-        if(_inner == 1){
-            return;
-        }
-        inner = _inner;
-    }
-
-    function increase() external {
-        assert(inner!=0xFFFFFFFF);
-    }
-
-    function crytic_never_occur() public view returns (bool){
-        return inner!=1;
-    }
-
-    function crytic_set_inner_revert(uint256 _inner) public returns (bool){
-        return true;
-    }
-
 }
 

@@ -141,7 +141,7 @@ def main():
     lido.setOracleMaster(oracleMaster, {'from': alith, 'required_confs': 2})
     # Dev Kusama has 3 min era
     era_sec = 60 * 3
-    lido.setRelaySpec((1, era_sec, era_sec * (28+3), 16, 1), {'from': alith})
+    lido.setRelaySpec(1, era_sec, era_sec * (28+3), 16, 1, {'from': alith})
 
     print("addOracleMember")
     oracleMaster.addOracleMember(oracle1.address, {'from': alith})
