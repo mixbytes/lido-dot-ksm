@@ -27,10 +27,12 @@ contract Lido2Test is Distribute {
     }
 
     function test__redeem(uint256 amount) external {
+        require(amount < uint256(type(uint128).max));
         _burn(amount);
     }
 
     function test__deposit(uint256 amount) external {
+        require(amount < uint256(type(uint128).max));
         _submit(amount);
     }
 
@@ -42,7 +44,11 @@ contract Lido2Test is Distribute {
         }
     }
 
-    function echidna_test() public view returns (bool) {
+    function echidna_test_distribute() public view returns (bool) {
+        return !distributeFail;
+    }
+
+    function echidna_test_invariant() public view returns (bool) {
         return !distributeFail;
     }
 

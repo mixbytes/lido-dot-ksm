@@ -44,13 +44,13 @@ abstract contract Distribute is stKSM {
     mapping(address => uint256) public ledgerStake;
 
     function _burn(uint256 _amount) internal returns (uint256){
-        uint256 _shares = getSharesByPooledKSM(_amount);
-        require(_shares <= _sharesOf(msg.sender), "LIDO: REDEEM_AMOUNT_EXCEEDS_BALANCE");
+        uint256 sharesAmount = getSharesByPooledKSM(_amount);
+        require(sharesAmount <= _sharesOf(msg.sender), "LIDO: REDEEM_AMOUNT_EXCEEDS_BALANCE");
 
-        _burnShares(msg.sender, _shares);
+        _burnShares(msg.sender, sharesAmount);
         fundRaisedBalance -= _amount;
         bufferedRedeems += _amount;
-        return _shares;
+        return sharesAmount;
     }
 
     /**
@@ -77,11 +77,49 @@ abstract contract Distribute is stKSM {
         return sharesAmount;
     }
 
+    /**
+    * @notice Rebalance stake accross ledgers according their shares.
+    */
+    function _rebalance() internal {
+        uint256 totalStake = getTotalPooledKSM();
+
+        uint256 stakesSum = 0;
+        address nonZeroLedged = address(0);
+        uint _length = ledgers.length;
+        uint256 _ledgerSharesTotal = ledgerSharesTotal;
+        for (uint i = 0; i < _length; i++) {
+            uint256 share = ledgerShares[ledgers[i]];
+            uint256 stake = totalStake * share / _ledgerSharesTotal;
+
+            stakesSum += stake;
+            ledgerStake[ledgers[i]] = stake;
+
+            if (share > 0 && nonZeroLedged == address(0)) {
+                nonZeroLedged = ledgers[i];
+            }
+        }
+
+        // need to compensate remainder of integer division
+        // if we have at least one non zero ledger
+        uint256 remainingDust = totalStake - stakesSum;
+        if (remainingDust > 0 && nonZeroLedged != address(0)) {
+            ledgerStake[nonZeroLedged] += remainingDust;
+        }
+    }
+
     function _distribute() internal {
         if (bufferedDeposits == bufferedRedeems) {
             return;
         }
+
         int256 _stake = bufferedDeposits.toInt256() - bufferedRedeems.toInt256();
+
+        // if(_stake<0){ // it's dirty hack
+        //     _rebalance();
+        //     bufferedDeposits = 0;
+        //     bufferedRedeems = 0;
+        //     return;
+        // }
 
         uint256 totalStake = _getTotalPooledKSM();
         uint256 ledgersLength = ledgers.length;
@@ -738,7 +776,7 @@ contract Lido is Distribute, Initializable {
            from stakes calculated around ledger shares, so that method fixes that lag.
     */
     function forceRebalanceStake() external auth(ROLE_STAKE_MANAGER) {
-        _forceRebalanceStakes();
+        _rebalance();
     }
 
     /**
@@ -751,35 +789,6 @@ contract Lido is Distribute, Initializable {
         }
     }
 
-    /**
-    * @notice Rebalance stake accross ledgers according their shares.
-    */
-    function _forceRebalanceStakes() internal {
-        uint256 totalStake = getTotalPooledKSM();
-
-        uint256 stakesSum = 0;
-        address nonZeroLedged = address(0);
-        uint _length = ledgers.length;
-        uint256 _ledgerSharesTotal = ledgerSharesTotal;
-        for (uint i = 0; i < _length; i++) {
-            uint256 share = ledgerShares[ledgers[i]];
-            uint256 stake = totalStake * share / _ledgerSharesTotal;
-
-            stakesSum += stake;
-            ledgerStake[ledgers[i]] = stake;
-
-            if (share > 0 && nonZeroLedged == address(0)) {
-                nonZeroLedged = ledgers[i];
-            }
-        }
-
-        // need to compensate remainder of integer division
-        // if we have at least one non zero ledger
-        uint256 remainingDust = totalStake - stakesSum;
-        if (remainingDust > 0 && nonZeroLedged != address(0)) {
-            ledgerStake[nonZeroLedged] += remainingDust;
-        }
-    }
 
     /**
     * @notice Emits an {Transfer} event where from is 0 address. Indicates mint events.
