@@ -13,7 +13,7 @@ import "../interfaces/IAuthManager.sol";
 
 import "./stKSM.sol";
 
-abstract contract Distribute is stKSM {
+abstract contract Distribute{
     using SafeCast for uint256;
 
     // sum of all deposits and rewards
@@ -43,45 +43,24 @@ abstract contract Distribute is stKSM {
     // Ledger stakes
     mapping(address => uint256) public ledgerStake;
 
-    function _burn(uint256 _amount) internal returns (uint256){
-        uint256 sharesAmount = getSharesByPooledKSM(_amount);
-        require(sharesAmount <= _sharesOf(msg.sender), "LIDO: REDEEM_AMOUNT_EXCEEDS_BALANCE");
-
-        _burnShares(msg.sender, sharesAmount);
+    function _burn(uint256 _amount) internal virtual returns (uint256){
         fundRaisedBalance -= _amount;
         bufferedRedeems += _amount;
-        return sharesAmount;
+        return 0;
     }
 
-    /**
-    * @notice Process user deposit, mints stKSM and increase the pool buffer
-    * @return amount of stKSM shares generated
-    */
-    function _submit(uint256 _deposit) internal returns (uint256) {
-        address sender = msg.sender;
 
-        require(_deposit != 0, "LIDO: ZERO_DEPOSIT");
-
-        uint256 sharesAmount = getSharesByPooledKSM(_deposit);
-        if (sharesAmount == 0) {
-            // totalPooledKSM is 0: either the first-ever deposit or complete slashing
-            // assume that shares correspond to KSM as 1-to-1
-            sharesAmount = _deposit;
-        }
-
+    function _submit(uint256 _deposit) internal virtual returns (uint256) {
         fundRaisedBalance += _deposit;
         bufferedDeposits += _deposit;
-        _mintShares(sender, sharesAmount);
-
-        _emitTransferAfterMintingShares(sender, sharesAmount);
-        return sharesAmount;
+        return 0;
     }
 
     /**
     * @notice Rebalance stake accross ledgers according their shares.
     */
     function _rebalance() internal {
-        uint256 totalStake = getTotalPooledKSM();
+        uint256 totalStake = _getTotalPooledKSM();
 
         uint256 stakesSum = 0;
         address nonZeroLedged = address(0);
@@ -114,10 +93,11 @@ abstract contract Distribute is stKSM {
 
         int256 _stake = bufferedDeposits.toInt256() - bufferedRedeems.toInt256();
 
+        bufferedDeposits = 0;
+        bufferedRedeems = 0;
+
         // if(_stake<0){ // it's dirty hack
         //     _rebalance();
-        //     bufferedDeposits = 0;
-        //     bufferedRedeems = 0;
         //     return;
         // }
 
@@ -177,22 +157,14 @@ abstract contract Distribute is stKSM {
         if (nonZeroLedger != address(0) && remainingDust > 0) {
             ledgerStake[nonZeroLedger] += remainingDust;
         }
-        bufferedDeposits = 0;
-        bufferedRedeems = 0;
+
+
     }
 
-    /**
-    * @notice Returns amount of total pooled tokens by contract.
-    * @return amount of pooled vKSM in contract
-    */
-    function _getTotalPooledKSM() internal view override returns (uint256) {
-        return fundRaisedBalance;
-    }
-
-    function _emitTransferAfterMintingShares(address _to, uint256 _sharesAmount) internal virtual {}
+    function _getTotalPooledKSM() internal view virtual returns (uint256){}
 }
 
-contract Lido is Distribute, Initializable {
+contract Lido is stKSM, Distribute, Initializable {
     using Clones for address;
 
     // Records a deposit made by a user
@@ -353,6 +325,51 @@ contract Lido is Distribute, Initializable {
         treasury = _treasury;
         developers = _developers;
     }
+
+    /**
+    * @notice Process user redeem, burn `_amount` stKSM and decrease the pool buffer
+    * @return amount of stKSM shares burned
+    */
+    function _burn(uint256 _amount) internal override returns (uint256){
+        uint256 sharesAmount = getSharesByPooledKSM(_amount);
+        require(sharesAmount <= _sharesOf(msg.sender), "LIDO: REDEEM_AMOUNT_EXCEEDS_BALANCE");
+        _burnShares(msg.sender, sharesAmount);
+        
+        super._burn(_amount);
+        return sharesAmount;
+    }
+
+    /**
+    * @notice Process user deposit, mints stKSM and increase the pool buffer
+    * @return amount of stKSM shares generated
+    */
+    function _submit(uint256 _deposit) internal override returns (uint256) {
+        address sender = msg.sender;
+
+        require(_deposit != 0, "LIDO: ZERO_DEPOSIT");
+
+        uint256 sharesAmount = getSharesByPooledKSM(_deposit);
+        if (sharesAmount == 0) {
+            // totalPooledKSM is 0: either the first-ever deposit or complete slashing
+            // assume that shares correspond to KSM as 1-to-1
+            sharesAmount = _deposit;
+        }
+
+        super._submit(_deposit);
+
+        _mintShares(sender, sharesAmount);
+        _emitTransferAfterMintingShares(sender, sharesAmount);
+        return sharesAmount;
+    }
+
+    /**
+    * @notice Returns amount of total pooled tokens by contract.
+    * @return amount of pooled vKSM in contract
+    */
+    function _getTotalPooledKSM() internal view override(stKSM, Distribute) returns (uint256) {
+        return fundRaisedBalance;
+    }    
+
 
     /**
     * @notice Set treasury address to '_treasury'
@@ -793,7 +810,7 @@ contract Lido is Distribute, Initializable {
     /**
     * @notice Emits an {Transfer} event where from is 0 address. Indicates mint events.
     */
-    function _emitTransferAfterMintingShares(address _to, uint256 _sharesAmount) internal override {
+    function _emitTransferAfterMintingShares(address _to, uint256 _sharesAmount) internal{
         emit Transfer(address(0), _to, getPooledKSMByShares(_sharesAmount));
     }
 }

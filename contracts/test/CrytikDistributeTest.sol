@@ -13,6 +13,10 @@ contract Lido2Test is Distribute {
         test_configure(50_000_000_000_000);
     }
 
+    function _getTotalPooledKSM() internal view override returns (uint256){
+        return fundRaisedBalance;
+    }
+
     function crytic_test_distribute() public view returns (bool){
         return !distributeFail;
     }
@@ -57,7 +61,7 @@ contract Lido2Test is Distribute {
     }
 
     function test_configure(uint256 totalStake) internal {
-        require(totalShares < uint256(type(uint128).max));
+        require(totalStake < uint256(type(uint128).max));
         // configuration of 4 ledgers with shares are equal to 100
         ledgers.push(address(0x01));
         ledgers.push(address(0x02));
