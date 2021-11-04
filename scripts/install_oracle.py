@@ -14,10 +14,10 @@ ALL_ROLES = ['ROLE_SPEC_MANAGER',
 
 # set you own proxy accounts
 STASH = [
-  'ExDErakRQnQcCwhULxEPJGfYFpGK3qSYfJFcUk3dweJ3w6P',
-  'HobfP8gG3rqvdU7C2qcfEn1ruXwfE5fEmtZUcmCr7TX4ibU',
-  'GLKzK731vwPo3W8ipLyaf979Mx1hbhuqFqMULU5xppWjyPe',
-  'DVKFDQNXF5QDSDVAqTfvs8gZWLyd4r6n6rqrtS5RLGKRUbq'
+  'HcE3Mns2R531avV7D7KRfzpAc2KmCppAPFYXkXanRYZjTX7',
+  'HGRw8uaDzb1WHerQQhy5TD7LvWQppuEYdj1bVvqPJXMbXvn',
+  'EZWgrkoLAJBJ2WLCF6mvxu87vgoPhZ4MbJfztK4TX1AyAXe',
+  'HGcoj2TGFpVHjtbkaXfn9Zen4SB3cY7t7Pez7s72AYNRLbo'
 ]
 
 # charlie
@@ -55,7 +55,7 @@ lido = None
 UNIT = 1_000_000_000_000
 
 # set Kusama relay chain node websocket endpoint address
-RELAY_URL = 'ws://localhost:9951'
+RELAY_URL = 'ws://dev.lido.mixbytes.io/relay'
 
 # the last transaction
 t = None
@@ -66,7 +66,7 @@ if hasattr(project, 'OpenzeppelinContracts410Project'):
 else:
     OpenzeppelinContractsProject = project.OpenzeppelinContractsProject
 
-LiquidstakingOracleProject = project.LiquidstakingOracleProject
+LiquidstakingOracleProject = project.LidoDotKsmProject
 
 # assert(1 <= QUORUM <= 2, 'supported QUORUM of 1 or 2')
 
@@ -80,14 +80,14 @@ stash = [ss58decode(S) for S in STASH]
 
 def deploy_with_proxy(container, proxy_admin, *args):
     owner = proxy_admin.owner()
-    _implementation = container.deploy({'from': owner, 'required_confs': 2})
+    _implementation = container.deploy({'from': owner, 'required_confs': 2, 'gas_limit': 12*10**6})
     encoded_inputs = _implementation.initialize.encode_input(*args)
 
     _instance = OpenzeppelinContractsProject.TransparentUpgradeableProxy.deploy(
         _implementation,
         proxy_admin,
         encoded_inputs,
-        {'from': owner, 'gas_limit': 10**6, 'required_confs': 2}
+        {'from': owner, 'gas_limit': 10**6, 'required_confs': 2, 'gas_limit': 12*10**6}
     )
     OpenzeppelinContractsProject.TransparentUpgradeableProxy.remove(_instance)
 
@@ -103,7 +103,7 @@ def config(_lido=None):
     for S in STASH:
         s = ss58decode(S)
         print(f"stash {S} = {s} addLedger")
-        _lido.addLedger(s, s, 100, {'from': alith})
+        _lido.addLedger(s, s, 100, {'from': alith, 'gas_limit': 12*10**6})
 
 
 def main():
@@ -111,45 +111,45 @@ def main():
 
     ProxyAdmin = OpenzeppelinContractsProject.ProxyAdmin
 
-    proxy_admin = ProxyAdmin.deploy({'from': alith, 'required_confs': 2})
+    proxy_admin = ProxyAdmin.deploy({'from': alith, 'required_confs': 2, 'gas_limit': 12*10**6})
 
     print("configure AuthManager")
     mgr = deploy_with_proxy(LiquidstakingOracleProject.AuthManager, proxy_admin, ZERO_ADDRESS)
 
     for role in ALL_ROLES:
-        mgr.addByString(role, alith, {'from': alith})
+        mgr.addByString(role, alith, {'from': alith, 'gas_limit': 12*10**6})
 
     print("configure Lido")
 
-    lido = deploy_with_proxy(LiquidstakingOracleProject.Lido, proxy_admin, mgr.address, vKSM, x, x)
+    lido = deploy_with_proxy(LiquidstakingOracleProject.Lido, proxy_admin, mgr.address, vKSM, x, x, alith, alith)
 
-    print("Lido proxy {lido}")
+    print("Lido proxy:", lido)
 
     print("Oracle deploy")
-    oracle = LiquidstakingOracleProject.Oracle.deploy({'from': alith, 'required_confs': 2})
+    oracle = LiquidstakingOracleProject.Oracle.deploy({'from': alith, 'required_confs': 2, 'gas_limit': 12*10**6})
     print("Oracle master")
-    oracleMaster = LiquidstakingOracleProject.OracleMaster.deploy({'from': alith, 'required_confs': 2})
-    oracleMaster.initialize(oracle, QUORUM, {'from': alith})
+    oracleMaster = LiquidstakingOracleProject.OracleMaster.deploy({'from': alith, 'required_confs': 2, 'gas_limit': 12*10**6})
+    oracleMaster.initialize(oracle, QUORUM, {'from': alith, 'gas_limit': 12*10**6})
 
     print("Ledger")
-    lc = LiquidstakingOracleProject.Ledger.deploy({'from': alith, 'required_confs': 2})
+    lc = LiquidstakingOracleProject.Ledger.deploy({'from': alith, 'required_confs': 2, 'gas_limit': 12*10**6})
 
-    lido.setLedgerClone(lc, {'from': alith})
+    lido.setLedgerClone(lc, {'from': alith, 'gas_limit': 12*10**6})
 
     #print("setLido for oracleMaster")
     #oracleMaster.setLido(lido, {'from': alith})
-    lido.setOracleMaster(oracleMaster, {'from': alith, 'required_confs': 2})
+    lido.setOracleMaster(oracleMaster, {'from': alith, 'required_confs': 2, 'gas_limit': 12*10**6})
     # Dev Kusama has 3 min era
     era_sec = 60 * 3
-    lido.setRelaySpec((1, era_sec, era_sec * (28+3), 16, 1), {'from': alith})
+    lido.setRelaySpec((1, era_sec, era_sec * (28+3), 16, 1), {'from': alith, 'gas_limit': 12*10**6})
 
     print("addOracleMember")
-    oracleMaster.addOracleMember(oracle1.address, {'from': alith})
-    oracleMaster.addOracleMember(oracle2.address, {'from': alith})
+    oracleMaster.addOracleMember(oracle1.address, {'from': alith, 'gas_limit': 12*10**6})
+    oracleMaster.addOracleMember(oracle2.address, {'from': alith, 'gas_limit': 12*10**6})
 
     # mint
-    x.mint(alith.address, 100 * UNIT, {'from': alith})
-    x.mint(baltathar.address, 100 * UNIT, {'from': alith})
+    x.mint(alith.address, 100 * UNIT, {'from': alith, 'gas_limit': 12*10**6})
+    x.mint(baltathar.address, 100 * UNIT, {'from': alith, 'gas_limit': 12*10**6})
 
     alith.transfer(oracle1, "10 ether")
     alith.transfer(oracle2, "10 ether")
@@ -161,17 +161,17 @@ def main():
 def new_proxy(n=4):
     # send XCMP message to create anonimouse proxy accounts
     for _ in range(n):
-        x.sendUmp("0x1e0400000000000000", {'from': alith})
+        x.sendUmp("0x1e0400000000000000", {'from': alith, 'gas_limit': 12*10**6})
 
 
 def deposit(_lido=None):
     _lido = _lido or lido
 
-    vKSM.approve(_lido.address, 20 * UNIT, {'from': alith})
-    vKSM.approve(_lido.address, 30 * UNIT, {'from': baltathar})
+    vKSM.approve(_lido.address, 20 * UNIT, {'from': alith, 'gas_limit': 12*10**6})
+    vKSM.approve(_lido.address, 30 * UNIT, {'from': baltathar, 'gas_limit': 12*10**6})
 
-    _lido.deposit(20 * UNIT, {'from': alith})
-    _lido.deposit(30 * UNIT, {'from': baltathar})
+    _lido.deposit(20 * UNIT, {'from': alith, 'gas_limit': 12*10**6})
+    _lido.deposit(30 * UNIT, {'from': baltathar, 'gas_limit': 12*10**6})
 
 
 def createReport(url, stashAddress):
@@ -251,17 +251,17 @@ def createReport(url, stashAddress):
 
 def nominate():
     for s in stash:
-        lido.nominate(s, [ss58decode(item) for item in VALIDATORS], {'from': alith})
+        lido.nominate(s, [ss58decode(item) for item in VALIDATORS], {'from': alith, 'gas_limit': 12*10**6})
 
 
 def report(_lido=None):
     _lido = _lido or lido
-    oracleMaster = OracleMaster.at(_lido.ORACLE_MASTER())
+    oracleMaster = LiquidstakingOracleProject.OracleMaster.at(_lido.ORACLE_MASTER())
     for S in STASH:
         print(f"report for {S}")
         r = createReport(RELAY_URL, S)
 
-        t = oracleMaster.reportRelay(r[0], r[1:], {'from': oracle1})
+        t = oracleMaster.reportRelay(r[0], r[1:], {'from': oracle1, 'gas_limit': 12*10**6})
         if QUORUM > 1:
-            t = oracleMaster.reportRelay(r[0], r[1:], {'from': oracle2})
+            t = oracleMaster.reportRelay(r[0], r[1:], {'from': oracle2, 'gas_limit': 12*10**6})
         print(t.info())

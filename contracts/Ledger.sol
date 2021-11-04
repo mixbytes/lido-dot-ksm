@@ -6,9 +6,10 @@ import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import "../interfaces/IOracleMaster.sol";
 import "../interfaces/ILido.sol";
-import "../interfaces/IAUX.sol";
+import "../interfaces/IRelayEncoder.sol";
 import "../interfaces/IvKSM.sol";
-import "../interfaces/IvAccounts.sol";
+import "../interfaces/IXcmTransactor.sol";
+import "../interfaces/IController.sol";
 import "../interfaces/Types.sol";
 
 import "./utils/LedgerUtils.sol";
@@ -53,11 +54,8 @@ contract Ledger {
 
     // vKSM precompile
     IvKSM internal vKSM;
-    // AUX call builder precompile
-    IAUX internal AUX;
-    // Virtual accounts precompile
-    IvAccounts internal vAccounts;
 
+    IController internal controller;
 
     // Lido main contract address
     ILido public LIDO;
@@ -86,19 +84,17 @@ contract Ledger {
     * @param _stashAccount - stash account id
     * @param _controllerAccount - controller account id
     * @param _vKSM - vKSM contract address
-    * @param _AUX - AUX(relaychain calls builder) contract address
-    * @param _vAccounts - vAccounts(relaychain calls relayer) contract address
+    * @param _controller - xcmTransactor(relaychain calls relayer) contract address
     * @param _minNominatorBalance - minimal allowed nominator balance
     */
     function initialize(
         bytes32 _stashAccount,
         bytes32 _controllerAccount,
         address _vKSM,
-        address _AUX,
-        address _vAccounts,
+        address _controller,
         uint128 _minNominatorBalance
     ) external {
-        require(address(vKSM) == address(0), "LEDGED: ALREADY_INITALIZED");
+        require(address(vKSM) == address(0), "LEDGED: ALREADY_INITIALIZED");
 
         // The owner of the funds
         stashAccount = _stashAccount;
@@ -110,10 +106,12 @@ contract Ledger {
         LIDO = ILido(msg.sender);
 
         vKSM = IvKSM(_vKSM);
-        AUX = IAUX(_AUX);
-        vAccounts = IvAccounts(_vAccounts);
+
+        controller = IController(_controller);
 
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
+
+        vKSM.approve(_controller, type(uint256).max);
     }
 
     /**
@@ -147,9 +145,7 @@ contract Ledger {
     */
     function nominate(bytes32[] calldata _validators) external onlyLido {
         require(activeBalance >= MIN_NOMINATOR_BALANCE, "LEDGED: NOT_ENOUGH_STAKE");
-        bytes[] memory calls = new bytes[](1);
-        calls[0] = AUX.buildNominate(_validators);
-        vAccounts.relayTransactCallAll(controllerAccount, GARANTOR, 0, calls);
+        controller.nominate(_validators);
     }
 
     /**
@@ -186,9 +182,6 @@ contract Ledger {
             emit Slash(slash, _report.stashBalance);
         }
 
-        bytes[] memory calls = new bytes[](5);
-        uint16 calls_counter = 0;
-
         uint128 _ledgerStake = ledgerStake().toUint128();
 
         // relay deficit or bonding
@@ -207,23 +200,23 @@ contract Ledger {
 
                 if (forTransfer > 0) {
                     vKSM.transferFrom(address(LIDO), address(this), forTransfer);
-                    vKSM.relayTransferTo(_report.stashAccount, forTransfer);
+                    controller.transferToRelaychain(forTransfer);
                     transferUpwardBalance += forTransfer;
                 }
             }
 
             // rebond all always
             if (unlockingBalance > 0) {
-                calls[calls_counter++] = AUX.buildReBond(unlockingBalance);
+                controller.rebond(unlockingBalance);
             }
 
             uint128 relayFreeBalance = _report.getFreeBalance();
 
             if (relayFreeBalance > 0 &&
                 (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle)) {
-                calls[calls_counter++] = AUX.buildBondExtra(relayFreeBalance);
+                controller.bondExtra(relayFreeBalance);
             } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
-                calls[calls_counter++] = AUX.buildBond(controllerAccount, relayFreeBalance);
+                controller.bond(controllerAccount, relayFreeBalance);
             }
 
         }
@@ -235,7 +228,7 @@ contract Ledger {
 
             // if ledger is in the deadpool we need to put it to chill
             if (_ledgerStake < MIN_NOMINATOR_BALANCE && status != Types.LedgerStatus.Idle) {
-                calls[calls_counter++] = AUX.buildChill();
+                controller.chill();
             }
 
             uint128 deficit = _report.stashBalance - _ledgerStake;
@@ -244,7 +237,7 @@ contract Ledger {
             // need to downward transfer if we have some free
             if (relayFreeBalance > 0) {
                 uint128 forTransfer = relayFreeBalance > deficit ? deficit : relayFreeBalance;
-                vAccounts.relayTransferFrom(stashAccount, forTransfer);
+                controller.transferToParachain(forTransfer);
                 transferDownwardBalance += forTransfer;
                 deficit -= forTransfer;
                 relayFreeBalance -= forTransfer;
@@ -252,7 +245,7 @@ contract Ledger {
 
             // withdraw if we have some unlocked
             if (deficit > 0 && withdrawableBalance > 0) {
-                calls[calls_counter++] = AUX.buildWithdraw();
+                controller.withdrawUnbonded();
                 deficit -= withdrawableBalance > deficit ? deficit : withdrawableBalance;
             }
 
@@ -260,23 +253,15 @@ contract Ledger {
             if (nonWithdrawableBalance < deficit) {
                 // todo drain stake if remaining balance is less than MIN_NOMINATOR_BALANCE
                 uint128 forUnbond = deficit - nonWithdrawableBalance;
-                calls[calls_counter++] = AUX.buildUnBond(forUnbond);
+                controller.unbond(forUnbond);
                 // notice.
                 // deficit -= forUnbond;
             }
 
             // bond all remain free balance
             if (relayFreeBalance > 0) {
-                calls[calls_counter++] = AUX.buildBondExtra(relayFreeBalance);
+                controller.bondExtra(relayFreeBalance);
             }
-        }
-
-        if (calls_counter > 0) {
-            bytes[] memory calls_trimmed = new bytes[](calls_counter);
-            for (uint16 i = 0; i < calls_counter; ++i) {
-                calls_trimmed[i] = calls[i];
-            }
-            vAccounts.relayTransactCallAll(_report.controllerAccount, GARANTOR, 0, calls_trimmed);
         }
 
         cachedTotalBalance = _report.stashBalance;

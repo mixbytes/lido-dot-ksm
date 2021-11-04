@@ -94,11 +94,13 @@ contract Lido is stKSM, Initializable {
 
 
     // vKSM precompile
-    IvKSM internal vKSM;
-    // AUX relay call builder precompile
-    address internal AUX;
-    // Virtual accounts precompile
-    address internal vAccounts;
+    IERC20 internal vKSM;
+    // relay calls builder precompile
+    address internal relayEncoder;
+    // xcm transactor precompile
+    address internal xcmTransactor;
+    // xTokens precompile for transferring relay xcm assets through chains
+    address internal xTokens;
 
 
     // auth manager contract address
@@ -177,20 +179,20 @@ contract Lido is stKSM, Initializable {
     * @notice Initialize lido contract.
     * @param _authManager - auth manager contract address
     * @param _vKSM - vKSM contract address
-    * @param _AUX - AUX(relaychain calls builder) contract address
-    * @param _vAccounts - vAccounts(relaychain calls relayer) contract address
+    * @param _relayEncoder - relayEncoder(relaychain calls builder) contract address
+    * @param _xcmTransactor - xcmTransactor(relaychain calls relayer) contract address
     */
     function initialize(
         address _authManager,
         address _vKSM,
-        address _AUX,
-        address _vAccounts,
+        address _relayEncoder,
+        address _xcmTransactor,
         address _developers,
         address _treasury
     ) external initializer {
         vKSM = IvKSM(_vKSM);
-        AUX = _AUX;
-        vAccounts = _vAccounts;
+        relayEncoder = _relayEncoder;
+        xcmTransactor = _xcmTransactor;
         AUTH_MANAGER = _authManager;
 
         MAX_LEDGERS_AMOUNT = 200;
@@ -423,8 +425,8 @@ contract Lido is stKSM, Initializable {
             _stashAccount,
             _controllerAccount,
             address(vKSM),
-            AUX,
-            vAccounts,
+            relayEncoder,
+            xcmTransactor,
             RELAY_SPEC.minNominatorBalance
         );
         ledgers.push(ledger);
