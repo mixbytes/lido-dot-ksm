@@ -2,6 +2,13 @@ from substrateinterface import Keypair
 from substrateinterface import SubstrateInterface
 from pathlib import Path
 from brownie import project, config, accounts, interface, ZERO_ADDRESS
+from brownie.network import gas_limit
+
+import os
+
+
+# set this because of bug with brownie
+gas_limit(10900000)
 
 ALL_ROLES = ['ROLE_SPEC_MANAGER',
              'ROLE_PAUSE_MANAGER',
@@ -14,10 +21,10 @@ ALL_ROLES = ['ROLE_SPEC_MANAGER',
 
 # set you own proxy accounts
 STASH = [
-  'ExDErakRQnQcCwhULxEPJGfYFpGK3qSYfJFcUk3dweJ3w6P',
-  'HobfP8gG3rqvdU7C2qcfEn1ruXwfE5fEmtZUcmCr7TX4ibU',
-  'GLKzK731vwPo3W8ipLyaf979Mx1hbhuqFqMULU5xppWjyPe',
-  'DVKFDQNXF5QDSDVAqTfvs8gZWLyd4r6n6rqrtS5RLGKRUbq'
+  'F5WsoV4zKDWo8MZP13A8kc6JiSRDs5JH2kYRz7MNKaU9Apq',
+  'JDqAjmhfiM6E8sKhMDRm61SwXb5Sq31wFUjqkqCih6srLe5',
+  'Ena5GfbjxR5Bd2JBcNh93FNP3i4piz4dCFhVtXcdpszo3Je',
+  'EM4zvYurksPCw3DHjEZQbffPnxKEsWi2pYqcRLzu2nkCUid',
 ]
 
 # charlie
@@ -30,14 +37,17 @@ STASH12 = 'HnMAUz7r2G8G3hB27SYNyit5aJmh2a5P4eMdDtACtMFDbam'
 OR1 = '0x925eda0e60dac4a29712e1f9cfe1a3f1efe4270596e46722295248428f25e6ee'
 OR2 = '0x0801d35e1dbb9e47f89ff7971c627617eef53ced08e622e82bc551540efdcb4d'
 # Oracle quorum
-QUORUM = 2
+QUORUM = int(os.getenv('QUORUM', 2))
+assert 1 <= QUORUM <= 2, 'supported QUORUM of 1 or 2'
 
 # Parachain soverein account
 MOONBEAM = 'F7fq1jSAsQD9BqmTx3UAhwpMNa9WJGMmru2o7Evn83gSgfb'
 
 VALIDATORS = [
     'GsvVmjr1CBHwQHw84pPHMDxgNY3iBLz6Qn7qS3CH8qPhrHz',  # //Alice//stash
-    'JKspFU6ohf1Grg3Phdzj2pSgWvsYWzSfKghhfzMbdhNBWs5'   # //Bob//stash
+    'JKspFU6ohf1Grg3Phdzj2pSgWvsYWzSfKghhfzMbdhNBWs5',   # //Bob//stash
+    STASH10,
+    STASH11,
 ]
 
 alith = accounts.add(private_key=0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133)
@@ -48,6 +58,9 @@ oracle2 = accounts.add(private_key=OR2)
 
 x = interface.XcmPrecompile('0x0000000000000000000000000000000000000801')
 vKSM = interface.IvKSM('0x0000000000000000000000000000000000000801')
+
+developers = accounts.add()
+treasury = accounts.add()
 
 # set after deployment
 lido = None
@@ -66,9 +79,7 @@ if hasattr(project, 'OpenzeppelinContracts410Project'):
 else:
     OpenzeppelinContractsProject = project.OpenzeppelinContractsProject
 
-LiquidstakingOracleProject = project.LiquidstakingOracleProject
-
-# assert(1 <= QUORUM <= 2, 'supported QUORUM of 1 or 2')
+LidoDotKsmProject = project.LidoDotKsmProject
 
 
 def ss58decode(address):
@@ -114,25 +125,25 @@ def main():
     proxy_admin = ProxyAdmin.deploy({'from': alith, 'required_confs': 2})
 
     print("configure AuthManager")
-    mgr = deploy_with_proxy(LiquidstakingOracleProject.AuthManager, proxy_admin, ZERO_ADDRESS)
+    mgr = deploy_with_proxy(LidoDotKsmProject.AuthManager, proxy_admin, ZERO_ADDRESS)
 
     for role in ALL_ROLES:
         mgr.addByString(role, alith, {'from': alith})
 
     print("configure Lido")
 
-    lido = deploy_with_proxy(LiquidstakingOracleProject.Lido, proxy_admin, mgr.address, vKSM, x, x)
+    lido = deploy_with_proxy(LidoDotKsmProject.Lido, proxy_admin, mgr.address, vKSM, x, x, developers, treasury)
 
-    print("Lido proxy {lido}")
+    print(f"Lido proxy {lido}")
 
     print("Oracle deploy")
-    oracle = LiquidstakingOracleProject.Oracle.deploy({'from': alith, 'required_confs': 2})
+    oracle = LidoDotKsmProject.Oracle.deploy({'from': alith, 'required_confs': 2})
     print("Oracle master")
-    oracleMaster = LiquidstakingOracleProject.OracleMaster.deploy({'from': alith, 'required_confs': 2})
+    oracleMaster = LidoDotKsmProject.OracleMaster.deploy({'from': alith, 'required_confs': 2})
     oracleMaster.initialize(oracle, QUORUM, {'from': alith})
 
     print("Ledger")
-    lc = LiquidstakingOracleProject.Ledger.deploy({'from': alith, 'required_confs': 2})
+    lc = LidoDotKsmProject.Ledger.deploy({'from': alith, 'required_confs': 2})
 
     lido.setLedgerClone(lc, {'from': alith})
 
@@ -249,14 +260,13 @@ def createReport(url, stashAddress):
         ]
 
 
-def nominate():
+def nominate(lido):
     for s in stash:
         lido.nominate(s, [ss58decode(item) for item in VALIDATORS], {'from': alith})
 
 
-def report(_lido=None):
-    _lido = _lido or lido
-    oracleMaster = OracleMaster.at(_lido.ORACLE_MASTER())
+def report(lido):
+    oracleMaster = LidoDotKsmProject.OracleMaster.at(lido.ORACLE_MASTER())
     for S in STASH:
         print(f"report for {S}")
         r = createReport(RELAY_URL, S)
