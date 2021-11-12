@@ -11,6 +11,7 @@ jobs:
   lint-test:
     name: Solidity linters
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
     - uses: actions/checkout@v2
@@ -19,7 +20,7 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: 12.x
-    
+
     - name: Get yarn cache directory path
       id: yarn-cache-dir-path
       run: echo "::set-output name=dir::$(yarn cache dir)"
@@ -45,6 +46,6 @@ jobs:
       if: |
         steps.cache-yarn-cache.outputs.cache-hit != 'true' ||
         steps.cache-node-modules.outputs.cache-hit != 'true'
-    
+
     - name: Run Solidity linters
       run: yarn lint:sol:solhint
