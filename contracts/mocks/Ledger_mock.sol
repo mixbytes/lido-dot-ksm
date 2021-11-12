@@ -17,7 +17,7 @@ contract LedgerMock {
         LIDO = ILido(msg.sender);
     }
 
-    function distributeRewards(uint256 _totalRewards) external {
-        LIDO.distributeRewards(_totalRewards);
+    function distributeRewards(uint256 _totalRewards, uint256 _balance) external {
+        LIDO.distributeRewards(_totalRewards, _balance);
     }
 }

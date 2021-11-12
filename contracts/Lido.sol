@@ -32,10 +32,10 @@ contract Lido is stKSM, Initializable {
     event FeeSet(uint16 fee, uint16 feeOperatorsBP, uint16 feeTreasuryBP,  uint16 feeDevelopersBP);
 
     // Rewards distributed
-    event Rewards(address ledger, uint256 rewards);
+    event Rewards(address ledger, uint256 rewards, uint256 balance);
 
     // Rewards distributed
-    event Losses(address ledger, uint256 losses);
+    event Losses(address ledger, uint256 losses, uint256 balance);
 
     // Added new ledger
     event LedgerAdd(
@@ -569,7 +569,7 @@ contract Lido is stKSM, Initializable {
     /**
     * @notice Distribute rewards earned by ledger, allowed to call only by ledger
     */
-    function distributeRewards(uint256 _totalRewards) external {
+    function distributeRewards(uint256 _totalRewards, uint256 ledgerBalance) external {
         require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
 
         Types.Fee memory _fee = FEE;
@@ -594,13 +594,13 @@ contract Lido is stKSM, Initializable {
         _emitTransferAfterMintingShares(developers, _devShares);
         _emitTransferAfterMintingShares(treasury, shares2mint - _devShares);
 
-        emit Rewards(msg.sender, _totalRewards);
+        emit Rewards(msg.sender, _totalRewards, ledgerBalance);
     }
 
     /**
     * @notice Distribute lossed by ledger, allowed to call only by ledger
     */
-    function distributeLosses(uint256 _totalLosses) external {
+    function distributeLosses(uint256 _totalLosses, uint256 ledgerBalance) external {
         require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
 
         fundRaisedBalance -= _totalLosses;
@@ -608,7 +608,7 @@ contract Lido is stKSM, Initializable {
             ledgerStake[msg.sender] -= _totalLosses;
         }
 
-        emit Losses(msg.sender, _totalLosses);
+        emit Losses(msg.sender, _totalLosses, ledgerBalance);
     }
 
     /**

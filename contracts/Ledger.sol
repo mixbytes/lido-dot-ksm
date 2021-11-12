@@ -175,13 +175,13 @@ contract Ledger {
         uint128 _cachedTotalBalance = cachedTotalBalance;
         if (_cachedTotalBalance < _report.stashBalance) { // if cached balance > real => we have reward
             uint128 reward = _report.stashBalance - _cachedTotalBalance;
-            LIDO.distributeRewards(reward);
+            LIDO.distributeRewards(reward, _report.stashBalance);
 
             emit Rewards(reward, _report.stashBalance);
         }
         else if (_cachedTotalBalance > _report.stashBalance) {
             uint128 slash = _cachedTotalBalance - _report.stashBalance;
-            LIDO.distributeLosses(slash);
+            LIDO.distributeLosses(slash, _report.stashBalance);
 
             emit Slash(slash, _report.stashBalance);
         }
