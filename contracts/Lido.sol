@@ -2,13 +2,14 @@
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 import "../interfaces/IOracleMaster.sol";
 import "../interfaces/ILedger.sol";
-import "../interfaces/IvKSM.sol";
+import "../interfaces/IController.sol";
 import "../interfaces/IAuthManager.sol";
 
 import "./stKSM.sol";
@@ -94,13 +95,9 @@ contract Lido is stKSM, Initializable {
 
 
     // vKSM precompile
-    IERC20 internal vKSM;
-    // relay calls builder precompile
-    address internal relayEncoder;
-    // xcm transactor precompile
-    address internal xcmTransactor;
-    // xTokens precompile for transferring relay xcm assets through chains
-    address internal xTokens;
+    IERC20 public vKSM;
+    // controller
+    address public controller;
 
 
     // auth manager contract address
@@ -179,20 +176,19 @@ contract Lido is stKSM, Initializable {
     * @notice Initialize lido contract.
     * @param _authManager - auth manager contract address
     * @param _vKSM - vKSM contract address
-    * @param _relayEncoder - relayEncoder(relaychain calls builder) contract address
-    * @param _xcmTransactor - xcmTransactor(relaychain calls relayer) contract address
+    * @param _controller - relay controller address
+    * @param _developers - devs address
+    * @param _treasury - treasury address
     */
     function initialize(
         address _authManager,
         address _vKSM,
-        address _relayEncoder,
-        address _xcmTransactor,
+        address _controller,
         address _developers,
         address _treasury
     ) external initializer {
-        vKSM = IvKSM(_vKSM);
-        relayEncoder = _relayEncoder;
-        xcmTransactor = _xcmTransactor;
+        vKSM = IERC20(_vKSM);
+        controller = _controller;
         AUTH_MANAGER = _authManager;
 
         MAX_LEDGERS_AMOUNT = 200;
@@ -408,6 +404,7 @@ contract Lido is stKSM, Initializable {
     function addLedger(
         bytes32 _stashAccount,
         bytes32 _controllerAccount,
+        uint16 _index,
         uint256 _share
     )
         external
@@ -425,8 +422,7 @@ contract Lido is stKSM, Initializable {
             _stashAccount,
             _controllerAccount,
             address(vKSM),
-            relayEncoder,
-            xcmTransactor,
+            controller,
             RELAY_SPEC.minNominatorBalance
         );
         ledgers.push(ledger);
@@ -437,7 +433,9 @@ contract Lido is stKSM, Initializable {
 
         IOracleMaster(ORACLE_MASTER).addLedger(ledger);
 
-        vKSM.approve(ledger, type(uint256).max);
+//        vKSM.approve(ledger, type(uint256).max);
+
+        IController(controller).newSubAccount(_index, _stashAccount, ledger);
 
         emit LedgerAdd(ledger, _stashAccount, _controllerAccount, _share);
         return ledger;

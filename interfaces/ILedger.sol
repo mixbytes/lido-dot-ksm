@@ -8,8 +8,7 @@ interface ILedger {
         bytes32 stashAccount,
         bytes32 controllerAccount,
         address vKSM,
-        address AUX,
-        address vAccounts,
+        address controller,
         uint128 minNominatorBalance
     ) external;
 

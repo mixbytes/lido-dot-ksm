@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 import "../interfaces/IRelayEncoder.sol";
-import "../interfaces/IvKSM.sol";
 import "../interfaces/IxTokens.sol";
 import "../interfaces/IXcmTransactor.sol";
 import "../interfaces/ILedger.sol";
@@ -17,7 +18,7 @@ contract Controller {
     bytes32 public relayAccount;
 
     // vKSM precompile
-    IvKSM internal vKSM;
+    IERC20 internal vKSM;
 
     // relay call builder precompile
     IRelayEncoder internal relayEncoder;
@@ -59,6 +60,59 @@ contract Controller {
         uint64 newValue
     );
 
+    event Bond (
+        address caller,
+        bytes32 stash,
+        bytes32 controller,
+        uint256 amount
+    );
+
+    event BondExtra (
+        address caller,
+        bytes32 stash,
+        uint256 amount
+    );
+
+    event Unbond (
+        address caller,
+        bytes32 stash,
+        uint256 amount
+    );
+
+    event Rebond (
+        address caller,
+        bytes32 stash,
+        uint256 amount
+    );
+
+    event Withdraw (
+        address caller,
+        bytes32 stash
+    );
+
+    event Nominate (
+        address caller,
+        bytes32 stash,
+        bytes32[] validators
+    );
+
+    event Chill (
+        address caller,
+        bytes32 stash
+    );
+
+    event TransferToRelaychain (
+        address from,
+        bytes32 to,
+        uint256 amount
+    );
+
+    event TransferToParachain (
+        bytes32 from,
+        address to,
+        uint256 amount
+    );
+
 
     modifier onlyRegistred() {
         require(senderToIndex[msg.sender] != 0, "sender isn't registred");
@@ -87,7 +141,7 @@ contract Controller {
         relayAccount = _relayAccount;
         rootDerivativeIndex = _rootDerivativeIndex;
 
-        vKSM = IvKSM(_vKSM);
+        vKSM = IERC20(_vKSM);
         relayEncoder = IRelayEncoder(_relayEncoder);
         xcmTransactor = IXcmTransactor(_xcmTransactor);
         xTokens = IxTokens(_xTokens);
@@ -120,24 +174,26 @@ contract Controller {
     }
 
 
-    function newSubAccount(uint16 index, bytes32 accountId, address paraAddress) external returns(bytes32, uint16) {
-        require(indexToAccount[index] == bytes32(0), "already registred");
+    function newSubAccount(uint16 index, bytes32 accountId, address paraAddress) external {
+        require(indexToAccount[index + 1] == bytes32(0), "already registred");
 
         senderToIndex[paraAddress] = index + 1;
         indexToAccount[index + 1] = accountId;
     }
 
 
-    function nominate(bytes32[] calldata _validators) external onlyRegistred {
-        uint256[] memory convertedValidators = new uint256[](_validators.length);
-        for (uint256 i = 0; i < _validators.length; ++i) {
-            convertedValidators[i] = uint256(_validators[i]);
+    function nominate(bytes32[] calldata validators) external onlyRegistred {
+        uint256[] memory convertedValidators = new uint256[](validators.length);
+        for (uint256 i = 0; i < validators.length; ++i) {
+            convertedValidators[i] = uint256(validators[i]);
         }
         callThroughDerivative(
             getSenderIndex(),
-            getWeight(WEIGHT.NOMINATE_BASE) + getWeight(WEIGHT.NOMINATE_PER_UNIT) * uint64(_validators.length),
+            getWeight(WEIGHT.NOMINATE_BASE) + getWeight(WEIGHT.NOMINATE_PER_UNIT) * uint64(validators.length),
             relayEncoder.encode_nominate(convertedValidators)
         );
+
+        emit Nominate(msg.sender, getSenderAccount(), validators);
     }
 
     function bond(bytes32 controller, uint256 amount) external onlyRegistred {
@@ -146,6 +202,8 @@ contract Controller {
             getWeight(WEIGHT.BOND_BASE),
             relayEncoder.encode_bond(uint256(controller), amount, bytes(hex"00"))
         );
+
+        emit Bond(msg.sender, getSenderAccount(), controller, amount);
     }
 
     function bondExtra(uint256 amount) external onlyRegistred {
@@ -154,6 +212,8 @@ contract Controller {
             getWeight(WEIGHT.BOND_EXTRA_BASE),
             relayEncoder.encode_bond_extra(amount)
         );
+
+        emit BondExtra(msg.sender, getSenderAccount(), amount);
     }
 
     function unbond(uint256 amount) external onlyRegistred {
@@ -162,6 +222,8 @@ contract Controller {
             getWeight(WEIGHT.UNBOND_BASE),
             relayEncoder.encode_unbond(amount)
         );
+
+        emit Unbond(msg.sender, getSenderAccount(), amount);
     }
 
     function withdrawUnbonded() external onlyRegistred {
@@ -170,6 +232,8 @@ contract Controller {
             getWeight(WEIGHT.WITHDRAW_UNBONDED_BASE) + getWeight(WEIGHT.WITHDRAW_UNBONDED_PER_UNIT) * 10,
             relayEncoder.encode_withdraw_unbonded(10/* TODO fix*/)
         );
+
+        emit Withdraw(msg.sender, getSenderAccount());
     }
 
     function rebond(uint256 amount) external onlyRegistred {
@@ -178,6 +242,8 @@ contract Controller {
             getWeight(WEIGHT.REBOND_BASE) + getWeight(WEIGHT.REBOND_PER_UNIT) * 10 /*TODO fix*/,
             relayEncoder.encode_rebond(amount)
         );
+
+        emit Rebond(msg.sender, getSenderAccount(), amount);
     }
 
     function chill() external onlyRegistred {
@@ -186,6 +252,8 @@ contract Controller {
             getWeight(WEIGHT.CHILL_BASE),
             relayEncoder.encode_chill()
         );
+
+        emit Chill(msg.sender, getSenderAccount());
     }
 
     function transferToParachain(uint256 amount) external onlyRegistred {
@@ -195,6 +263,8 @@ contract Controller {
             getWeight(WEIGHT.TRANSFER_TO_PARA_BASE),
             encodeReverseTransfer(msg.sender, amount)
         );
+
+        emit TransferToParachain(getSenderAccount(), msg.sender, amount);
     }
 
     function transferToRelaychain(uint256 amount) external onlyRegistred {
@@ -205,6 +275,8 @@ contract Controller {
         destination.interior = new bytes[](1);
         destination.interior[0] = bytes.concat(bytes1(hex"01"), getSenderAccount(), bytes1(hex"00")); // X2, NetworkId: Any
         xTokens.transfer(address(vKSM), amount + 18900000000, destination, getWeight(WEIGHT.TRANSFER_TO_RELAY_BASE));
+
+        emit TransferToRelaychain(msg.sender, getSenderAccount(), amount);
     }
 
 

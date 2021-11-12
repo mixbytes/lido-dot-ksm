@@ -11,8 +11,7 @@ contract LedgerMock {
         bytes32 _stashAccount,
         bytes32 _controllerAccount,
         address _vKSM,
-        address _AUX,
-        address _vAccounts,
+        address _controller,
         uint128 _minNominatorBalance
     ) external {
         LIDO = ILido(msg.sender);

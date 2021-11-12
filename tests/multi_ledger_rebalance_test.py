@@ -4,7 +4,7 @@ from helpers import RelayChain, distribute_initial_tokens
 
 def test_add_multi_ledgers(lido, oracle_master, vKSM, Ledger, accounts):
     for stash in (0x10, 0x20, 0x30):
-        lido.addLedger(hex(stash), hex(stash + 1), 100, {'from': accounts[0]})
+        lido.addLedger(hex(stash), hex(stash + 1), 0, 100, {'from': accounts[0]})
         ledger = Ledger.at(lido.findLedger(hex(stash)))
         assert ledger.stashAccount() == hex(stash)
 
@@ -26,7 +26,7 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, accounts):
 
     for i in range(len(stashes)):
         stash = stashes[i]
-        lido.addLedger(hex(stash), hex(stash + 1), shares[i], {'from': accounts[0]})
+        lido.addLedger(hex(stash), hex(stash + 1), 0, shares[i], {'from': accounts[0]})
 
     distribute_initial_tokens(vKSM, lido, accounts)
 
@@ -62,7 +62,7 @@ def test_change_shares_distribution(lido, oracle_master, vKSM, Ledger, accounts)
 
     for i in range(len(stashes)):
         stash = stashes[i]
-        lido.addLedger(hex(stash), hex(stash + 1), shares[i], {'from': accounts[0]})
+        lido.addLedger(hex(stash), hex(stash + 1), 0, shares[i], {'from': accounts[0]})
 
     distribute_initial_tokens(vKSM, lido, accounts)
 
@@ -104,7 +104,7 @@ def test_redeem_distribution(lido, oracle_master, vKSM, Ledger, accounts):
 
     for i in range(len(stashes)):
         stash = stashes[i]
-        lido.addLedger(hex(stash), hex(stash + 1), shares[i], {'from': accounts[0]})
+        lido.addLedger(hex(stash), hex(stash + 1), 0, shares[i], {'from': accounts[0]})
 
     distribute_initial_tokens(vKSM, lido, accounts)
 
@@ -139,7 +139,7 @@ def test_huge_amount_ledgers(lido, oracle_master, vKSM, Ledger, accounts):
 
     for i in range(len(stashes)):
         stash = stashes[i]
-        lido.addLedger(hex(stash), hex(stash + 1), shares[i], {'from': accounts[0]})
+        lido.addLedger(hex(stash), hex(stash + 1), 0, shares[i], {'from': accounts[0]})
 
     distribute_initial_tokens(vKSM, lido, accounts)
 

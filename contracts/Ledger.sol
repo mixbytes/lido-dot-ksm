@@ -2,12 +2,12 @@
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import "../interfaces/IOracleMaster.sol";
 import "../interfaces/ILido.sol";
 import "../interfaces/IRelayEncoder.sol";
-import "../interfaces/IvKSM.sol";
 import "../interfaces/IXcmTransactor.sol";
 import "../interfaces/IController.sol";
 import "../interfaces/Types.sol";
@@ -53,7 +53,7 @@ contract Ledger {
 
 
     // vKSM precompile
-    IvKSM internal vKSM;
+    IERC20 internal vKSM;
 
     IController internal controller;
 
@@ -105,13 +105,13 @@ contract Ledger {
 
         LIDO = ILido(msg.sender);
 
-        vKSM = IvKSM(_vKSM);
+        vKSM = IERC20(_vKSM);
 
         controller = IController(_controller);
 
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
 
-        vKSM.approve(_controller, type(uint256).max);
+//        vKSM.approve(_controller, type(uint256).max);
     }
 
     /**
@@ -121,6 +121,10 @@ contract Ledger {
     */
     function setMinNominatorBalance(uint128 _minNominatorBalance) external onlyLido {
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
+    }
+
+    function refreshAllowances() external {
+        vKSM.approve(address(controller), type(uint256).max);
     }
 
     /**

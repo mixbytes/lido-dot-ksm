@@ -2,33 +2,10 @@ from brownie import chain
 from helpers import RelayChain, distribute_initial_tokens
 
 
-def test_upward_transfer_mock(vKSM, accounts):
-    before = vKSM.balanceOf(accounts[0])
-
-    tx = vKSM.relayTransferTo("123", 123, {'from': accounts[0]})
-    tx.info()
-
-    assert tx.events['UpwardTransfer'][0]['amount'] == 123
-    assert tx.events['UpwardTransfer'][0]['from'] == accounts[0]
-    assert tx.events['UpwardTransfer'][0]['to'] == "0x123"
-
-    assert vKSM.balanceOf(accounts[0]) == before - 123
-
-
-def test_downward_transfer_mock(vKSM, vAccounts, accounts):
-    before = vKSM.balanceOf(accounts[0])
-
-    tx = vAccounts.relayTransferFrom("123", 123, {'from': accounts[0]})
-
-    assert tx.events['DownwardTransfer'][0]['amount'] == 123
-    assert tx.events['DownwardTransfer'][0]['from'] == "0x123"
-    assert tx.events['DownwardTransfer'][0]['to'] == accounts[0]
-
-    assert vKSM.balanceOf(accounts[0]) == before
 
 
 def test_add_stash(lido, oracle_master, vKSM, Ledger, accounts):
-    lido.addLedger("0x10", "0x20", 100, {'from': accounts[0]})
+    lido.addLedger("0x10", "0x20", 0, 100, {'from': accounts[0]})
 
     ledger = Ledger.at(lido.findLedger("0x10"))
     assert ledger.stashAccount() == "0x10"

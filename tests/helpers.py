@@ -1,3 +1,6 @@
+
+from brownie import Ledger
+
 class RelayLedger:
     ledger_address = None
     stash_account = None
@@ -107,9 +110,11 @@ class RelayChain:
         self.total_rewards = 0
 
     def new_ledger(self, stash_account, controller_account, share):
-        tx = self.lido.addLedger(stash_account, controller_account, share, {'from': self.accounts[0]})
+        tx = self.lido.addLedger(stash_account, controller_account, 0, share, {'from': self.accounts[0]})
         tx.info()
         self.ledgers.append(RelayLedger(self, tx.events['LedgerAdd'][0]['addr'], stash_account, controller_account))
+        self.lido.refreshAllowances({'from': self.accounts[0]})
+        Ledger.at(tx.events['LedgerAdd'][0]['addr']).refreshAllowances({'from': self.accounts[0]})
 
     def _ledger_idx_by_stash_account(self, stash_account):
         for i in range(len(self.ledgers)):
@@ -168,9 +173,9 @@ class RelayChain:
         for i in range(len(tx.events)):
             name = tx.events[i].name
             event = tx.events[i]
-            if name == 'UpwardTransfer':
+            if name == 'TransferToRelaychain':
                 self._process_upward_transfer(event)
-            elif name == 'DownwardTransfer':
+            elif name == 'TransferToParachain':
                 self._process_downward_transfer(event)
             else:
                 self._process_call(name, event)

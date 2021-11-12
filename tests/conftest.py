@@ -44,16 +44,6 @@ def vKSM(vKSM_mock, accounts):
 
 
 @pytest.fixture(scope="module")
-def vAccounts(vAccounts_mock, vKSM, accounts):
-    return vAccounts_mock.deploy(vKSM, {'from': accounts[0]})
-
-
-@pytest.fixture(scope="module")
-def aux(AUX_mock, accounts):
-    return AUX_mock.deploy({'from': accounts[0]})
-
-
-@pytest.fixture(scope="module")
 def auth_manager(AuthManager, proxy_admin, accounts):
     am = deploy_with_proxy(AuthManager, proxy_admin, accounts[0])
     am.addByString('ROLE_SPEC_MANAGER', accounts[0], {'from': accounts[0]})
@@ -79,6 +69,12 @@ def oracle_master(Oracle, OracleMaster, Ledger, accounts, chain):
 
 
 @pytest.fixture(scope="module")
+def controller(Controller_mock, accounts, chain):
+    c = Controller_mock.deploy({'from': accounts[0]})
+    return c
+
+
+@pytest.fixture(scope="module")
 def admin(accounts):
     return accounts[0]
 
@@ -94,9 +90,9 @@ def developers(accounts):
 
 
 @pytest.fixture(scope="module")
-def lido(Lido, vKSM, vAccounts, aux, auth_manager, oracle_master, proxy_admin, chain, Ledger, accounts, developers, treasury):
+def lido(Lido, vKSM, controller, auth_manager, oracle_master, proxy_admin, chain, Ledger, accounts, developers, treasury):
     lc = Ledger.deploy({'from': accounts[0]})
-    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, aux, vAccounts, developers, treasury)
+    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury)
     _lido.setLedgerClone(lc)
     _lido.setOracleMaster(oracle_master)
     era_sec = 60 * 60 * 6
@@ -105,14 +101,14 @@ def lido(Lido, vKSM, vAccounts, aux, auth_manager, oracle_master, proxy_admin, c
 
 
 @pytest.fixture(scope="module")
-def mocklido(Lido, LedgerMock, Oracle, OracleMaster, vKSM, vAccounts, auth_manager, aux, admin, developers, treasury):
+def mocklido(Lido, LedgerMock, Oracle, OracleMaster, vKSM, controller, auth_manager, admin, developers, treasury):
     lc = LedgerMock.deploy({'from': admin})
     o = Oracle.deploy({'from': admin})
     om = OracleMaster.deploy({'from': admin})
     om.initialize(o, 1, {'from': admin})
 
     _lido = Lido.deploy({'from': admin})
-    _lido.initialize(auth_manager, vKSM, aux, vAccounts, developers, treasury, {'from': admin})
+    _lido.initialize(auth_manager, vKSM, controller, developers, treasury, {'from': admin})
     _lido.setLedgerClone(lc, {'from': admin})
     _lido.setOracleMaster(om, {'from': admin})
 
@@ -121,5 +117,5 @@ def mocklido(Lido, LedgerMock, Oracle, OracleMaster, vKSM, vAccounts, auth_manag
 
 @pytest.fixture(scope="module")
 def mockledger(mocklido, admin, LedgerMock):
-    mocklido.addLedger(0x01, 0x01, 100, {'from': admin})
+    mocklido.addLedger(0x01, 0x01, 0, 100, {'from': admin})
     return LedgerMock.at(mocklido.findLedger(0x01))
