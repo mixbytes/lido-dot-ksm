@@ -628,6 +628,9 @@ contract Lido is stKSM, Initializable {
     */
     function forceRebalanceStake() external auth(ROLE_STAKE_MANAGER) {
         _forceRebalanceStakes();
+
+        bufferedDeposits = 0;
+        bufferedRedeems = 0;
     }
 
     /**
