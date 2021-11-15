@@ -2,6 +2,20 @@ from substrateinterface import Keypair
 from substrateinterface import SubstrateInterface
 from pathlib import Path
 from brownie import *
+import base58
+from hashlib import blake2b
+
+
+def get_derivative_account(root_account, index):
+    seed_bytes = b'modlpy/utilisuba'
+    root_account_bytes = bytes.fromhex(Keypair(root_account).public_key[2:])
+    index_bytes = int(index).to_bytes(2, 'little')
+
+    entropy = blake2b(seed_bytes + root_account_bytes + index_bytes, digest_size=32).digest()
+    input_bytes = bytes([42]) + entropy
+    checksum = blake2b(b'SS58PRE' + input_bytes).digest()
+    return base58.b58encode(input_bytes + checksum[:2]).decode()
+
 
 project.load(Path.home() / ".brownie" / "packages" / config["dependencies"][0])
 if hasattr(project, 'OpenzeppelinContracts410Project'):
@@ -30,8 +44,9 @@ ALL_ROLES = ['ROLE_SPEC_MANAGER',
 
 
 # stashes
+ROOT_DERIVATIVE = '5HYQeRamG9nQyRYAUoyHMuZ9tnSTPNSyim4uCBXuBCHJJm6a'
 STASH_IDX = [40, 41, 42]
-STASH = ["5CKFkuaM9EXYVWRV5q2rtP7pWt714RhaZJb5cMDTnoKwGcXy", "5HgjE4L65GnJq9E8LMwDChitXGX8rRBZux9pn5ky7in4pcjj", "5CMgD8Tg1byF9MMxTDnPfDF4qBQfHP8f9Ym6jTJbdQbckMb9"]
+STASH = [ get_derivative_account(ROOT_DERIVATIVE, idx) for idx in STASH_IDX ]
 
 
 # Oracles
