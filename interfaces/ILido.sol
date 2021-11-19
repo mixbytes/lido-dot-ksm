@@ -4,6 +4,8 @@ pragma solidity ^0.8.0;
 import "./Types.sol";
 
 interface ILido {
+    function developers() external view returns(address);
+    
     function distributeRewards(uint256 totalRewards, uint256 ledgerBalance) external;
 
     function distributeLosses(uint256 totalLosses, uint256 ledgerBalance) external;

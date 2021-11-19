@@ -83,6 +83,8 @@ contract OracleMaster is Pausable {
         uint8 _quorum
     ) external {
         require(ORACLE_CLONE == address(0), "OM: ALREADY_INITIALIZED");
+        require(_oracleClone != address(0), "OM: INCORRECT_CLONE_ADDRESS");
+        require(_quorum > 0 && _quorum < MAX_MEMBERS, "OM: INCORRECT_QUORUM");
 
         ORACLE_CLONE = _oracleClone;
         QUORUM = _quorum;
@@ -94,6 +96,8 @@ contract OracleMaster is Pausable {
     */
     function setLido(address _lido) external {
         require(LIDO == address(0), "OM: LIDO_ALREADY_DEFINED");
+        require(_lido != address(0), "OM: INCORRECT_LIDO_ADDRESS");
+
         LIDO = _lido;
     }
 
@@ -113,7 +117,7 @@ contract OracleMaster is Pausable {
     * @param _quorum new value of quorum threshold
     */
     function setQuorum(uint8 _quorum) external auth(ROLE_ORACLE_QUORUM_MANAGER) {
-        require(0 != _quorum, "OM: QUORUM_WONT_BE_MADE");
+        require(_quorum > 0 && _quorum < MAX_MEMBERS, "OM: QUORUM_WONT_BE_MADE");
         uint8 oldQuorum = QUORUM;
         QUORUM = _quorum;
 

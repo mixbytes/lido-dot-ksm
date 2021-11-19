@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import "../interfaces/IOracleMaster.sol";
 import "../interfaces/ILido.sol";
+import "../interfaces/IAuthManager.sol";
 import "../interfaces/IRelayEncoder.sol";
 import "../interfaces/IXcmTransactor.sol";
 import "../interfaces/IController.sol";
@@ -63,9 +64,8 @@ contract Ledger {
     // Minimal allowed balance to being a nominator
     uint128 public MIN_NOMINATOR_BALANCE;
 
-
-    // Who pay off relay chain transaction fees
-    bytes32 internal constant GARANTOR = 0x00;
+    // Ledger manager role
+    bytes32 internal constant ROLE_LEDGER_MANAGER = keccak256("ROLE_LEDGER_MANAGER");
 
 
     modifier onlyLido() {
@@ -76,6 +76,11 @@ contract Ledger {
     modifier onlyOracle() {
         address oracle = IOracleMaster(ILido(LIDO).ORACLE_MASTER()).getOracle(address(this));
         require(msg.sender == oracle, "LEDGED: NOT_ORACLE");
+        _;
+    }
+
+    modifier auth(bytes32 role) {
+        require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "LEDGED: UNAUTHOROZED");
         _;
     }
 
@@ -123,7 +128,7 @@ contract Ledger {
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
     }
 
-    function refreshAllowances() external {
+    function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
         vKSM.approve(address(controller), type(uint256).max);
     }
 
@@ -278,6 +283,10 @@ contract Ledger {
             uint128 totalDownwardTransferred = uint128(vKSM.balanceOf(address(this)));
 
             if (totalDownwardTransferred >= _transferDownwardBalance ) {
+                if (totalDownwardTransferred > _transferDownwardBalance) {
+                    // TODO add check that LIDO.developers() != address(0)
+                    vKSM.transfer(LIDO.developers(), totalDownwardTransferred - _transferDownwardBalance);    
+                }
                 // take transferred funds into buffered balance
                 vKSM.transfer(address(LIDO), _transferDownwardBalance);
 
