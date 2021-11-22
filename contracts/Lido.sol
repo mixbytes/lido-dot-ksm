@@ -41,8 +41,7 @@ contract Lido is stKSM, Initializable {
     event LedgerAdd(
         address addr,
         bytes32 stashAccount,
-        bytes32 controllerAccount,
-        uint256 share
+        bytes32 controllerAccount
     );
 
     // Ledger removed
@@ -50,10 +49,9 @@ contract Lido is stKSM, Initializable {
         address addr
     );
 
-    // Ledger share setted
-    event LedgerSetShare(
-        address addr,
-        uint256 share
+    // Ledger removed
+    event LedgerDisable(
+        address addr
     );
 
     // sum of all deposits and rewards
@@ -69,20 +67,11 @@ contract Lido is stKSM, Initializable {
     // pending claims total
     uint256 public pendingClaimsTotal;
 
-    // Ledger accounts
-    address[] private ledgers;
-
     // Ledger address by stash account id
     mapping(bytes32 => address) private ledgerByStash;
 
     // Map to check ledger existence by address
-    mapping(address => uint256) private ledgerByAddress;
-
-    // Ledger shares map
-    mapping(address => uint256) public ledgerShares;
-
-    // Sum of all ledger shares
-    uint256 public ledgerSharesTotal;
+    mapping(address => bool) private ledgerByAddress;
 
     // haven't executed buffrered deposits
     uint256 public bufferedDeposits;
@@ -93,6 +82,11 @@ contract Lido is stKSM, Initializable {
     // Ledger stakes
     mapping(address => uint256) public ledgerStake;
 
+    // Disabled ledgers
+    address[] public disabledLedgers;
+
+    // Enabled ledgers
+    address[] public enabledLedgers;
 
     // vKSM precompile
     IERC20 public vKSM;
@@ -250,10 +244,14 @@ contract Lido is stKSM, Initializable {
     * @return Array of bytes32 relaychain stash accounts
     */
     function getStashAccounts() public view returns (bytes32[] memory) {
-        bytes32[] memory _stashes = new bytes32[](ledgers.length);
+        bytes32[] memory _stashes = new bytes32[](enabledLedgers.length + disabledLedgers.length);
 
-        for (uint i = 0; i < ledgers.length; i++) {
-            _stashes[i] = bytes32(ILedger(ledgers[i]).stashAccount());
+        for (uint i = 0; i < enabledLedgers.length; i++) {
+            _stashes[i] = bytes32(ILedger(enabledLedgers[i]).stashAccount());
+        }
+
+        for (uint i = 0; i < disabledLedgers.length; i++) {
+            _stashes[enabledLedgers.length + i] = bytes32(ILedger(disabledLedgers[i]).stashAccount());
         }
         return _stashes;
     }
@@ -264,7 +262,17 @@ contract Lido is stKSM, Initializable {
     * @return Array of ledger contract addresses
     */
     function getLedgerAddresses() public view returns (address[] memory) {
-        return ledgers;
+        address[] memory _ledgers = new address[](enabledLedgers.length + disabledLedgers.length);
+
+        for (uint i = 0; i < enabledLedgers.length; i++) {
+            _ledgers[i] = enabledLedgers[i];
+        }
+
+        for (uint i = 0; i < disabledLedgers.length; i++) {
+            _ledgers[enabledLedgers.length + i] = disabledLedgers[i];
+        }
+
+        return _ledgers;
     }
 
     /**
@@ -398,14 +406,12 @@ contract Lido is stKSM, Initializable {
            recommended to carefully calculate share value to avoid significant rebalancing.
     * @param _stashAccount - relaychain stash account id
     * @param _controllerAccount - controller account id for given stash
-    * @param _share - share of managing stake from total pooled tokens
     * @return created ledger address
     */
     function addLedger(
         bytes32 _stashAccount,
         bytes32 _controllerAccount,
-        uint16 _index,
-        uint256 _share
+        uint16 _index
     )
         external
         auth(ROLE_LEDGER_MANAGER)
@@ -413,7 +419,7 @@ contract Lido is stKSM, Initializable {
     {
         require(LEDGER_CLONE != address(0), "LIDO: UNSPECIFIED_LEDGER_CLONE");
         require(ORACLE_MASTER != address(0), "LIDO: NO_ORACLE_MASTER");
-        require(ledgers.length < MAX_LEDGERS_AMOUNT, "LIDO: LEDGERS_POOL_LIMIT");
+        require(enabledLedgers.length + disabledLedgers.length < MAX_LEDGERS_AMOUNT, "LIDO: LEDGERS_POOL_LIMIT");
         require(ledgerByStash[_stashAccount] == address(0), "LIDO: STASH_ALREADY_EXISTS");
 
         address ledger = LEDGER_CLONE.cloneDeterministic(_stashAccount);
@@ -425,11 +431,9 @@ contract Lido is stKSM, Initializable {
             controller,
             RELAY_SPEC.minNominatorBalance
         );
-        ledgers.push(ledger);
+        enabledLedgers.push(ledger);
         ledgerByStash[_stashAccount] = ledger;
-        ledgerByAddress[ledger] = ledgers.length;
-        ledgerShares[ledger] = _share;
-        ledgerSharesTotal += _share;
+        ledgerByAddress[ledger] = true;
 
         IOracleMaster(ORACLE_MASTER).addLedger(ledger);
 
@@ -437,47 +441,31 @@ contract Lido is stKSM, Initializable {
 
         IController(controller).newSubAccount(_index, _stashAccount, ledger);
 
-        emit LedgerAdd(ledger, _stashAccount, _controllerAccount, _share);
+        emit LedgerAdd(ledger, _stashAccount, _controllerAccount);
         return ledger;
     }
 
-    /**
-    * @notice Set new share for existing ledger, allowed to call only by ROLE_LEDGER_MANAGER
-    * @param _ledger - target ledger address
-    * @param _newShare - new stare amount
-    */
-    function setLedgerShare(address _ledger, uint256 _newShare) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgerByAddress[_ledger] != 0, "LIDO: LEDGER_NOT_FOUND");
-
-        ledgerSharesTotal -= ledgerShares[_ledger];
-        ledgerShares[_ledger] = _newShare;
-        ledgerSharesTotal += _newShare;
-
-        emit LedgerSetShare(_ledger, _newShare);
-    }
 
     /**
     * @notice Remove ledger, allowed to call only by ROLE_LEDGER_MANAGER
     * @dev That method cannot be executed for running ledger, so need to drain funds
-    *      from ledger by setting zero share and wait for unbonding period.
     * @param _ledgerAddress - target ledger address
     */
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgerByAddress[_ledgerAddress] != 0, "LIDO: LEDGER_NOT_FOUND");
-        require(ledgerShares[_ledgerAddress] == 0, "LIDO: LEDGER_HAS_NON_ZERO_SHARE");
+        require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
         require(ledgerStake[_ledgerAddress] == 0, "LIDO: LEDGER_HAS_NON_ZERO_STAKE");
+        uint256 ledgerIdx = findDisabledLedger(_ledgerAddress);
+        require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_DISABLED");
 
         ILedger ledger = ILedger(_ledgerAddress);
         require(ledger.isEmpty(), "LIDO: LEDGER_IS_NOT_EMPTY");
 
-        address lastLedger = ledgers[ledgers.length - 1];
-        uint256 idxToRemove = ledgerByAddress[_ledgerAddress] - 1;
-        ledgers[idxToRemove] = lastLedger; // put last ledger to removing ledger position
-        ledgerByAddress[lastLedger] = idxToRemove + 1; // fix last ledger index after swap
-        ledgers.pop();
+        address lastLedger = disabledLedgers[disabledLedgers.length - 1];
+        disabledLedgers[ledgerIdx] = lastLedger;
+        disabledLedgers.pop();
+
         delete ledgerByAddress[_ledgerAddress];
         delete ledgerByStash[ledger.stashAccount()];
-        delete ledgerShares[_ledgerAddress];
 
         IOracleMaster(ORACLE_MASTER).removeLedger(_ledgerAddress);
 
@@ -486,6 +474,41 @@ contract Lido is stKSM, Initializable {
         emit LedgerRemove(_ledgerAddress);
     }
 
+    function findEnabledLedger(address _ledgerAddress) internal returns(uint256) {
+        for (uint256 i = 0; i < enabledLedgers.length; ++i) {
+            if (enabledLedgers[i] == _ledgerAddress) {
+                return i;
+            }
+        }
+        return type(uint256).max;
+    }
+
+    function findDisabledLedger(address _ledgerAddress) internal returns(uint256) {
+        for (uint256 i = 0; i < disabledLedgers.length; ++i) {
+            if (disabledLedgers[i] == _ledgerAddress) {
+                return i;
+            }
+        }
+        return type(uint256).max;
+    }
+    /**
+    * @notice Disable ledger, allowed to call only by ROLE_LEDGER_MANAGER
+    * @dev That method put ledger to "draining" mode, after ledger drained it can be removed
+    * @param _ledgerAddress - target ledger address
+    */
+    function disableLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
+        require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
+        uint256 ledgerIdx = findEnabledLedger(_ledgerAddress);
+        require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_ENABLED");
+
+        address lastLedger = enabledLedgers[enabledLedgers.length - 1];
+        enabledLedgers[ledgerIdx] = lastLedger;
+        enabledLedgers.pop();
+
+        disabledLedgers.push(_ledgerAddress);
+
+        emit LedgerDisable(_ledgerAddress);
+    }
     /**
     * @notice Nominate on behalf of gived stash account, allowed to call only by ROLE_STAKE_MANAGER
     * @dev Method spawns xcm call to relaychain
@@ -574,7 +597,7 @@ contract Lido is stKSM, Initializable {
     * @notice Distribute rewards earned by ledger, allowed to call only by ledger
     */
     function distributeRewards(uint256 _totalRewards, uint256 ledgerBalance) external {
-        require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
+        require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
         Types.Fee memory _fee = FEE;
 
@@ -584,9 +607,7 @@ contract Lido is stKSM, Initializable {
 
         fundRaisedBalance += _totalRewards;
 
-        if (ledgerShares[msg.sender] > 0) {
-            ledgerStake[msg.sender] += _totalRewards;
-        }
+        ledgerStake[msg.sender] += _totalRewards;
 
         uint256 _rewards = _totalRewards * _feeDevTreasure / uint256(10000 - _fee.operators);
         uint256 denom = _getTotalPooledKSM()  - _rewards;
@@ -607,14 +628,10 @@ contract Lido is stKSM, Initializable {
     * @notice Distribute lossed by ledger, allowed to call only by ledger
     */
     function distributeLosses(uint256 _totalLosses, uint256 ledgerBalance) external {
-        require(ledgerByAddress[msg.sender] != 0, "LIDO: NOT_FROM_LEDGER");
+        require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
         fundRaisedBalance -= _totalLosses;
-        if (ledgerShares[msg.sender] > 0) {
-            // slash > ledgerStake can be possible only if we make big rebalance for ledger
-            // in this case we must return all funds from relay chain 
-            ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= _totalLosses ? _totalLosses : ledgerStake[msg.sender];
-        }
+        ledgerStake[msg.sender] -= _totalLosses;
 
         emit Losses(msg.sender, _totalLosses, ledgerBalance);
     }
@@ -632,7 +649,7 @@ contract Lido is stKSM, Initializable {
     /**
     * @notice Force rebalance stake accross ledgers, allowed to call only by ROLE_STAKE_MANAGER
     * @dev In some cases(due to rewards distribution) real ledger stakes can become different
-           from stakes calculated around ledger shares, so that method fixes that lag.
+        from target, so that method fixes that lag.
     */
     function forceRebalanceStake() external auth(ROLE_STAKE_MANAGER) {
         _forceRebalanceStakes();
@@ -645,40 +662,28 @@ contract Lido is stKSM, Initializable {
     * @notice Refresh allowance for each ledger, allowed to call only by ROLE_LEDGER_MANAGER
     */
     function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
-        uint _length = ledgers.length;
-        for (uint i = 0; i < _length; i++) {
-            vKSM.approve(ledgers[i], type(uint256).max);
+        for (uint i = 0; i < enabledLedgers.length; i++) {
+            vKSM.approve(enabledLedgers[i], type(uint256).max);
         }
     }
 
     /**
-    * @notice Rebalance stake accross ledgers according their shares.
+    * @notice Rebalance stake accross ledgers.
     */
     function _forceRebalanceStakes() internal {
         uint256 totalStake = getTotalPooledKSM();
 
         uint256 stakesSum = 0;
         address nonZeroLedged = address(0);
-        uint _length = ledgers.length;
-        uint256 _ledgerSharesTotal = ledgerSharesTotal;
 
-        if (_ledgerSharesTotal == 0) {
-            // When total shares = 0, we try to move all funds from relay chain to para chain
-            for (uint i = 0; i < _length; i++) {
-                ledgerStake[ledgers[i]] = 0;
-            }
-            return;
-        }
-
+        uint _length = enabledLedgers.length;
+        uint256 stake = totalStake / _length;
         for (uint i = 0; i < _length; i++) {
-            uint256 share = ledgerShares[ledgers[i]];
-            uint256 stake = totalStake * share / _ledgerSharesTotal;
-
             stakesSum += stake;
-            ledgerStake[ledgers[i]] = stake;
+            ledgerStake[enabledLedgers[i]] = stake;
 
-            if (share > 0 && nonZeroLedged == address(0)) {
-                nonZeroLedged = ledgers[i];
+            if (nonZeroLedged == address(0)) {
+                nonZeroLedged = enabledLedgers[i];
             }
         }
 
@@ -691,97 +696,103 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
-    * @notice Rebalance stake accross ledgers according their shares.
+    * @notice Rebalance stake accross ledgers by soft manner.
     */
     function _softRebalanceStakes() internal {
         if (bufferedDeposits > 0 || bufferedRedeems > 0) {
-            int256 diff = bufferedDeposits.toInt256() - bufferedRedeems.toInt256();
-            if (diff != 0) {
-                _distribute(diff);
+            if (disabledLedgers.length > 0) {
+                bufferedRedeems = _processDisabledLedgers(bufferedRedeems);
             }
+            _processEnabled(bufferedDeposits.toInt256() - bufferedRedeems.toInt256());
 
             bufferedDeposits = 0;
             bufferedRedeems = 0;
         }
     }
 
-    function _distribute(int256 _stake) internal {
-        uint256 ledgersLength = ledgers.length;
+    function _processDisabledLedgers(uint256 redeems) internal returns(uint256 remainingRedeems) {
+        uint256 disabledLength = disabledLedgers.length;
+        uint256 stakesSum = 0;
+        uint256 actualRedeems = 0;
+
+        for (uint256 i = 0; i < disabledLength; ++i) {
+            stakesSum += ledgerStake[disabledLedgers[i]];
+        }
+
+        for (uint256 i = 0; i < disabledLength; ++i) {
+            uint256 currentStake = ledgerStake[disabledLedgers[i]];
+            uint256 decrement = redeems * currentStake / stakesSum;
+            decrement = decrement > currentStake ? currentStake : decrement;
+            ledgerStake[disabledLedgers[i]] = currentStake - decrement;
+            actualRedeems += decrement;
+        }
+
+        return redeems - actualRedeems;
+    }
+
+    function _processEnabled(int256 _stake) internal {
+        uint256 ledgersLength = enabledLedgers.length;
 
         int256[] memory diffs = new int256[](ledgersLength);
         address[] memory ledgersCache = new address[](ledgersLength);
         int256[] memory ledgerStakesCache = new int256[](ledgersLength);
-        uint256[] memory ledgerSharesCache = new uint256[](ledgersLength);
 
         int256 activeDiffsSum = 0;
         int256 totalChange = 0;
-        uint256 _ledgerSharesTotal = ledgerSharesTotal;
         int256 preciseDiffSum = 0;
 
-        if (_ledgerSharesTotal == 0) {
-            // When total shares = 0, we try to move all funds from relay chain to para chain
-            for (uint i = 0; i < ledgersLength; i++) {
-                ledgerStake[ledgers[i]] = 0;
-            }
-            return;
-        }
-
         {
-            uint256 totalStake = getTotalPooledKSM();
+            uint256 targetStake = getTotalPooledKSM() / ledgersLength;
             int256 diff = 0;
             for (uint256 i = 0; i < ledgersLength; ++i) {
-                ledgersCache[i] = ledgers[i];
+                ledgersCache[i] = enabledLedgers[i];
                 ledgerStakesCache[i] = int256(ledgerStake[ledgersCache[i]]);
-                ledgerSharesCache[i] = ledgerShares[ledgersCache[i]];
 
-                uint256 targetStake = totalStake * ledgerSharesCache[i] / _ledgerSharesTotal;
-                preciseDiffSum += int256(totalStake * ledgerSharesCache[i]) - ledgerStakesCache[i] * int256(_ledgerSharesTotal);
                 diff = int256(targetStake) - int256(ledgerStakesCache[i]);
                 if (_stake * diff > 0) {
                     activeDiffsSum += diff;
                 }
                 diffs[i] = diff;
+                preciseDiffSum += diff;
             }
         }
 
-        if (preciseDiffSum != 0) {
-            if (activeDiffsSum != 0) {
-                int8 direction = 1;
-                if (activeDiffsSum < 0) {
-                    direction = -1;
-                    activeDiffsSum = -activeDiffsSum;
-                }
+        if (preciseDiffSum == 0 || activeDiffsSum == 0) {
+            return;
+        }
 
+        int8 direction = 1;
+        if (activeDiffsSum < 0) {
+            direction = -1;
+            activeDiffsSum = -activeDiffsSum;
+        }
+
+        for (uint256 i = 0; i < ledgersLength; ++i) {
+            diffs[i] *= direction;
+            if (diffs[i] > 0) {
+                int256 change = diffs[i] * _stake / activeDiffsSum;
+                int256 newStake = ledgerStakesCache[i] + change;
+                ledgerStake[ledgersCache[i]] = uint256(newStake);
+                ledgerStakesCache[i] = newStake;
+                totalChange += change;
+            }
+        }
+
+        {
+            int256 remaining = _stake - totalChange;
+            if (remaining > 0) {
                 for (uint256 i = 0; i < ledgersLength; ++i) {
-                    diffs[i] *= direction;
-                    if (diffs[i] > 0 && (direction < 0 || ledgerSharesCache[i] > 0)) {
-                        int256 change = diffs[i] * _stake / activeDiffsSum;
-                        int256 newStake = ledgerStakesCache[i] + change;
-                        ledgerStake[ledgersCache[i]] = uint256(newStake);
-                        ledgerStakesCache[i] = newStake;
-                        totalChange += change;
-                    }
+                    ledgerStake[ledgersCache[i]] += uint256(remaining);
+                    break;
                 }
             }
-
-            {
-                int256 remaining = _stake - totalChange;
-                if (remaining > 0) {
-                    for (uint256 i = 0; i < ledgersLength; ++i) {
-                        if (ledgerSharesCache[i] > 0) {
-                            ledgerStake[ledgersCache[i]] += uint256(remaining);
-                            break;
-                        }
-                    }
-                }
-                else if (remaining < 0) {
-                    for (uint256 i = 0; i < ledgersLength && remaining < 0; ++i) {
-                        uint256 stake = uint256(ledgerStakesCache[i]);
-                        if (stake > 0) {
-                            uint256 decrement = stake > uint256(-remaining) ? uint256(-remaining) : stake;
-                            ledgerStake[ledgersCache[i]] -= decrement;
-                            remaining += int256(decrement);
-                        }
+            else if (remaining < 0) {
+                for (uint256 i = 0; i < ledgersLength && remaining < 0; ++i) {
+                    uint256 stake = uint256(ledgerStakesCache[i]);
+                    if (stake > 0) {
+                        uint256 decrement = stake > uint256(-remaining) ? uint256(-remaining) : stake;
+                        ledgerStake[ledgersCache[i]] -= decrement;
+                        remaining += int256(decrement);
                     }
                 }
             }

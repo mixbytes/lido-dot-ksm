@@ -2,25 +2,24 @@ from brownie import chain, Ledger
 from helpers import RelayChain, distribute_initial_tokens
 
 
-def check_distribution(lido, stashes, shares, total_deposit):
-    total_shares = sum(i for i in shares)
-    stakes_sum = 0
+def check_distribution(lido, stashes, total_deposit):
+    stakes_sum =0
     for i in range(len(stashes)):
         stash = hex(stashes[i])
         ledger = Ledger.at(lido.findLedger(stash))
         stakes_sum += ledger.ledgerStake()
-        assert abs(ledger.ledgerStake() - total_deposit * shares[i] // total_shares) < total_shares
+        target = total_deposit // len(stashes)
+        assert abs(ledger.ledgerStake() - target) / target < 0.01
     assert stakes_sum == total_deposit
 
 
 def test_add_ledger_slowly(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
     stashes = [0x10]
-    shares = [100]
     total_deposit = 0
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger(hex(stashes[0]), hex(stashes[0]+1), shares[0])
+    relay.new_ledger(hex(stashes[0]), hex(stashes[0]+1))
 
     deposit = 1000 * 10**18
     total_deposit += deposit
@@ -29,20 +28,19 @@ def test_add_ledger_slowly(lido, oracle_master, vKSM, accounts):
     rewards = 3 * 10**18
     relay.new_era([rewards])
     relay.new_era([rewards])
-    check_distribution(lido, stashes, shares, total_deposit + relay.total_rewards)
+    check_distribution(lido, stashes, total_deposit + relay.total_rewards)
 
     assert relay.ledgers[0].active_balance == relay.total_rewards + total_deposit
 
     # new stash
     stashes.append(0x20)
-    shares.append(50)
-    relay.new_ledger(hex(stashes[1]), hex(stashes[1]+1), shares[1])
+    relay.new_ledger(hex(stashes[1]), hex(stashes[1]+1))
 
     total_deposit += deposit
     lido.deposit(deposit, {'from': accounts[0]})
     relay.new_era()  # send unbond for first ledger
     # check target stake distribution
-    check_distribution(lido, stashes, shares, total_deposit + relay.total_rewards)
+    check_distribution(lido, stashes, total_deposit + relay.total_rewards)
     relay.timetravel(29)  # wait for unbonding period
     relay.new_era()  # send withdraw for first ledger
     relay.new_era()  # downward transfer from first ledger
@@ -56,12 +54,11 @@ def test_add_ledger_slowly(lido, oracle_master, vKSM, accounts):
 def test_remove_ledger_slowly(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
     stashes = [0x10, 0x20]
-    shares = [100, 50]
     total_deposit = 0
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger(hex(stashes[0]), hex(stashes[0]+1), shares[0])
-    relay.new_ledger(hex(stashes[1]), hex(stashes[1]+1), shares[1])
+    relay.new_ledger(hex(stashes[0]), hex(stashes[0]+1))
+    relay.new_ledger(hex(stashes[1]), hex(stashes[1]+1))
 
     deposit = 1000 * 10**18
     total_deposit += deposit
@@ -74,19 +71,17 @@ def test_remove_ledger_slowly(lido, oracle_master, vKSM, accounts):
     lido.deposit(deposit, {'from': accounts[0]})
     relay.new_era()
 
-    check_distribution(lido, stashes, shares, total_deposit + relay.total_rewards)
+    check_distribution(lido, stashes, total_deposit + relay.total_rewards)
 
-    # set zero share for ledger
-    shares[1] = 0
-    lido.setLedgerShare(relay.ledgers[1].ledger_address, 0, {'from': accounts[0]})
+    # disable ledger
+    lido.disableLedger(relay.ledgers[1].ledger_address, {'from': accounts[0]})
 
-    lido.redeem(deposit, {'from': accounts[0]})
-    total_deposit -= deposit
+    lido.redeem(deposit + 2*rewards, {'from': accounts[0]})
+    total_deposit -= deposit + 2*rewards
     relay.new_era()  # send unbond for second ledger
 
     # check target stake distribution
-    check_distribution(lido, stashes, shares, total_deposit + relay.total_rewards)
-    assert relay.ledgers[1].status == 'Chill'
+    check_distribution(lido, stashes[:1], total_deposit + relay.total_rewards)
 
     relay.timetravel(29)  # wait for unbonding period
 
@@ -96,6 +91,8 @@ def test_remove_ledger_slowly(lido, oracle_master, vKSM, accounts):
     relay.new_era([rewards])  # upward transfer for first ledger
     relay.new_era([rewards])  # bondextra for fisrt ledger
     relay.new_era([rewards])  # bondextra for fisrt ledger [it depend on oracle_masterReport order accross ledgers]
+
+    assert relay.ledgers[1].status == 'Chill'
 
     assert relay.ledgers[0].active_balance == Ledger.at(lido.findLedger(hex(stashes[0]))).ledgerStake()
     assert relay.ledgers[1].active_balance == Ledger.at(lido.findLedger(hex(stashes[1]))).ledgerStake()
