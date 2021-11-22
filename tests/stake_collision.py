@@ -44,3 +44,10 @@ def test_stake_collision(lido, oracle_master, vKSM, Ledger, accounts):
     lido.flushStakes({'from': oracle_master})
     # check stake for ledger 1
     ledger_stakes()
+
+    # Redeem 20 vKSM
+    lido.redeem(20 * 10**18, {'from': accounts[0]})
+    # era 3
+    lido.flushStakes({'from': oracle_master})
+    # check stake for ledger 1
+    ledger_stakes()

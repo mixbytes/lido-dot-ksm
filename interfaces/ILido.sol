@@ -16,6 +16,8 @@ interface ILido {
 
     function ledgerStake(address ledger) external view returns (uint256);
 
+    function ledgerShares(address ledger) external view returns (uint256);
+
     function avaliableForStake() external view returns (uint256);
 
     function flushStakes() external;
