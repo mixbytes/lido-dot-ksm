@@ -445,6 +445,24 @@ contract Lido is stKSM, Initializable {
         return ledger;
     }
 
+    /**
+    * @notice Disable ledger, allowed to call only by ROLE_LEDGER_MANAGER
+    * @dev That method put ledger to "draining" mode, after ledger drained it can be removed
+    * @param _ledgerAddress - target ledger address
+    */
+    function disableLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
+        require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
+        uint256 ledgerIdx = findEnabledLedger(_ledgerAddress);
+        require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_ENABLED");
+
+        address lastLedger = enabledLedgers[enabledLedgers.length - 1];
+        enabledLedgers[ledgerIdx] = lastLedger;
+        enabledLedgers.pop();
+
+        disabledLedgers.push(_ledgerAddress);
+
+        emit LedgerDisable(_ledgerAddress);
+    }
 
     /**
     * @notice Remove ledger, allowed to call only by ROLE_LEDGER_MANAGER
@@ -474,41 +492,6 @@ contract Lido is stKSM, Initializable {
         emit LedgerRemove(_ledgerAddress);
     }
 
-    function findEnabledLedger(address _ledgerAddress) internal returns(uint256) {
-        for (uint256 i = 0; i < enabledLedgers.length; ++i) {
-            if (enabledLedgers[i] == _ledgerAddress) {
-                return i;
-            }
-        }
-        return type(uint256).max;
-    }
-
-    function findDisabledLedger(address _ledgerAddress) internal returns(uint256) {
-        for (uint256 i = 0; i < disabledLedgers.length; ++i) {
-            if (disabledLedgers[i] == _ledgerAddress) {
-                return i;
-            }
-        }
-        return type(uint256).max;
-    }
-    /**
-    * @notice Disable ledger, allowed to call only by ROLE_LEDGER_MANAGER
-    * @dev That method put ledger to "draining" mode, after ledger drained it can be removed
-    * @param _ledgerAddress - target ledger address
-    */
-    function disableLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
-        uint256 ledgerIdx = findEnabledLedger(_ledgerAddress);
-        require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_ENABLED");
-
-        address lastLedger = enabledLedgers[enabledLedgers.length - 1];
-        enabledLedgers[ledgerIdx] = lastLedger;
-        enabledLedgers.pop();
-
-        disabledLedgers.push(_ledgerAddress);
-
-        emit LedgerDisable(_ledgerAddress);
-    }
     /**
     * @notice Nominate on behalf of gived stash account, allowed to call only by ROLE_STAKE_MANAGER
     * @dev Method spawns xcm call to relaychain
@@ -652,10 +635,11 @@ contract Lido is stKSM, Initializable {
         from target, so that method fixes that lag.
     */
     function forceRebalanceStake() external auth(ROLE_STAKE_MANAGER) {
-        _forceRebalanceStakes();
-
-        bufferedDeposits = 0;
-        bufferedRedeems = 0;
+        if (enabledLedgers.length > 0) {
+            _forceRebalanceStakes();
+            bufferedDeposits = 0;
+            bufferedRedeems = 0;
+        }
     }
 
     /**
@@ -700,16 +684,23 @@ contract Lido is stKSM, Initializable {
     */
     function _softRebalanceStakes() internal {
         if (bufferedDeposits > 0 || bufferedRedeems > 0) {
+            // first try to distribute redeems accross disabled ledgers
             if (disabledLedgers.length > 0) {
                 bufferedRedeems = _processDisabledLedgers(bufferedRedeems);
             }
-            _processEnabled(bufferedDeposits.toInt256() - bufferedRedeems.toInt256());
-
-            bufferedDeposits = 0;
-            bufferedRedeems = 0;
+            // distribute remaining stakes and redeems accross enabled
+            if (enabledLedgers.length > 0) {
+                _processEnabled(bufferedDeposits.toInt256() - bufferedRedeems.toInt256());
+                bufferedDeposits = 0;
+                bufferedRedeems = 0;
+            }
         }
     }
 
+    /**
+    * @notice Spread redeems accross disabled ledgers
+    * @return remainingRedeems - redeems amount which didn't distributed
+    */
     function _processDisabledLedgers(uint256 redeems) internal returns(uint256 remainingRedeems) {
         uint256 disabledLength = disabledLedgers.length;
         uint256 stakesSum = 0;
@@ -730,6 +721,10 @@ contract Lido is stKSM, Initializable {
         return redeems - actualRedeems;
     }
 
+    /**
+    * @notice Distribute stakes and redeems accross enabled ledgers with relaxation
+    * @dev this function should never mix bond/unbond
+    */
     function _processEnabled(int256 _stake) internal {
         uint256 ledgersLength = enabledLedgers.length;
 
@@ -837,5 +832,31 @@ contract Lido is stKSM, Initializable {
     */
     function _getTotalPooledKSM() internal view override returns (uint256) {
         return fundRaisedBalance;
+    }
+
+    /**
+    * @notice Returns enabled ledger index by given address
+    * @return enabled ledger index or uint256_max if not found
+    */
+    function findEnabledLedger(address _ledgerAddress) internal returns(uint256) {
+        for (uint256 i = 0; i < enabledLedgers.length; ++i) {
+            if (enabledLedgers[i] == _ledgerAddress) {
+                return i;
+            }
+        }
+        return type(uint256).max;
+    }
+
+    /**
+    * @notice Returns disabled ledger index by given address
+    * @return disabled ledger index or uint256_max if not found
+    */
+    function findDisabledLedger(address _ledgerAddress) internal returns(uint256) {
+        for (uint256 i = 0; i < disabledLedgers.length; ++i) {
+            if (disabledLedgers[i] == _ledgerAddress) {
+                return i;
+            }
+        }
+        return type(uint256).max;
     }
 }
