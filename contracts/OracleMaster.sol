@@ -45,12 +45,23 @@ contract OracleMaster is Pausable {
     // Relay seconds per era
     uint64 public RELAY_SECONDS_PER_ERA;
 
+    // Relay era id on updating
+    uint64 public ANCHOR_ERA_ID;
+
+    // Relay timestamp on updating
+    uint64 public ANCHOR_TIMESTAMP;
+
+    // Relay seconds per era
+    uint64 public SECONDS_PER_ERA;
 
     /// Maximum number of oracle committee members
     uint256 public constant MAX_MEMBERS = 255;
 
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
+
+    // Spec manager role
+    bytes32 internal constant ROLE_SPEC_MANAGER = keccak256("ROLE_SPEC_MANAGER");
 
     // General oracle manager role
     bytes32 internal constant ROLE_ORACLE_MANAGER = keccak256("ROLE_ORACLE_MANAGER");
@@ -295,12 +306,29 @@ contract OracleMaster is Pausable {
     }
 
     /**
+    * @notice Set parameters from relay chain for accurately calculation of current era id
+    * @param _anchorEraId - current relay chain era id
+    * @param _anchorTimestamp - current relay chain timestamp
+    * @param _secondsPerEra - current relay chain era duration in seconds
+    */
+    function setAnchorEra(uint64 _anchorEraId, uint64 _anchorTimestamp, uint64 _secondsPerEra) external auth(ROLE_SPEC_MANAGER) {
+        require(_secondsPerEra > 0, "OM: BAD_SECONDS_PER_ERA");
+        require(uint64(block.timestamp) >= _anchorTimestamp, "OM: BAD_TIMESTAMP");
+        uint64 newEra = _anchorEraId + (uint64(block.timestamp) - _anchorTimestamp) / _secondsPerEra;
+        require(newEra >= eraId, "OM: ERA_COLLISION");
+
+        ANCHOR_ERA_ID = _anchorEraId;
+        ANCHOR_TIMESTAMP = _anchorTimestamp;
+        SECONDS_PER_ERA = _secondsPerEra;
+    }
+
+    /**
     * @notice Calculate current expected era id
     * @dev Calculation based on relaychain genesis timestamp and era duratation
     * @return current era id
     */
     function _getCurrentEraId() internal view returns (uint64) {
-        return (uint64(block.timestamp) - RELAY_GENESIS_TIMESTAMP ) / RELAY_SECONDS_PER_ERA;
+        return ANCHOR_ERA_ID + (uint64(block.timestamp) - ANCHOR_TIMESTAMP) / SECONDS_PER_ERA;
     }
 
     /**

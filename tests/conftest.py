@@ -97,6 +97,7 @@ def lido(Lido, vKSM, controller, auth_manager, oracle_master, proxy_admin, chain
     _lido.setOracleMaster(oracle_master)
     era_sec = 60 * 60 * 6
     _lido.setRelaySpec((chain.time(), era_sec, era_sec * 28, 16, 1))  # kusama settings except min nominator bond
+    oracle_master.setAnchorEra(0, chain.time(), era_sec)
     return _lido
 
 

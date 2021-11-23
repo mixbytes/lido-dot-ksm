@@ -247,6 +247,7 @@ def main():
     lido.setOracleMaster(oracle_master, get_opts(roles['ROLE_ORACLE_MANAGER']))
     lido.setLedgerClone(ledger_clone, get_opts(roles['ROLE_ORACLE_MANAGER']))
     lido.setRelaySpec((1, era_sec, era_sec * (28+3), max_validators_per_ledger, min_nominator_bond), get_opts(roles['ROLE_SPEC_MANAGER']))
+    oracle_master.setAnchorEra(0, 1, era_sec)
 
     print(f'\n{Fore.GREEN}Adding oracle members...')
     for oracle in ORACLES:
