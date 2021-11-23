@@ -79,8 +79,11 @@ contract Lido is stKSM, Initializable {
     // haven't executed buffrered redeems
     uint256 public bufferedRedeems;
 
-    // Ledger stakes
+    // Ledger target stakes
     mapping(address => uint256) public ledgerStake;
+
+    // Ledger borrow
+    mapping(address => uint256) public ledgerBorrow;
 
     // Disabled ledgers
     address[] public disabledLedgers;
@@ -90,6 +93,7 @@ contract Lido is stKSM, Initializable {
 
     // vKSM precompile
     IERC20 public vKSM;
+
     // controller
     address public controller;
 
@@ -291,8 +295,7 @@ contract Lido is stKSM, Initializable {
     *      that ledgers already have locked KSMs
     */
     function avaliableForStake() external view returns(uint256) {
-        uint256 freeBalance = vKSM.balanceOf(address(this));
-        return freeBalance < pendingClaimsTotal ? 0 : freeBalance - pendingClaimsTotal;
+        return ledgerStake[msg.sender] - ledgerBorrow[msg.sender];
     }
 
     /**
@@ -437,8 +440,6 @@ contract Lido is stKSM, Initializable {
 
         IOracleMaster(ORACLE_MASTER).addLedger(ledger);
 
-//        vKSM.approve(ledger, type(uint256).max);
-
         IController(controller).newSubAccount(_index, _stashAccount, ledger);
 
         emit LedgerAdd(ledger, _stashAccount, _controllerAccount);
@@ -579,7 +580,7 @@ contract Lido is stKSM, Initializable {
     /**
     * @notice Distribute rewards earned by ledger, allowed to call only by ledger
     */
-    function distributeRewards(uint256 _totalRewards, uint256 ledgerBalance) external {
+    function distributeRewards(uint256 _totalRewards, uint256 _ledgerBalance) external {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
         Types.Fee memory _fee = FEE;
@@ -589,8 +590,8 @@ contract Lido is stKSM, Initializable {
         assert(_feeDevTreasure>0);
 
         fundRaisedBalance += _totalRewards;
-
         ledgerStake[msg.sender] += _totalRewards;
+        ledgerBorrow[msg.sender] += _totalRewards;
 
         uint256 _rewards = _totalRewards * _feeDevTreasure / uint256(10000 - _fee.operators);
         uint256 denom = _getTotalPooledKSM()  - _rewards;
@@ -604,19 +605,42 @@ contract Lido is stKSM, Initializable {
         _emitTransferAfterMintingShares(developers, _devShares);
         _emitTransferAfterMintingShares(treasury, shares2mint - _devShares);
 
-        emit Rewards(msg.sender, _totalRewards, ledgerBalance);
+        emit Rewards(msg.sender, _totalRewards, _ledgerBalance);
     }
 
     /**
     * @notice Distribute lossed by ledger, allowed to call only by ledger
     */
-    function distributeLosses(uint256 _totalLosses, uint256 ledgerBalance) external {
+    function distributeLosses(uint256 _totalLosses, uint256 _ledgerBalance) external {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
         fundRaisedBalance -= _totalLosses;
         ledgerStake[msg.sender] -= _totalLosses;
+        ledgerBorrow[msg.sender] -= _totalLosses;
 
-        emit Losses(msg.sender, _totalLosses, ledgerBalance);
+        emit Losses(msg.sender, _totalLosses, _ledgerBalance);
+    }
+
+    function transferFromLedger(uint256 _amount) external {
+        require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
+
+        if (_amount > ledgerBorrow[msg.sender]) { // some donations
+            fundRaisedBalance += _amount - ledgerBorrow[msg.sender]; //just distribute it as rewards
+            ledgerBorrow[msg.sender] = 0;
+        }
+        else {
+            ledgerBorrow[msg.sender] -= _amount;
+        }
+
+        vKSM.transferFrom(msg.sender, address(this), _amount);
+    }
+
+    function transferToLedger(uint256 _amount) external {
+        require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
+        require(ledgerBorrow[msg.sender] + _amount <= ledgerStake[msg.sender], "LIDO: LEDGER_NOT_ENOUGH_STAKE");
+
+        ledgerBorrow[msg.sender] += _amount;
+        vKSM.transfer(msg.sender, _amount);
     }
 
     /**
@@ -639,15 +663,6 @@ contract Lido is stKSM, Initializable {
             _forceRebalanceStakes();
             bufferedDeposits = 0;
             bufferedRedeems = 0;
-        }
-    }
-
-    /**
-    * @notice Refresh allowance for each ledger, allowed to call only by ROLE_LEDGER_MANAGER
-    */
-    function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
-        for (uint i = 0; i < enabledLedgers.length; i++) {
-            vKSM.approve(enabledLedgers[i], type(uint256).max);
         }
     }
 

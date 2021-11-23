@@ -131,6 +131,7 @@ contract Ledger {
     }
 
     function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
+        vKSM.approve(address(LIDO), type(uint256).max);
         vKSM.approve(address(controller), type(uint256).max);
     }
 
@@ -140,14 +141,6 @@ contract Ledger {
     */
     function ledgerStake() public view returns (uint256) {
         return LIDO.ledgerStake(address(this));
-    }
-
-    /**
-    * @notice Return shares amount for this ledger
-    * @return shares amount
-    */
-    function ledgerShares() public view returns (uint256) {
-        return LIDO.ledgerShares(address(this));
     }
 
     /**
@@ -202,119 +195,84 @@ contract Ledger {
         }
 
         uint128 _ledgerStake = ledgerStake().toUint128();
-        uint256 _ledgerShares = ledgerShares();
 
-        if (_ledgerShares > 0) {
-            // relay deficit or bonding
-            if (_report.stashBalance <= _ledgerStake) {
-                //    Staking strategy:
-                //     - upward transfer deficit tokens
-                //     - rebond all unlocking tokens
-                //     - bond_extra all free balance
+        // relay deficit or bonding
+        if (_report.stashBalance <= _ledgerStake) {
+            //    Staking strategy:
+            //     - upward transfer deficit tokens
+            //     - rebond all unlocking tokens
+            //     - bond_extra all free balance
 
-                uint128 deficit = _ledgerStake - _report.stashBalance;
+            uint128 deficit = _ledgerStake - _report.stashBalance;
 
-                // just upward transfer if we have deficit
-                if (deficit > 0) {
-                    uint128 lidoBalance = uint128(LIDO.avaliableForStake());
-                    uint128 forTransfer = lidoBalance > deficit ? deficit : lidoBalance;
-
-                    if (forTransfer > 0) {
-                        vKSM.transferFrom(address(LIDO), address(this), forTransfer);
-                        controller.transferToRelaychain(forTransfer);
-                        transferUpwardBalance += forTransfer;
-                    }
-                }
-
-                // rebond all always
-                if (unlockingBalance > 0) {
-                    controller.rebond(unlockingBalance);
-                }
-
-                uint128 relayFreeBalance = _report.getFreeBalance();
-                if ((relayFreeBalance == transferUpwardBalance) && (transferUpwardBalance > 0)) {
-                    // In case if bond amount = transferUpwardBalance we can't distinguish 2 messages were success or 2 masseges were failed
-                    relayFreeBalance -= 1;
-                }
-
-                if (relayFreeBalance > 0 &&
-                    (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle)) {
-                    controller.bondExtra(relayFreeBalance);
-                    pendingBonds += relayFreeBalance;
-                } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
-                    controller.bond(controllerAccount, relayFreeBalance);
-                    pendingBonds += relayFreeBalance;
-                }
-
+            // just upward transfer if we have deficit
+            if (deficit > 0) {
+                LIDO.transferToLedger(deficit);
+                controller.transferToRelaychain(deficit);
+                transferUpwardBalance += deficit;
             }
-            else if (_report.stashBalance > _ledgerStake) { // parachain deficit
-                //    Unstaking strategy:
-                //     - try to downward transfer already free balance
-                //     - if we still have deficit try to withdraw already unlocked tokens
-                //     - if we still have deficit initiate unbond for remain deficit
 
-                // if ledger is in the deadpool we need to put it to chill
-                if (_ledgerStake < MIN_NOMINATOR_BALANCE && status != Types.LedgerStatus.Idle) {
-                    controller.chill();
-                }
+            // rebond all always
+            if (unlockingBalance > 0) {
+                controller.rebond(unlockingBalance);
+            }
 
-                uint128 deficit = _report.stashBalance - _ledgerStake;
-                uint128 relayFreeBalance = _report.getFreeBalance();
+            uint128 relayFreeBalance = _report.getFreeBalance();
+            if ((relayFreeBalance == transferUpwardBalance) && (transferUpwardBalance > 0)) {
+                // In case if bond amount = transferUpwardBalance we can't distinguish 2 messages were success or 2 masseges were failed
+                relayFreeBalance -= 1;
+            }
 
-                // need to downward transfer if we have some free
-                if (relayFreeBalance > 0) {
-                    uint128 forTransfer = relayFreeBalance > deficit ? deficit : relayFreeBalance;
-                    controller.transferToParachain(forTransfer);
-                    transferDownwardBalance += forTransfer;
-                    deficit -= forTransfer;
-                    relayFreeBalance -= forTransfer;
-                }
-
-                // withdraw if we have some unlocked
-                if (deficit > 0 && withdrawableBalance > 0) {
-                    controller.withdrawUnbonded();
-                    deficit -= withdrawableBalance > deficit ? deficit : withdrawableBalance;
-                }
-
-                // need to unbond if we still have deficit
-                if (nonWithdrawableBalance < deficit) {
-                    // todo drain stake if remaining balance is less than MIN_NOMINATOR_BALANCE
-                    uint128 forUnbond = deficit - nonWithdrawableBalance;
-                    controller.unbond(forUnbond);
-                    // notice.
-                    // deficit -= forUnbond;
-                }
-
-                // bond all remain free balance
-                if (relayFreeBalance > 0) {
-                    controller.bondExtra(relayFreeBalance);
-                }
+            if (relayFreeBalance > 0 &&
+                (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle)) {
+                controller.bondExtra(relayFreeBalance);
+                pendingBonds += relayFreeBalance;
+            } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
+                controller.bond(controllerAccount, relayFreeBalance);
+                pendingBonds += relayFreeBalance;
             }
         }
-        else {
-            // If ledger shares == 0 we try to send all assets from relay chain to parachain
-            if (status != Types.LedgerStatus.Idle) {
+        else if (_report.stashBalance > _ledgerStake) { // parachain deficit
+            //    Unstaking strategy:
+            //     - try to downward transfer already free balance
+            //     - if we still have deficit try to withdraw already unlocked tokens
+            //     - if we still have deficit initiate unbond for remain deficit
+
+            // if ledger is in the deadpool we need to put it to chill
+            if (_ledgerStake < MIN_NOMINATOR_BALANCE && status != Types.LedgerStatus.Idle) {
                 controller.chill();
             }
 
+            uint128 deficit = _report.stashBalance - _ledgerStake;
             uint128 relayFreeBalance = _report.getFreeBalance();
 
             // need to downward transfer if we have some free
             if (relayFreeBalance > 0) {
-                controller.transferToParachain(relayFreeBalance);
-                transferDownwardBalance += relayFreeBalance;
+                uint128 forTransfer = relayFreeBalance > deficit ? deficit : relayFreeBalance;
+                controller.transferToParachain(forTransfer);
+                transferDownwardBalance += forTransfer;
+                deficit -= forTransfer;
+                relayFreeBalance -= forTransfer;
             }
 
             // withdraw if we have some unlocked
-            if (withdrawableBalance > 0) {
+            if (deficit > 0 && withdrawableBalance > 0) {
                 controller.withdrawUnbonded();
+                deficit -= withdrawableBalance > deficit ? deficit : withdrawableBalance;
             }
 
-            uint128 active = lockedBalance;
+            // need to unbond if we still have deficit
+            if (nonWithdrawableBalance < deficit) {
+                // todo drain stake if remaining balance is less than MIN_NOMINATOR_BALANCE
+                uint128 forUnbond = deficit - nonWithdrawableBalance;
+                controller.unbond(forUnbond);
+                // notice.
+                // deficit -= forUnbond;
+            }
 
-            // need to unbond if we still have smth
-            if (active > (nonWithdrawableBalance + withdrawableBalance)) {
-                controller.unbond(active - nonWithdrawableBalance - withdrawableBalance);
+            // bond all remain free balance
+            if (relayFreeBalance > 0) {
+                controller.bondExtra(relayFreeBalance);
             }
         }
 
@@ -328,12 +286,8 @@ contract Ledger {
             uint128 totalDownwardTransferred = uint128(vKSM.balanceOf(address(this)));
 
             if (totalDownwardTransferred >= _transferDownwardBalance ) {
-                if (totalDownwardTransferred > _transferDownwardBalance) {
-                    // TODO add check that LIDO.developers() != address(0)
-                    vKSM.transfer(LIDO.developers(), totalDownwardTransferred - _transferDownwardBalance);    
-                }
-                // take transferred funds into buffered balance
-                vKSM.transfer(address(LIDO), _transferDownwardBalance);
+                // send all funds to lido
+                LIDO.transferFromLedger(totalDownwardTransferred);
 
                 // Clear transfer flag
                 cachedTotalBalance -= _transferDownwardBalance;

@@ -20,6 +20,10 @@ interface ILido {
 
     function avaliableForStake() external view returns (uint256);
 
+    function transferFromLedger(uint256 amount) external;
+
+    function transferToLedger(uint256 amount) external;
+
     function flushStakes() external;
 
     function findLedger(bytes32 stash) external view returns (address);
