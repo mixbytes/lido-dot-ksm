@@ -616,7 +616,7 @@ contract Lido is stKSM, Initializable {
 
         fundRaisedBalance -= _totalLosses;
         // edge case when loss can be more than stake
-        ledgerStake[msg.sender] -= _totalLosses >= ledgerStake[msg.sender] ? _totalLosses : ledgerStake[msg.sender];
+        ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= _totalLosses ? _totalLosses : ledgerStake[msg.sender];
         ledgerBorrow[msg.sender] -= _totalLosses;
 
         emit Losses(msg.sender, _totalLosses, _ledgerBalance);
