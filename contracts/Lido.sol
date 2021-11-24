@@ -615,7 +615,8 @@ contract Lido is stKSM, Initializable {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
         fundRaisedBalance -= _totalLosses;
-        ledgerStake[msg.sender] -= _totalLosses;
+        // edge case when loss can be more than stake
+        ledgerStake[msg.sender] -= _totalLosses >= ledgerStake[msg.sender] ? _totalLosses : ledgerStake[msg.sender];
         ledgerBorrow[msg.sender] -= _totalLosses;
 
         emit Losses(msg.sender, _totalLosses, _ledgerBalance);
@@ -791,10 +792,8 @@ contract Lido is stKSM, Initializable {
         {
             int256 remaining = _stake - totalChange;
             if (remaining > 0) {
-                for (uint256 i = 0; i < ledgersLength; ++i) {
-                    ledgerStake[ledgersCache[i]] += uint256(remaining);
-                    break;
-                }
+                // just add to first ledger
+                ledgerStake[ledgersCache[0]] += uint256(remaining);
             }
             else if (remaining < 0) {
                 for (uint256 i = 0; i < ledgersLength && remaining < 0; ++i) {
