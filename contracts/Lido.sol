@@ -673,27 +673,27 @@ contract Lido is stKSM, Initializable {
     * @notice Rebalance stake accross ledgers.
     */
     function _forceRebalanceStakes() internal {
+        uint ledegrsLength = enabledLedgers.length;
+        assert(ledegrsLength > 0);
+
         uint256 totalStake = getTotalPooledKSM();
 
-        uint256 stakesSum = 0;
-        address nonZeroLedged = address(0);
+        // subtract disabled ledgers stake
+        for (uint i = 0; i < disabledLedgers.length; i++) {
+            totalStake -= ledgerStake[disabledLedgers[i]];
+        }
 
-        uint _length = enabledLedgers.length;
-        uint256 stake = totalStake / _length;
-        for (uint i = 0; i < _length; i++) {
+        uint256 stakesSum = 0;
+        uint256 stake = totalStake / ledegrsLength;
+        for (uint i = 0; i < ledegrsLength; i++) {
             stakesSum += stake;
             ledgerStake[enabledLedgers[i]] = stake;
-
-            if (nonZeroLedged == address(0)) {
-                nonZeroLedged = enabledLedgers[i];
-            }
         }
 
         // need to compensate remainder of integer division
-        // if we have at least one non zero ledger
         uint256 remainingDust = totalStake - stakesSum;
-        if (remainingDust > 0 && nonZeroLedged != address(0)) {
-            ledgerStake[nonZeroLedged] += remainingDust;
+        if (remainingDust > 0) {
+            ledgerStake[enabledLedgers[0]] += remainingDust;
         }
     }
 
@@ -721,6 +721,8 @@ contract Lido is stKSM, Initializable {
     */
     function _processDisabledLedgers(uint256 redeems) internal returns(uint256 remainingRedeems) {
         uint256 disabledLength = disabledLedgers.length;
+        assert(disabledLength > 0);
+
         uint256 stakesSum = 0;
         uint256 actualRedeems = 0;
 
@@ -745,6 +747,7 @@ contract Lido is stKSM, Initializable {
     */
     function _processEnabled(int256 _stake) internal {
         uint256 ledgersLength = enabledLedgers.length;
+        assert(ledgersLength > 0);
 
         int256[] memory diffs = new int256[](ledgersLength);
         address[] memory ledgersCache = new address[](ledgersLength);
