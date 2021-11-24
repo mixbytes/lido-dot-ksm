@@ -106,9 +106,6 @@ contract Lido is stKSM, Initializable {
     // Maximum number of ledgers
     uint256 public MAX_LEDGERS_AMOUNT;
 
-    // Who pay off relay chain transaction fees
-    bytes32 public GARANTOR;
-
     /** fee interest in basis points.
     It's packed uint256 consist of three uint16 (total_fee, treasury_fee, developers_fee).
     where total_fee = treasury_fee + developers_fee + 3000 (3% operators fee)
@@ -198,7 +195,6 @@ contract Lido is stKSM, Initializable {
         _fee.developers = DEFAULT_DEVELOPERS_FEE;
         _fee.treasury = DEFAULT_TREASURY_FEE;
         FEE = _fee;
-        GARANTOR = 0x00;
 
         treasury = _treasury;
         developers =_developers;
@@ -215,6 +211,7 @@ contract Lido is stKSM, Initializable {
     * @notice Set treasury address to '_treasury'
     */
     function setTreasury(address _treasury) external auth(ROLE_TREASURY) {
+        require(_treasury != address(0), "LIDO: INCORRECT_TREASURY_ADDRESS");
         treasury = _treasury;
     }
 
@@ -222,6 +219,7 @@ contract Lido is stKSM, Initializable {
     * @notice Set developers address to '_developers'
     */
     function setDevelopers(address _developers) external auth(ROLE_DEVELOPERS) {
+        require(_developers != address(0), "LIDO: INCORRECT_DEVELOPERS_ADDRESS");
         developers = _developers;
     }
 
@@ -315,6 +313,7 @@ contract Lido is stKSM, Initializable {
     */
     function setOracleMaster(address _oracleMaster) external auth(ROLE_ORACLE_MANAGER) {
         require(ORACLE_MASTER == address(0), "LIDO: ORACLE_MASTER_ALREADY_DEFINED");
+        require(_oracleMaster != address(0), "LIDO: INCORRECT_ORACLE_MASTER_ADDRESS");
         ORACLE_MASTER = _oracleMaster;
         IOracleMaster(ORACLE_MASTER).setLido(address(this));
     }
@@ -325,6 +324,7 @@ contract Lido is stKSM, Initializable {
     * @param _ledgerClone - ledger clone address
     */
     function setLedgerClone(address _ledgerClone) external auth(ROLE_LEDGER_MANAGER) {
+        require(_ledgerClone != address(0), "LIDO: INCORRECT_LEDGER_CLONE_ADDRESS");
         LEDGER_CLONE = _ledgerClone;
     }
 
@@ -465,6 +465,7 @@ contract Lido is stKSM, Initializable {
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
         require(ledgerByAddress[_ledgerAddress] != 0, "LIDO: LEDGER_NOT_FOUND");
         require(ledgerShares[_ledgerAddress] == 0, "LIDO: LEDGER_HAS_NON_ZERO_SHARE");
+        require(ledgerStake[_ledgerAddress] == 0, "LIDO: LEDGER_HAS_NON_ZERO_STAKE");
 
         ILedger ledger = ILedger(_ledgerAddress);
         require(ledger.isEmpty(), "LIDO: LEDGER_IS_NOT_EMPTY");
@@ -492,7 +493,8 @@ contract Lido is stKSM, Initializable {
     * @param _validators - validators set to be nominated
     */
     function nominate(bytes32 _stashAccount, bytes32[] calldata _validators) external auth(ROLE_STAKE_MANAGER) {
-        require(ledgerByStash[_stashAccount] != address(0),  "UNKNOWN_STASH_ACCOUNT");
+        require(ledgerByStash[_stashAccount] != address(0),  "LIDO: UNKNOWN_STASH_ACCOUNT");
+        require(_validators.length <= RELAY_SPEC.maxValidatorsPerLedger, "LIDO: VALIDATORS_AMOUNT_TOO_BIG");
 
         ILedger(ledgerByStash[_stashAccount]).nominate(_validators);
     }
@@ -519,6 +521,7 @@ contract Lido is stKSM, Initializable {
     */
     function redeem(uint256 _amount) external whenNotPaused {
         uint256 _shares = getSharesByPooledKSM(_amount);
+        require(_shares > 0, "LIDO: AMOUNT_TOO_LOW");
         require(_shares <= _sharesOf(msg.sender), "LIDO: REDEEM_AMOUNT_EXCEEDS_BALANCE");
         require(claimOrders[msg.sender].length < MAX_CLAIMS, "LIDO: MAX_CLAIMS_EXCEEDS");
 
@@ -560,6 +563,7 @@ contract Lido is stKSM, Initializable {
         for (uint256 i = 0; i < readyToClaimCount; ++i) { orders.pop(); }
 
         if (readyToClaim > 0) {
+            require(readyToClaim <= vKSM.balanceOf(address(this)), "LIDO: CLAIM_EXCEEDS_BALANCE");
             vKSM.transfer(msg.sender, readyToClaim);
             pendingClaimsTotal -= readyToClaim;
             emit Claimed(msg.sender, readyToClaim);
@@ -585,7 +589,9 @@ contract Lido is stKSM, Initializable {
         }
 
         uint256 _rewards = _totalRewards * _feeDevTreasure / uint256(10000 - _fee.operators);
-        uint256 shares2mint = _rewards * _getTotalShares() / (_getTotalPooledKSM()  - _rewards);
+        uint256 denom = _getTotalPooledKSM()  - _rewards;
+        uint256 shares2mint = _getTotalPooledKSM();
+        if (denom > 0) shares2mint = _rewards * _getTotalShares() / denom;
 
         _mintShares(treasury, shares2mint);
 
@@ -605,7 +611,9 @@ contract Lido is stKSM, Initializable {
 
         fundRaisedBalance -= _totalLosses;
         if (ledgerShares[msg.sender] > 0) {
-            ledgerStake[msg.sender] -= _totalLosses;
+            // slash > ledgerStake can be possible only if we make big rebalance for ledger
+            // in this case we must return all funds from relay chain 
+            ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= _totalLosses ? _totalLosses : ledgerStake[msg.sender];
         }
 
         emit Losses(msg.sender, _totalLosses, ledgerBalance);
@@ -653,6 +661,15 @@ contract Lido is stKSM, Initializable {
         address nonZeroLedged = address(0);
         uint _length = ledgers.length;
         uint256 _ledgerSharesTotal = ledgerSharesTotal;
+
+        if (_ledgerSharesTotal == 0) {
+            // When total shares = 0, we try to move all funds from relay chain to para chain
+            for (uint i = 0; i < _length; i++) {
+                ledgerStake[ledgers[i]] = 0;
+            }
+            return;
+        }
+
         for (uint i = 0; i < _length; i++) {
             uint256 share = ledgerShares[ledgers[i]];
             uint256 stake = totalStake * share / _ledgerSharesTotal;
@@ -678,7 +695,10 @@ contract Lido is stKSM, Initializable {
     */
     function _softRebalanceStakes() internal {
         if (bufferedDeposits > 0 || bufferedRedeems > 0) {
-            _distribute(bufferedDeposits.toInt256() - bufferedRedeems.toInt256());
+            int256 diff = bufferedDeposits.toInt256() - bufferedRedeems.toInt256();
+            if (diff != 0) {
+                _distribute(diff);
+            }
 
             bufferedDeposits = 0;
             bufferedRedeems = 0;
@@ -695,10 +715,19 @@ contract Lido is stKSM, Initializable {
 
         int256 activeDiffsSum = 0;
         int256 totalChange = 0;
+        uint256 _ledgerSharesTotal = ledgerSharesTotal;
+        int256 preciseDiffSum = 0;
+
+        if (_ledgerSharesTotal == 0) {
+            // When total shares = 0, we try to move all funds from relay chain to para chain
+            for (uint i = 0; i < ledgersLength; i++) {
+                ledgerStake[ledgers[i]] = 0;
+            }
+            return;
+        }
 
         {
             uint256 totalStake = getTotalPooledKSM();
-            uint256 _ledgerSharesTotal = ledgerSharesTotal;
             int256 diff = 0;
             for (uint256 i = 0; i < ledgersLength; ++i) {
                 ledgersCache[i] = ledgers[i];
@@ -706,6 +735,7 @@ contract Lido is stKSM, Initializable {
                 ledgerSharesCache[i] = ledgerShares[ledgersCache[i]];
 
                 uint256 targetStake = totalStake * ledgerSharesCache[i] / _ledgerSharesTotal;
+                preciseDiffSum += int256(totalStake * ledgerSharesCache[i]) - ledgerStakesCache[i] * int256(_ledgerSharesTotal);
                 diff = int256(targetStake) - int256(ledgerStakesCache[i]);
                 if (_stake * diff > 0) {
                     activeDiffsSum += diff;
@@ -714,43 +744,44 @@ contract Lido is stKSM, Initializable {
             }
         }
 
-
-        if (activeDiffsSum != 0) {
-            int8 direction = 1;
-            if (activeDiffsSum < 0) {
-                direction = -1;
-                activeDiffsSum = -activeDiffsSum;
-            }
-
-            for (uint256 i = 0; i < ledgersLength; ++i) {
-                diffs[i] *= direction;
-                if (diffs[i] > 0 && (direction < 0 || ledgerSharesCache[i] > 0)) {
-                    int256 change = diffs[i] * _stake / activeDiffsSum;
-                    int256 newStake = ledgerStakesCache[i] + change;
-                    ledgerStake[ledgersCache[i]] = uint256(newStake);
-                    ledgerStakesCache[i] = newStake;
-                    totalChange += change;
+        if (preciseDiffSum != 0) {
+            if (activeDiffsSum != 0) {
+                int8 direction = 1;
+                if (activeDiffsSum < 0) {
+                    direction = -1;
+                    activeDiffsSum = -activeDiffsSum;
                 }
-            }
-        }
 
-        {
-            int256 remaining = _stake - totalChange;
-            if (remaining > 0) {
                 for (uint256 i = 0; i < ledgersLength; ++i) {
-                    if (ledgerSharesCache[i] > 0) {
-                        ledgerStake[ledgersCache[i]] += uint256(remaining);
-                        break;
+                    diffs[i] *= direction;
+                    if (diffs[i] > 0 && (direction < 0 || ledgerSharesCache[i] > 0)) {
+                        int256 change = diffs[i] * _stake / activeDiffsSum;
+                        int256 newStake = ledgerStakesCache[i] + change;
+                        ledgerStake[ledgersCache[i]] = uint256(newStake);
+                        ledgerStakesCache[i] = newStake;
+                        totalChange += change;
                     }
                 }
             }
-            else if (remaining < 0) {
-                for (uint256 i = 0; i < ledgersLength || remaining < 0; ++i) {
-                    uint256 stake = uint256(ledgerStakesCache[i]);
-                    if (stake > 0) {
-                        uint256 decrement = stake > uint256(-remaining) ? uint256(-remaining) : stake;
-                        ledgerStake[ledgersCache[i]] -= decrement;
-                        remaining += int256(decrement);
+
+            {
+                int256 remaining = _stake - totalChange;
+                if (remaining > 0) {
+                    for (uint256 i = 0; i < ledgersLength; ++i) {
+                        if (ledgerSharesCache[i] > 0) {
+                            ledgerStake[ledgersCache[i]] += uint256(remaining);
+                            break;
+                        }
+                    }
+                }
+                else if (remaining < 0) {
+                    for (uint256 i = 0; i < ledgersLength && remaining < 0; ++i) {
+                        uint256 stake = uint256(ledgerStakesCache[i]);
+                        if (stake > 0) {
+                            uint256 decrement = stake > uint256(-remaining) ? uint256(-remaining) : stake;
+                            ledgerStake[ledgersCache[i]] -= decrement;
+                            remaining += int256(decrement);
+                        }
                     }
                 }
             }

@@ -94,6 +94,8 @@ class RelayChain:
     era = 0
     total_rewards = 0
     chain = None
+    bond_enabled = True
+    transfer_enabled = True
 
     def __init__(self, lido, vKSM, oracle_master, accounts, chain):
         self.lido = lido
@@ -115,6 +117,12 @@ class RelayChain:
         self.ledgers.append(RelayLedger(self, tx.events['LedgerAdd'][0]['addr'], stash_account, controller_account))
         self.lido.refreshAllowances({'from': self.accounts[0]})
         Ledger.at(tx.events['LedgerAdd'][0]['addr']).refreshAllowances({'from': self.accounts[0]})
+
+    def disable_bond(self):
+        self.bond_enabled = False
+
+    def disable_transfer(self):
+        self.transfer_enabled = False
 
     def _ledger_idx_by_stash_account(self, stash_account):
         for i in range(len(self.ledgers)):
@@ -146,8 +154,9 @@ class RelayChain:
 
     def _process_call(self, name, event):
         if name == 'Bond':
-            idx = self._ledger_idx_by_ledger_address(event['caller'])
-            self.ledgers[idx].bond(event['amount'])
+            if self.bond_enabled:
+                idx = self._ledger_idx_by_ledger_address(event['caller'])
+                self.ledgers[idx].bond(event['amount'])
         elif name == 'BondExtra':
             idx = self._ledger_idx_by_ledger_address(event['caller'])
             self.ledgers[idx].bond_extra(event['amount'])
@@ -174,7 +183,8 @@ class RelayChain:
             name = tx.events[i].name
             event = tx.events[i]
             if name == 'TransferToRelaychain':
-                self._process_upward_transfer(event)
+                if self.transfer_enabled:
+                    self._process_upward_transfer(event)
             elif name == 'TransferToParachain':
                 self._process_downward_transfer(event)
             else:
