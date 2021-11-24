@@ -53,7 +53,7 @@ contract Ledger {
     uint128 public transferDownwardBalance;
 
     // Pending bonding
-    uint128 private bondedBalance;
+    uint128 private pendingBonds;
 
     // vKSM precompile
     IERC20 internal vKSM;
@@ -240,10 +240,10 @@ contract Ledger {
                 if (relayFreeBalance > 0 &&
                     (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle)) {
                     controller.bondExtra(relayFreeBalance);
-                    bondedBalance += relayFreeBalance;
+                    pendingBonds += relayFreeBalance;
                 } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
                     controller.bond(controllerAccount, relayFreeBalance);
-                    bondedBalance += relayFreeBalance;
+                    pendingBonds += relayFreeBalance;
                 }
 
             }
@@ -349,13 +349,13 @@ contract Ledger {
         if (_transferUpwardBalance > 0) {
             uint128 ledgerFreeBalance = (totalBalance - lockedBalance);
             int128 freeBalanceDiff = int128(_report.getFreeBalance()) - int128(ledgerFreeBalance);
-            int128 expectedBalanceDiff = int128(transferUpwardBalance) - int128(bondedBalance);
+            int128 expectedBalanceDiff = int128(transferUpwardBalance) - int128(pendingBonds);
 
             if (freeBalanceDiff >= expectedBalanceDiff) {
                 cachedTotalBalance += _transferUpwardBalance;
 
                 transferUpwardBalance = 0;
-                bondedBalance = 0;
+                pendingBonds = 0;
                 emit UpwardComplete(_transferUpwardBalance);
                 _transferUpwardBalance = 0;
             }

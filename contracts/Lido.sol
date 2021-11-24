@@ -582,7 +582,7 @@ contract Lido is stKSM, Initializable {
         uint256 _feeDevTreasure = uint256(_fee.developers + _fee.treasury);
         assert(_feeDevTreasure>0);
 
-        fundRaisedBalance += _totalRewards; // TODO why we don't subtract operators fee?
+        fundRaisedBalance += _totalRewards;
 
         if (ledgerShares[msg.sender] > 0) {
             ledgerStake[msg.sender] += _totalRewards;
@@ -613,7 +613,7 @@ contract Lido is stKSM, Initializable {
         if (ledgerShares[msg.sender] > 0) {
             // slash > ledgerStake can be possible only if we make big rebalance for ledger
             // in this case we must return all funds from relay chain 
-            ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= _totalLosses?_totalLosses:ledgerStake[msg.sender];
+            ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= _totalLosses ? _totalLosses : ledgerStake[msg.sender];
         }
 
         emit Losses(msg.sender, _totalLosses, ledgerBalance);
