@@ -23,8 +23,8 @@ def test_stake_collision(lido, oracle_master, vKSM, Ledger, accounts):
                 print('ledger ' + str(i) + ' stake = ' + str(ledger.ledgerStake() / 10**18))
         print()
     # Check current ledger stakes
-    ledger_stakes()    
-    
+    ledger_stakes()
+
     # era 1
     # Set incorrect shares by mistake
     lido.setLedgerShare(lido.findLedger(stashes[0]), 100, {'from': accounts[0]})

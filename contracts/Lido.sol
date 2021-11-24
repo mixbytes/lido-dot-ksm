@@ -626,7 +626,9 @@ contract Lido is stKSM, Initializable {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
         if (_amount > ledgerBorrow[msg.sender]) { // some donations
-            fundRaisedBalance += _amount - ledgerBorrow[msg.sender]; //just distribute it as rewards
+            uint256 excess = _amount - ledgerBorrow[msg.sender];
+            fundRaisedBalance += excess; //just distribute it as rewards
+            bufferedDeposits += excess;
             ledgerBorrow[msg.sender] = 0;
         }
         else {

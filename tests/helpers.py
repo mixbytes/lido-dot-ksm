@@ -144,6 +144,7 @@ class RelayChain:
     def _process_upward_transfer(self, event):
         idx = self._ledger_idx_by_stash_account(event['to'])
         self.ledgers[idx].free_balance += event['amount']
+        self.vKSM.burn(event['from'], event['amount'], {'from': self.accounts[0]}).info()
 
     def _process_downward_transfer(self, event):
         idx = self._ledger_idx_by_stash_account(event['from'])

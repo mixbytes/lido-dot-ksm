@@ -13,7 +13,7 @@ def test_add_stash(lido, oracle_master, vKSM, Ledger, accounts):
 
 def test_relay_direct_transfer(lido, oracle_master, vKSM, accounts):
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     relay.new_era()
 
@@ -31,7 +31,7 @@ def test_deposit_bond_disable(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
     relay.disable_bond()
 
     deposit = 20 * 10**18
@@ -63,7 +63,7 @@ def test_equal_deposit_bond(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
@@ -93,7 +93,7 @@ def test_deposit_transfer_disable(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
     relay.disable_transfer()
 
     deposit = 20 * 10**18
@@ -117,7 +117,7 @@ def test_double_deposit(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
@@ -148,7 +148,7 @@ def test_deposit_with_direct_transfer(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
