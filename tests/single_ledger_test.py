@@ -5,7 +5,7 @@ from helpers import RelayChain, distribute_initial_tokens
 
 
 def test_add_stash(lido, oracle_master, vKSM, Ledger, accounts):
-    lido.addLedger("0x10", "0x20", 0, 100, {'from': accounts[0]})
+    lido.addLedger("0x10", "0x20", 0, {'from': accounts[0]})
 
     ledger = Ledger.at(lido.findLedger("0x10"))
     assert ledger.stashAccount() == "0x10"
@@ -13,7 +13,7 @@ def test_add_stash(lido, oracle_master, vKSM, Ledger, accounts):
 
 def test_relay_direct_transfer(lido, oracle_master, vKSM, accounts):
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     relay.new_era()
 
@@ -31,7 +31,7 @@ def test_deposit_bond_disable(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
     relay.disable_bond()
 
     deposit = 20 * 10**18
@@ -63,7 +63,7 @@ def test_equal_deposit_bond(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
@@ -93,7 +93,7 @@ def test_deposit_transfer_disable(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
     relay.disable_transfer()
 
     deposit = 20 * 10**18
@@ -117,7 +117,7 @@ def test_double_deposit(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
@@ -148,7 +148,7 @@ def test_deposit_with_direct_transfer(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
@@ -181,7 +181,7 @@ def test_single_deposit(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
@@ -201,7 +201,7 @@ def test_multi_deposit(lido, oracle_master, vKSM, accounts, developers, treasury
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit1 = 20 * 10**18
     deposit2 = 5 * 10**18
@@ -238,7 +238,7 @@ def test_redeem(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit1 = 20 * 10**18
     deposit2 = 5 * 10**18
@@ -276,7 +276,7 @@ def test_multi_redeem(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[1]})
@@ -336,7 +336,7 @@ def test_multi_redeem_order_removal(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[1]})
@@ -392,7 +392,7 @@ def test_multi_redeem_mixed_timeout(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
     relay_spec_raw = lido.RELAY_SPEC()
     relay_spec_array = [relay_spec_raw[0], relay_spec_raw[1], relay_spec_raw[2], relay_spec_raw[3], relay_spec_raw[4]]
 
@@ -432,7 +432,7 @@ def test_is_reported_indicator(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})

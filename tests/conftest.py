@@ -118,5 +118,5 @@ def mocklido(Lido, LedgerMock, Oracle, OracleMaster, vKSM, controller, auth_mana
 
 @pytest.fixture(scope="module")
 def mockledger(mocklido, admin, LedgerMock):
-    mocklido.addLedger(0x01, 0x01, 0, 100, {'from': admin})
+    mocklido.addLedger(0x01, 0x01, 0, {'from': admin})
     return LedgerMock.at(mocklido.findLedger(0x01))
