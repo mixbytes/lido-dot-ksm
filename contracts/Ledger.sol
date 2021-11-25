@@ -27,6 +27,9 @@ contract Ledger {
     event Rewards(uint128 amount, uint128 balance);
     event Slash(uint128 amount, uint128 balance);
 
+    // Lido main contract address
+    ILido public LIDO;
+
     // ledger stash account
     bytes32 public stashAccount;
 
@@ -59,9 +62,6 @@ contract Ledger {
     IERC20 internal vKSM;
 
     IController internal controller;
-
-    // Lido main contract address
-    ILido public LIDO;
 
     // Minimal allowed balance to being a nominator
     uint128 public MIN_NOMINATOR_BALANCE;
@@ -99,7 +99,8 @@ contract Ledger {
         bytes32 _controllerAccount,
         address _vKSM,
         address _controller,
-        uint128 _minNominatorBalance
+        uint128 _minNominatorBalance,
+        address _lido
     ) external {
         require(address(vKSM) == address(0), "LEDGED: ALREADY_INITIALIZED");
 
@@ -110,7 +111,7 @@ contract Ledger {
 
         status = Types.LedgerStatus.None;
 
-        LIDO = ILido(msg.sender);
+        LIDO = ILido(_lido);
 
         vKSM = IERC20(_vKSM);
 

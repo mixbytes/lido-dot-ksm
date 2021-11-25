@@ -4,10 +4,10 @@ pragma abicoder v2;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
-import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 import "../interfaces/IOracleMaster.sol";
+import "../interfaces/ILedgerFactory.sol";
 import "../interfaces/ILedger.sol";
 import "../interfaces/IController.sol";
 import "../interfaces/IAuthManager.sol";
@@ -16,7 +16,6 @@ import "./stKSM.sol";
 
 
 contract Lido is stKSM, Initializable {
-    using Clones for address;
     using SafeCast for uint256;
 
     // Records a deposit made by a user
@@ -104,14 +103,11 @@ contract Lido is stKSM, Initializable {
     // Maximum number of ledgers
     uint256 public MAX_LEDGERS_AMOUNT;
 
-    /** fee interest in basis points.
+    /* fee interest in basis points.
     It's packed uint256 consist of three uint16 (total_fee, treasury_fee, developers_fee).
     where total_fee = treasury_fee + developers_fee + 3000 (3% operators fee)
     */
     Types.Fee private FEE;
-
-    // ledger clone template contract
-    address public LEDGER_CLONE;
 
     // oracle master contract
     address public ORACLE_MASTER;
@@ -125,8 +121,13 @@ contract Lido is stKSM, Initializable {
     // treasury fund
     address public treasury;
 
-    /** default interest value in base points.
-    */
+    // ledger beacon
+    address public LEDGER_BEACON;
+
+    // ledger factory
+    address public LEDGER_FACTORY;
+
+    // default interest value in base points.
     uint16 internal constant DEFAULT_DEVELOPERS_FEE = 140;
     uint16 internal constant DEFAULT_OPERATORS_FEE = 300;
     uint16 internal constant DEFAULT_TREASURY_FEE = 560;
@@ -136,6 +137,9 @@ contract Lido is stKSM, Initializable {
 
     // Spec manager role
     bytes32 internal constant ROLE_SPEC_MANAGER = keccak256("ROLE_SPEC_MANAGER");
+
+    // Beacon manager role
+    bytes32 internal constant ROLE_BEACON_MANAGER = keccak256("ROLE_BEACON_MANAGER");
 
     // Pause manager role
     bytes32 internal constant ROLE_PAUSE_MANAGER = keccak256("ROLE_PAUSE_MANAGER");
@@ -211,6 +215,22 @@ contract Lido is stKSM, Initializable {
     function setTreasury(address _treasury) external auth(ROLE_TREASURY) {
         require(_treasury != address(0), "LIDO: INCORRECT_TREASURY_ADDRESS");
         treasury = _treasury;
+    }
+
+    /**
+    * @notice Set ledger beacon address to '_ledgerBeacon'
+    */
+    function setLedgerBeacon(address _ledgerBeacon) external auth(ROLE_BEACON_MANAGER) {
+        require(_ledgerBeacon != address(0), "LIDO: INCORRECT_BEACON_ADDRESS");
+        LEDGER_BEACON = _ledgerBeacon;
+    }
+
+    /**
+    * @notice Set ledger factory address to '_ledgerFactory'
+    */
+    function setLedgerFactory(address _ledgerFactory) external auth(ROLE_BEACON_MANAGER) {
+        require(_ledgerFactory != address(0), "LIDO: INCORRECT_FACTORY_ADDRESS");
+        LEDGER_FACTORY = _ledgerFactory;
     }
 
     /**
@@ -330,16 +350,6 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
-    * @notice Set new ledger clone contract address, allowed to call only by ROLE_LEDGER_MANAGER
-    * @dev After setting new ledger clone address, old ledgers won't be affected, be careful
-    * @param _ledgerClone - ledger clone address
-    */
-    function setLedgerClone(address _ledgerClone) external auth(ROLE_LEDGER_MANAGER) {
-        require(_ledgerClone != address(0), "LIDO: INCORRECT_LEDGER_CLONE_ADDRESS");
-        LEDGER_CLONE = _ledgerClone;
-    }
-
-    /**
     * @notice Set new lido fee, allowed to call only by ROLE_FEE_MANAGER
     * @param _feeOperators - Operators percentage in basis points. It's always 3%
     * @param _feeTreasury - Treasury fund percentage in basis points
@@ -420,20 +430,19 @@ contract Lido is stKSM, Initializable {
         auth(ROLE_LEDGER_MANAGER)
         returns(address)
     {
-        require(LEDGER_CLONE != address(0), "LIDO: UNSPECIFIED_LEDGER_CLONE");
+        require(LEDGER_BEACON != address(0), "LIDO: UNSPECIFIED_LEDGER_BEACON");
+        require(LEDGER_FACTORY != address(0), "LIDO: UNSPECIFIED_LEDGER_FACTORY");
         require(ORACLE_MASTER != address(0), "LIDO: NO_ORACLE_MASTER");
         require(enabledLedgers.length + disabledLedgers.length < MAX_LEDGERS_AMOUNT, "LIDO: LEDGERS_POOL_LIMIT");
         require(ledgerByStash[_stashAccount] == address(0), "LIDO: STASH_ALREADY_EXISTS");
 
-        address ledger = LEDGER_CLONE.cloneDeterministic(_stashAccount);
-        // skip one era before commissioning
-        ILedger(ledger).initialize(
+        address ledger = ILedgerFactory(LEDGER_FACTORY).createLedger( 
             _stashAccount,
             _controllerAccount,
             address(vKSM),
             controller,
-            RELAY_SPEC.minNominatorBalance
-        );
+            RELAY_SPEC.minNominatorBalance);
+
         enabledLedgers.push(ledger);
         ledgerByStash[_stashAccount] = ledger;
         ledgerByAddress[ledger] = true;

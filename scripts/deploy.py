@@ -185,6 +185,12 @@ def deploy_controller(deployer, proxy_admin):
 def deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers):
     return deploy_with_proxy(Lido, proxy_admin, deployer, auth_manager, vksm, controller, treasury, developers)
 
+def deploy_ledger_beacon(deployer, _ledger_clone, _lido):
+    return deploy(LedgerBeacon, deployer)
+
+def deploy_leger_factory(deployer, _lido, _ledger_beacon):
+    return deploy(LedgerFactory, deployer)
+
 
 # deployment
 def main():
@@ -243,9 +249,14 @@ def main():
 
     ledger_clone = deploy_ledger_clone(deployer)
 
+    ledger_beacon = deploy_ledger_beacon(deployer, ledger_clone, lido)
+
+    ledger_factory = deploy_leger_factory(deployer, lido, ledger_beacon)
+
     print(f'\n{Fore.GREEN}Lido configuration...')
     lido.setOracleMaster(oracle_master, get_opts(roles['ROLE_ORACLE_MANAGER']))
-    lido.setLedgerClone(ledger_clone, get_opts(roles['ROLE_ORACLE_MANAGER']))
+    lido.setLedgerBeacon(ledger_beacon, get_opts(roles['ROLE_BEACON_MANAGER']))
+    lido.setLedgerFactory(ledger_factory, get_opts(roles['ROLE_BEACON_MANAGER']))
     lido.setRelaySpec((1, era_sec, era_sec * (28+3), max_validators_per_ledger, min_nominator_bond), get_opts(roles['ROLE_SPEC_MANAGER']))
     oracle_master.setAnchorEra(0, 1, era_sec)
 

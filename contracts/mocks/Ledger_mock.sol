@@ -12,9 +12,10 @@ contract LedgerMock {
         bytes32 _controllerAccount,
         address _vKSM,
         address _controller,
-        uint128 _minNominatorBalance
+        uint128 _minNominatorBalance,
+        address _lido
     ) external {
-        LIDO = ILido(msg.sender);
+        LIDO = ILido(_lido);
     }
 
     function distributeRewards(uint256 _totalRewards, uint256 _balance) external {
