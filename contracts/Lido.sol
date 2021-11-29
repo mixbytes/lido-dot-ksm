@@ -96,7 +96,6 @@ contract Lido is stKSM, Initializable {
     // controller
     address public controller;
 
-
     // auth manager contract address
     address public AUTH_MANAGER;
 
@@ -186,6 +185,8 @@ contract Lido is stKSM, Initializable {
         address _developers,
         address _treasury
     ) external initializer {
+        require(_vKSM != address(0), "LIDO: INCORRECT_VKSM_ADDRESS");
+
         vKSM = IERC20(_vKSM);
         controller = _controller;
         AUTH_MANAGER = _authManager;
@@ -310,15 +311,6 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
-    * @notice Return vKSM amount available for stake by ledger
-    * @dev If we have balance less than pendingClaimsTotal that means
-    *      that ledgers already have locked KSMs
-    */
-    function avaliableForStake() external view returns(uint256) {
-        return ledgerStake[msg.sender] - ledgerBorrow[msg.sender];
-    }
-
-    /**
     * @notice Set relay chain spec, allowed to call only by ROLE_SPEC_MANAGER
     * @dev if some params are changed function will iterate over oracles and ledgers, be careful
     * @param _relaySpec - new relaychain spec
@@ -358,7 +350,7 @@ contract Lido is stKSM, Initializable {
     function setFee(uint16 _feeOperators, uint16 _feeTreasury,  uint16 _feeDevelopers) external auth(ROLE_FEE_MANAGER) {
         Types.Fee memory _fee;
         _fee.total = _feeTreasury + _feeOperators + _feeDevelopers;
-        require(_fee.total <= 10000 && (_feeTreasury > 0 || _feeDevelopers > 0) , "LIDO: FEE_DONT_ADD_UP");
+        require(_fee.total <= 10000 && (_feeTreasury > 0 || _feeDevelopers > 0) && _feeOperators < 10000, "LIDO: FEE_DONT_ADD_UP");
 
         emit FeeSet(_fee.total, _feeOperators, _feeTreasury, _feeDevelopers);
 
@@ -579,6 +571,7 @@ contract Lido is stKSM, Initializable {
         for (uint256 i = 0; i < readyToClaimCount; ++i) { orders.pop(); }
 
         if (readyToClaim > 0) {
+            // In case if ledgers receive big slashing after redeem
             require(readyToClaim <= vKSM.balanceOf(address(this)), "LIDO: CLAIM_EXCEEDS_BALANCE");
             vKSM.transfer(msg.sender, readyToClaim);
             pendingClaimsTotal -= readyToClaim;
@@ -717,7 +710,10 @@ contract Lido is stKSM, Initializable {
             }
             // distribute remaining stakes and redeems accross enabled
             if (enabledLedgers.length > 0) {
-                _processEnabled(bufferedDeposits.toInt256() - bufferedRedeems.toInt256());
+                int256 stake = bufferedDeposits.toInt256() - bufferedRedeems.toInt256();
+                if (stake != 0) {
+                    _processEnabled(stake);
+                }
                 bufferedDeposits = 0;
                 bufferedRedeems = 0;
             }
@@ -866,7 +862,7 @@ contract Lido is stKSM, Initializable {
     * @notice Returns enabled ledger index by given address
     * @return enabled ledger index or uint256_max if not found
     */
-    function findEnabledLedger(address _ledgerAddress) internal returns(uint256) {
+    function findEnabledLedger(address _ledgerAddress) internal view returns(uint256) {
         for (uint256 i = 0; i < enabledLedgers.length; ++i) {
             if (enabledLedgers[i] == _ledgerAddress) {
                 return i;
@@ -879,7 +875,7 @@ contract Lido is stKSM, Initializable {
     * @notice Returns disabled ledger index by given address
     * @return disabled ledger index or uint256_max if not found
     */
-    function findDisabledLedger(address _ledgerAddress) internal returns(uint256) {
+    function findDisabledLedger(address _ledgerAddress) internal view returns(uint256) {
         for (uint256 i = 0; i < disabledLedgers.length; ++i) {
             if (disabledLedgers[i] == _ledgerAddress) {
                 return i;

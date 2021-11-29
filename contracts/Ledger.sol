@@ -30,6 +30,12 @@ contract Ledger {
     // Lido main contract address
     ILido public LIDO;
 
+    // vKSM precompile
+    IERC20 internal VKSM;
+
+    // controller for sending xcm messages to relay chain
+    IController internal CONTROLLER;
+
     // ledger stash account
     bytes32 public stashAccount;
 
@@ -56,12 +62,7 @@ contract Ledger {
     uint128 public transferDownwardBalance;
 
     // Pending bonding
-    uint128 private pendingBonds;
-
-    // vKSM precompile
-    IERC20 internal vKSM;
-
-    IController internal controller;
+    uint128 public pendingBonds;
 
     // Minimal allowed balance to being a nominator
     uint128 public MIN_NOMINATOR_BALANCE;
@@ -102,7 +103,7 @@ contract Ledger {
         uint128 _minNominatorBalance,
         address _lido
     ) external {
-        require(address(vKSM) == address(0), "LEDGED: ALREADY_INITIALIZED");
+        require(address(VKSM) == address(0), "LEDGED: ALREADY_INITIALIZED");
 
         // The owner of the funds
         stashAccount = _stashAccount;
@@ -113,9 +114,9 @@ contract Ledger {
 
         LIDO = ILido(_lido);
 
-        vKSM = IERC20(_vKSM);
+        VKSM = IERC20(_vKSM);
 
-        controller = IController(_controller);
+        CONTROLLER = IController(_controller);
 
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
 
@@ -132,8 +133,8 @@ contract Ledger {
     }
 
     function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
-        vKSM.approve(address(LIDO), type(uint256).max);
-        vKSM.approve(address(controller), type(uint256).max);
+        VKSM.approve(address(LIDO), type(uint256).max);
+        VKSM.approve(address(CONTROLLER), type(uint256).max);
     }
 
     /**
@@ -158,7 +159,7 @@ contract Ledger {
     */
     function nominate(bytes32[] calldata _validators) external onlyLido {
         require(activeBalance >= MIN_NOMINATOR_BALANCE, "LEDGED: NOT_ENOUGH_STAKE");
-        controller.nominate(_validators);
+        CONTROLLER.nominate(_validators);
     }
 
     /**
@@ -209,13 +210,13 @@ contract Ledger {
             // just upward transfer if we have deficit
             if (deficit > 0) {
                 LIDO.transferToLedger(deficit);
-                controller.transferToRelaychain(deficit);
+                CONTROLLER.transferToRelaychain(deficit);
                 transferUpwardBalance += deficit;
             }
 
             // rebond all always
             if (unlockingBalance > 0) {
-                controller.rebond(unlockingBalance);
+                CONTROLLER.rebond(unlockingBalance);
             }
 
             uint128 relayFreeBalance = _report.getFreeBalance();
@@ -226,10 +227,10 @@ contract Ledger {
 
             if (relayFreeBalance > 0 &&
                 (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle)) {
-                controller.bondExtra(relayFreeBalance);
+                CONTROLLER.bondExtra(relayFreeBalance);
                 pendingBonds += relayFreeBalance;
             } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
-                controller.bond(controllerAccount, relayFreeBalance);
+                CONTROLLER.bond(controllerAccount, relayFreeBalance);
                 pendingBonds += relayFreeBalance;
             }
         }
@@ -241,7 +242,7 @@ contract Ledger {
 
             // if ledger is in the deadpool we need to put it to chill
             if (_ledgerStake < MIN_NOMINATOR_BALANCE && status != Types.LedgerStatus.Idle) {
-                controller.chill();
+                CONTROLLER.chill();
             }
 
             uint128 deficit = _report.stashBalance - _ledgerStake;
@@ -250,7 +251,7 @@ contract Ledger {
             // need to downward transfer if we have some free
             if (relayFreeBalance > 0) {
                 uint128 forTransfer = relayFreeBalance > deficit ? deficit : relayFreeBalance;
-                controller.transferToParachain(forTransfer);
+                CONTROLLER.transferToParachain(forTransfer);
                 transferDownwardBalance += forTransfer;
                 deficit -= forTransfer;
                 relayFreeBalance -= forTransfer;
@@ -258,7 +259,7 @@ contract Ledger {
 
             // withdraw if we have some unlocked
             if (deficit > 0 && withdrawableBalance > 0) {
-                controller.withdrawUnbonded();
+                CONTROLLER.withdrawUnbonded();
                 deficit -= withdrawableBalance > deficit ? deficit : withdrawableBalance;
             }
 
@@ -266,14 +267,14 @@ contract Ledger {
             if (nonWithdrawableBalance < deficit) {
                 // todo drain stake if remaining balance is less than MIN_NOMINATOR_BALANCE
                 uint128 forUnbond = deficit - nonWithdrawableBalance;
-                controller.unbond(forUnbond);
+                CONTROLLER.unbond(forUnbond);
                 // notice.
                 // deficit -= forUnbond;
             }
 
             // bond all remain free balance
             if (relayFreeBalance > 0) {
-                controller.bondExtra(relayFreeBalance);
+                CONTROLLER.bondExtra(relayFreeBalance);
             }
         }
 
@@ -284,7 +285,7 @@ contract Ledger {
         // wait for the downward transfer to complete
         uint128 _transferDownwardBalance = transferDownwardBalance;
         if (_transferDownwardBalance > 0) {
-            uint128 totalDownwardTransferred = uint128(vKSM.balanceOf(address(this)));
+            uint128 totalDownwardTransferred = uint128(VKSM.balanceOf(address(this)));
 
             if (totalDownwardTransferred >= _transferDownwardBalance ) {
                 // send all funds to lido

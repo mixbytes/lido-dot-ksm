@@ -30,6 +30,9 @@ contract LedgerBeacon is IBeacon {
     // revision index for specific ledger (if revision == 0 => current revision used)
     mapping(address => uint256) public ledgerRevision;
 
+    // index of max revision for ledger
+    mapping(address => uint256) public ledgerMaxRevision;
+
     // Beacon manager role
     bytes32 internal constant ROLE_BEACON_MANAGER = keccak256("ROLE_BEACON_MANAGER");
 
@@ -42,6 +45,11 @@ contract LedgerBeacon is IBeacon {
      * @dev Emitted when current revision updated.
      */
     event NewCurrentRevision(address indexed implementation);
+
+    /**
+     * @dev Emitted when ledger current revision updated.
+     */
+    event NewLedgerRevision(address indexed ledger, address indexed implementation);
 
     modifier auth(bytes32 role) {
         require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "LEDGER_BEACON: UNAUTHOROZED");
@@ -73,18 +81,26 @@ contract LedgerBeacon is IBeacon {
     */
     function setLedgerRevision(address _ledger, uint256 _revision) external auth(ROLE_BEACON_MANAGER) {
         require(
-            (ledgerRevision[_ledger] == 0 && _revision > 0 && _revision <= latestRevision) || 
+            (ledgerRevision[_ledger] == 0 && _revision > ledgerMaxRevision[_ledger] && _revision <= latestRevision) || 
             (ledgerRevision[_ledger] > 0 && _revision == 0), 
             "LEDGER_BEACON: INCORRECT_REVISION"
         );
         ledgerRevision[_ledger] = _revision;
+
+        if (_revision == 0) {
+            _revision = currentRevision;
+        }
+        else {
+            ledgerMaxRevision[_ledger] = _revision;
+        }
+        emit NewLedgerRevision(_ledger, revisionImplementation[_revision - 1]);
     }
 
     /**
     * @dev Update current revision
     */
     function setCurrentRevision(uint256 _newCurrentRevision) external auth(ROLE_BEACON_MANAGER) {
-        require(_newCurrentRevision > 0 && _newCurrentRevision <= latestRevision, "LEDGER_BEACON: INCORRECT_REVISION");
+        require(_newCurrentRevision > currentRevision && _newCurrentRevision <= latestRevision, "LEDGER_BEACON: INCORRECT_REVISION");
         currentRevision = _newCurrentRevision;
         emit NewCurrentRevision(revisionImplementation[_newCurrentRevision - 1]);
     }
