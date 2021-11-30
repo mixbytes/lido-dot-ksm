@@ -44,6 +44,8 @@ interface Types {
         // stash account balance. It includes locked (totalBalance) balance assigned
         // to a controller.
         uint128 stashBalance;
+        // slashing spans for ledger
+        uint32 slashingSpans;
     }
 
     struct RelaySpec {

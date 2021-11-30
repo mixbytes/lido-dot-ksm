@@ -29,4 +29,14 @@ library LedgerUtils {
             && report.totalBalance == (report.activeBalance + _total)
             && report.stashBalance >= report.totalBalance;
     }
+
+    /// @notice Return slashing spans for ledger
+    function getSlashingSpans(Types.OracleData memory report) internal pure returns (uint32) {
+        return report.slashingSpans;
+    }
+
+    /// @notice Return amount of unlocking chunks
+    function getUnlockingChunks(Types.OracleData memory report) internal pure returns (uint256) {
+        return report.unlocking.length;
+    }
 }

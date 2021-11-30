@@ -13,7 +13,8 @@ def get_report(active=[]):
         item[1], #total balance,
         [], #unlocking chunks
         [], #claimed rewards
-        item[1] + 10_000 # stash balance
+        item[1] + 10_000, # stash balance
+        0 # slashing spans
     )  for item in stash ] )
 
 

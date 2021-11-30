@@ -216,7 +216,7 @@ contract Ledger {
 
             // rebond all always
             if (unlockingBalance > 0) {
-                CONTROLLER.rebond(unlockingBalance);
+                CONTROLLER.rebond(unlockingBalance, _report.getUnlockingChunks());
             }
 
             uint128 relayFreeBalance = _report.getFreeBalance();
@@ -259,7 +259,7 @@ contract Ledger {
 
             // withdraw if we have some unlocked
             if (deficit > 0 && withdrawableBalance > 0) {
-                CONTROLLER.withdrawUnbonded();
+                CONTROLLER.withdrawUnbonded(_report.getSlashingSpans());
                 deficit -= withdrawableBalance > deficit ? deficit : withdrawableBalance;
             }
 

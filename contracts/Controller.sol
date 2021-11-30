@@ -7,15 +7,14 @@ import "../interfaces/IRelayEncoder.sol";
 import "../interfaces/IxTokens.sol";
 import "../interfaces/IXcmTransactor.sol";
 import "../interfaces/ILedger.sol";
+import "../interfaces/IAuthManager.sol";
+import "../interfaces/ILido.sol";
 
 
 
 contract Controller {
     // ledger controller account
     uint16 public rootDerivativeIndex;
-
-    // relay side account id
-    bytes32 public relayAccount;
 
     // vKSM precompile
     IERC20 internal vKSM;
@@ -28,6 +27,9 @@ contract Controller {
 
     // xTokens precompile
     IxTokens internal xTokens;
+
+    // LIDO address
+    address public LIDO;
 
     // Second layer derivative-proxy account to index
     mapping(address => uint16) public senderToIndex;
@@ -54,6 +56,11 @@ contract Controller {
     uint64 public MAX_WEIGHT;// = 1_835_300_000;
 
     uint64[] public weights;
+
+    uint64 internal maxWeight;
+
+    // Controller manager role
+    bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
 
     event WeightUpdated (
         uint8 index,
@@ -115,7 +122,17 @@ contract Controller {
 
 
     modifier onlyRegistred() {
-        require(senderToIndex[msg.sender] != 0, "sender isn't registred");
+        require(senderToIndex[msg.sender] != 0, "CONTROLLER: UNREGISTERED_SENDER");
+        _;
+    }
+
+    modifier auth(bytes32 role) {
+        require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "CONTROLLER: UNAUTHOROZED");
+        _;
+    }
+
+    modifier onlyLido() {
+        require(msg.sender == LIDO, "CONTROLLER: CALLER_NOT_LIDO");
         _;
     }
 
@@ -124,27 +141,30 @@ contract Controller {
     /**
     * @notice Initialize ledger contract.
     * @param _rootDerivativeIndex - stash account id
-    * @param _relayAccount - controller account id
     * @param _vKSM - vKSM contract address
     * @param _relayEncoder - relayEncoder(relaychain calls builder) contract address
     * @param _xcmTransactor - xcmTransactor(relaychain calls relayer) contract address
     * @param _xTokens - minimal allowed nominator balance
+    * @param _lido - LIDO address on para chain
     */
     function init(
         uint16 _rootDerivativeIndex,
-        bytes32 _relayAccount,
         address _vKSM,
         address _relayEncoder,
         address _xcmTransactor,
-        address _xTokens
+        address _xTokens,
+        address _lido
     ) external {
-        relayAccount = _relayAccount;
+        require(address(vKSM) == address(0), "CONTROLLER: ALREADY_INITIALIZED");
+
         rootDerivativeIndex = _rootDerivativeIndex;
 
         vKSM = IERC20(_vKSM);
         relayEncoder = IRelayEncoder(_relayEncoder);
         xcmTransactor = IXcmTransactor(_xcmTransactor);
         xTokens = IxTokens(_xTokens);
+
+        LIDO = _lido;
     }
 
 
@@ -153,16 +173,17 @@ contract Controller {
     }
 
 
-    function setMaxWeight(uint64 maxWeight) external {
-        MAX_WEIGHT = maxWeight;
+    function setMaxWeight(uint64 _maxWeight) external auth(ROLE_CONTROLLER_MANAGER) {
+        require(_maxWeight >= maxWeight, "CONTROLLER: INCORRECT_WEIGHT");
+        MAX_WEIGHT = _maxWeight;
     }
 
     function setWeights(
         uint128[] calldata _weights
-    ) external {
-        require(_weights.length == uint256(type(WEIGHT).max) + 1, "wrong weights size");
+    ) external auth(ROLE_CONTROLLER_MANAGER) {
+        require(_weights.length == uint256(type(WEIGHT).max) + 1, "CONTROLLER: WRONG_WEIGHTS_SIZE");
         for (uint256 i = 0; i < _weights.length; ++i) {
-            if ((_weights[i] >> 64) > 0) {
+            if ((_weights[i] >> 64) > 0) { // if _weights[i] = _weights[i] | 1 << 65 we must update i-th weight
                 if (weights.length == i) {
                     weights.push(0);
                 }
@@ -171,11 +192,21 @@ contract Controller {
                 emit WeightUpdated(uint8(i), weights[i]);
             }
         }
+        updateMaxWeight();
     }
 
+    function updateMaxWeight() internal {
+        uint64 _mxWeight;
+        for (uint256 i = 0; i < weights.length; ++i) {
+            if (weights[i] > _mxWeight) _mxWeight = weights[i];
+        }
+        
+        require(_mxWeight <= MAX_WEIGHT, "CONTROLLER: BIG_WEIGHT");
+        maxWeight = _mxWeight;
+    }
 
-    function newSubAccount(uint16 index, bytes32 accountId, address paraAddress) external {
-        require(indexToAccount[index + 1] == bytes32(0), "already registred");
+    function newSubAccount(uint16 index, bytes32 accountId, address paraAddress) external onlyLido {
+        require(indexToAccount[index + 1] == bytes32(0), "CONTROLLER: ALREADY_REGISTERED");
 
         senderToIndex[paraAddress] = index + 1;
         indexToAccount[index + 1] = accountId;
@@ -226,20 +257,25 @@ contract Controller {
         emit Unbond(msg.sender, getSenderAccount(), amount);
     }
 
-    function withdrawUnbonded() external onlyRegistred {
+    /**
+    * @notice Withdraw unbonded tokens (move unbonded tokens to free)
+    * @param slashingSpans - number of slashes received by ledger in case if we trying set ledger bonded balance < min, 
+    in other cases = 0
+    */
+    function withdrawUnbonded(uint32 slashingSpans) external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
-            getWeight(WEIGHT.WITHDRAW_UNBONDED_BASE) + getWeight(WEIGHT.WITHDRAW_UNBONDED_PER_UNIT) * 10,
-            relayEncoder.encode_withdraw_unbonded(10/* TODO fix*/)
+            getWeight(WEIGHT.WITHDRAW_UNBONDED_BASE) + getWeight(WEIGHT.WITHDRAW_UNBONDED_PER_UNIT) * slashingSpans,
+            relayEncoder.encode_withdraw_unbonded(slashingSpans)
         );
 
         emit Withdraw(msg.sender, getSenderAccount());
     }
 
-    function rebond(uint256 amount) external onlyRegistred {
+    function rebond(uint256 amount, uint256 unbondingChunks) external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
-            getWeight(WEIGHT.REBOND_BASE) + getWeight(WEIGHT.REBOND_PER_UNIT) * 10 /*TODO fix*/,
+            getWeight(WEIGHT.REBOND_BASE) + getWeight(WEIGHT.REBOND_PER_UNIT) * uint64(unbondingChunks),
             relayEncoder.encode_rebond(amount)
         );
 
@@ -294,7 +330,7 @@ contract Controller {
         le_index[1] = bytes1(uint8(index >> 8));
 
         uint64 total_weight = weight + getWeight(WEIGHT.AS_DERIVATIVE);
-        require(total_weight <= MAX_WEIGHT, "too much weight");
+        require(total_weight <= MAX_WEIGHT, "CONTROLLER: TOO_MUCH_WEIGHT");
 
         xcmTransactor.transact_through_derivative(
             0, // The transactor to be used
