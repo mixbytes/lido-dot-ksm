@@ -24,6 +24,9 @@ def test_fee_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, deve
     assert mocklido.balanceOf(treasury) == 0
     assert mocklido.balanceOf(developers) == 0
 
+    beacon = mocklido.LEDGER_BEACON()
+    print(beacon)
+
     assert mocklido.getFee() == 1000
     # call lido.distributeRewards via mock Ledger
     # 1 UNIT has already withdrawn operators (3%) fee

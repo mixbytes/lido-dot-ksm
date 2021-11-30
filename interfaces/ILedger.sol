@@ -9,7 +9,8 @@ interface ILedger {
         bytes32 controllerAccount,
         address vKSM,
         address controller,
-        uint128 minNominatorBalance
+        uint128 minNominatorBalance,
+        address lido
     ) external;
 
     function pushData(uint64 eraId, Types.OracleData calldata staking) external;
