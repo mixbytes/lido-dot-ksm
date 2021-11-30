@@ -296,9 +296,12 @@ contract Controller {
         uint64 total_weight = weight + getWeight(WEIGHT.AS_DERIVATIVE);
         require(total_weight <= MAX_WEIGHT, "too much weight");
 
-        xcmTransactor.transact_through_derivative(0, rootDerivativeIndex, address(vKSM),
-            total_weight,
-            bytes.concat(hex"1001", le_index, call)
+        xcmTransactor.transact_through_derivative(
+            0, // The transactor to be used
+            rootDerivativeIndex, // The index to be used
+            address(vKSM), // Address of the currencyId of the asset to be used for fees
+            total_weight, // The weight we want to buy in the destination chain
+            bytes.concat(hex"1001", le_index, call) // The inner call to be executed in the destination chain
         );
     }
 
