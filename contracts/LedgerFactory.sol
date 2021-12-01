@@ -27,7 +27,8 @@ contract LedgerFactory {
         bytes32 _controllerAccount,
         address _vKSM,
         address _controller,
-        uint128 _minNominatorBalance
+        uint128 _minNominatorBalance,
+        uint128 _minimumBalance
     ) external returns (address) {
         require(msg.sender == LIDO, "LF: ONLY_LIDO");
 
@@ -41,7 +42,8 @@ contract LedgerFactory {
                     _vKSM,
                     _controller,
                     _minNominatorBalance,
-                    LIDO
+                    LIDO,
+                    _minimumBalance
                 )
             )
         );

@@ -67,6 +67,9 @@ contract Ledger {
     // Minimal allowed balance to being a nominator
     uint128 public MIN_NOMINATOR_BALANCE;
 
+    // Minimal allowable active balance
+    uint128 public MINIMUM_BALANCE;
+
     // Ledger manager role
     bytes32 internal constant ROLE_LEDGER_MANAGER = keccak256("ROLE_LEDGER_MANAGER");
 
@@ -94,6 +97,8 @@ contract Ledger {
     * @param _vKSM - vKSM contract address
     * @param _controller - xcmTransactor(relaychain calls relayer) contract address
     * @param _minNominatorBalance - minimal allowed nominator balance
+    * @param _lido - LIDO address
+    * @param _minimumBalance - minimal allowed active balance for ledger
     */
     function initialize(
         bytes32 _stashAccount,
@@ -101,7 +106,8 @@ contract Ledger {
         address _vKSM,
         address _controller,
         uint128 _minNominatorBalance,
-        address _lido
+        address _lido,
+        uint128 _minimumBalance
     ) external {
         require(address(VKSM) == address(0), "LEDGED: ALREADY_INITIALIZED");
 
@@ -120,6 +126,7 @@ contract Ledger {
 
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
 
+        MINIMUM_BALANCE = _minimumBalance;
 //        vKSM.approve(_controller, type(uint256).max);
     }
 
@@ -130,6 +137,10 @@ contract Ledger {
     */
     function setMinNominatorBalance(uint128 _minNominatorBalance) external onlyLido {
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
+    }
+
+    function setMinimumBalance(uint128 _minimumBalance) external onlyLido {
+        MINIMUM_BALANCE = _minimumBalance;
     }
 
     function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
@@ -229,7 +240,7 @@ contract Ledger {
                 (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle)) {
                 CONTROLLER.bondExtra(relayFreeBalance);
                 pendingBonds += relayFreeBalance;
-            } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
+            } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MINIMUM_BALANCE) {
                 CONTROLLER.bond(controllerAccount, relayFreeBalance);
                 pendingBonds += relayFreeBalance;
             }
@@ -259,13 +270,19 @@ contract Ledger {
 
             // withdraw if we have some unlocked
             if (deficit > 0 && withdrawableBalance > 0) {
-                CONTROLLER.withdrawUnbonded(_report.getSlashingSpans());
+                uint32 slashSpans = 0;
+                if ((_report.getUnlockingChunks() == 0) && (_report.activeBalance < MIN_NOMINATOR_BALANCE)) {
+                    slashSpans = _report.getSlashingSpans();
+                }
+                CONTROLLER.withdrawUnbonded(slashSpans);
                 deficit -= withdrawableBalance > deficit ? deficit : withdrawableBalance;
             }
 
             // need to unbond if we still have deficit
             if (nonWithdrawableBalance < deficit) {
                 // todo drain stake if remaining balance is less than MIN_NOMINATOR_BALANCE
+                // NOTE: if ledger.active - forUnbond < min_balance => all active balance would be unbonded
+                // https://github.com/paritytech/substrate/blob/master/frame/staking/src/pallet/mod.rs#L858
                 uint128 forUnbond = deficit - nonWithdrawableBalance;
                 CONTROLLER.unbond(forUnbond);
                 // notice.

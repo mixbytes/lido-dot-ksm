@@ -5,12 +5,13 @@ import "./Types.sol";
 
 interface ILedger {
     function initialize(
-        bytes32 stashAccount,
+        bytes32 _stashAccount,
         bytes32 controllerAccount,
         address vKSM,
         address controller,
         uint128 minNominatorBalance,
-        address lido
+        address lido,
+        uint128 _minimumBalance
     ) external;
 
     function pushData(uint64 eraId, Types.OracleData calldata staking) external;
@@ -24,4 +25,6 @@ interface ILedger {
     function stashAccount() external view returns (bytes32);
 
     function totalBalance() external view returns (uint128);
+
+    function setMinimumBalance(uint128 _minimumBalance) external;
 }
