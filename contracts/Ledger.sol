@@ -131,15 +131,13 @@ contract Ledger {
     }
 
     /**
-    * @notice Set new minimal allowed nominator balance, allowed to call only by lido contract
+    * @notice Set new minimal allowed nominator balance and minimal active balance, allowed to call only by lido contract
     * @dev That method designed to be called by lido contract when relay spec is changed
     * @param _minNominatorBalance - minimal allowed nominator balance
+    * @param _minimumBalance - minimal allowed ledger active balance
     */
-    function setMinNominatorBalance(uint128 _minNominatorBalance) external onlyLido {
+    function setRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance) external onlyLido {
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
-    }
-
-    function setMinimumBalance(uint128 _minimumBalance) external onlyLido {
         MINIMUM_BALANCE = _minimumBalance;
     }
 
@@ -227,7 +225,7 @@ contract Ledger {
 
             // rebond all always
             if (unlockingBalance > 0) {
-                CONTROLLER.rebond(unlockingBalance, _report.getUnlockingChunks());
+                CONTROLLER.rebond(unlockingBalance, _report.unlocking.length);
             }
 
             uint128 relayFreeBalance = _report.getFreeBalance();
@@ -240,7 +238,7 @@ contract Ledger {
                 (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle)) {
                 CONTROLLER.bondExtra(relayFreeBalance);
                 pendingBonds += relayFreeBalance;
-            } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MINIMUM_BALANCE) {
+            } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
                 CONTROLLER.bond(controllerAccount, relayFreeBalance);
                 pendingBonds += relayFreeBalance;
             }
@@ -271,8 +269,8 @@ contract Ledger {
             // withdraw if we have some unlocked
             if (deficit > 0 && withdrawableBalance > 0) {
                 uint32 slashSpans = 0;
-                if ((_report.getUnlockingChunks() == 0) && (_report.activeBalance < MIN_NOMINATOR_BALANCE)) {
-                    slashSpans = _report.getSlashingSpans();
+                if ((_report.unlocking.length == 0) && (_report.activeBalance < MINIMUM_BALANCE)) {
+                    slashSpans = _report.slashingSpans;
                 }
                 CONTROLLER.withdrawUnbonded(slashSpans);
                 deficit -= withdrawableBalance > deficit ? deficit : withdrawableBalance;

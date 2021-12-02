@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 import "../interfaces/IRelayEncoder.sol";
 import "../interfaces/IxTokens.sol";
@@ -12,7 +13,7 @@ import "../interfaces/ILido.sol";
 
 
 
-contract Controller {
+contract Controller is Initializable {
     // ledger controller account
     uint16 public rootDerivativeIndex;
 
@@ -56,8 +57,6 @@ contract Controller {
     uint64 public MAX_WEIGHT;// = 1_835_300_000;
 
     uint64[] public weights;
-
-    uint64 internal maxWeight;
 
     // Controller manager role
     bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
@@ -136,8 +135,6 @@ contract Controller {
         _;
     }
 
-    function initialize() external {} //stub
-
     /**
     * @notice Initialize ledger contract.
     * @param _rootDerivativeIndex - stash account id
@@ -147,14 +144,14 @@ contract Controller {
     * @param _xTokens - minimal allowed nominator balance
     * @param _lido - LIDO address on para chain
     */
-    function init(
+    function initialize(
         uint16 _rootDerivativeIndex,
         address _vKSM,
         address _relayEncoder,
         address _xcmTransactor,
         address _xTokens,
         address _lido
-    ) external {
+    ) external initializer {
         require(address(vKSM) == address(0), "CONTROLLER: ALREADY_INITIALIZED");
 
         rootDerivativeIndex = _rootDerivativeIndex;
@@ -174,7 +171,6 @@ contract Controller {
 
 
     function setMaxWeight(uint64 _maxWeight) external auth(ROLE_CONTROLLER_MANAGER) {
-        require(_maxWeight >= maxWeight, "CONTROLLER: INCORRECT_WEIGHT");
         MAX_WEIGHT = _maxWeight;
     }
 
@@ -192,17 +188,6 @@ contract Controller {
                 emit WeightUpdated(uint8(i), weights[i]);
             }
         }
-        updateMaxWeight();
-    }
-
-    function updateMaxWeight() internal {
-        uint64 _mxWeight;
-        for (uint256 i = 0; i < weights.length; ++i) {
-            if (weights[i] > _mxWeight) _mxWeight = weights[i];
-        }
-        
-        require(_mxWeight <= MAX_WEIGHT, "CONTROLLER: BIG_WEIGHT");
-        maxWeight = _mxWeight;
     }
 
     function newSubAccount(uint16 index, bytes32 accountId, address paraAddress) external onlyLido {

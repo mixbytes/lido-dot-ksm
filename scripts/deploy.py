@@ -211,6 +211,7 @@ def main():
     era_sec = CONFIG['relay_spec']['era_duratation']
     max_validators_per_ledger = CONFIG['relay_spec']['max_validators_per_ledger']
     min_nominator_bond = CONFIG['relay_spec']['min_nominator_bond']
+    min_active_balance = CONFIG['relay_spec']['min_active_balance']
 
     root_derivative_index = CONFIG['root_derivative_index']
     root_derivative_account = ss58decode(get_derivative_account(CONFIG['sovereign_account'], root_derivative_index))
@@ -257,7 +258,7 @@ def main():
     lido.setOracleMaster(oracle_master, get_opts(roles['ROLE_ORACLE_MANAGER']))
     lido.setLedgerBeacon(ledger_beacon, get_opts(roles['ROLE_BEACON_MANAGER']))
     lido.setLedgerFactory(ledger_factory, get_opts(roles['ROLE_BEACON_MANAGER']))
-    lido.setRelaySpec((1, era_sec, era_sec * (28+3), max_validators_per_ledger, min_nominator_bond), get_opts(roles['ROLE_SPEC_MANAGER']))
+    lido.setRelaySpec((1, era_sec, era_sec * (28+3), max_validators_per_ledger, min_nominator_bond, min_active_balance), get_opts(roles['ROLE_SPEC_MANAGER']))
     oracle_master.setAnchorEra(0, 1, era_sec)
 
     print(f'\n{Fore.GREEN}Adding oracle members...')

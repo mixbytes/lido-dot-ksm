@@ -126,9 +126,6 @@ contract Lido is stKSM, Initializable {
     // ledger factory
     address public LEDGER_FACTORY;
 
-    // Minimum allowable active balance for ledger
-    uint128 public ledgerMinimumActiveBalance;
-
     // default interest value in base points.
     uint16 internal constant DEFAULT_DEVELOPERS_FEE = 140;
     uint16 internal constant DEFAULT_OPERATORS_FEE = 300;
@@ -325,11 +322,25 @@ contract Lido is stKSM, Initializable {
         require(_relaySpec.unbondingPeriod > 0, "LIDO: BAD_UNBONDING_PERIOD");
         require(_relaySpec.maxValidatorsPerLedger > 0, "LIDO: BAD_MAX_VALIDATORS_PER_LEDGER");
 
-        //TODO loop through ledgerByAddress and oracles if some params changed
-
         RELAY_SPEC = _relaySpec;
 
         IOracleMaster(ORACLE_MASTER).setRelayParams(_relaySpec.genesisTimestamp, _relaySpec.secondsPerEra);
+
+        _updateLedgerMinimumBalance(_relaySpec.minNominatorBalance, _relaySpec.ledgerMinimumActiveBalance);
+    }
+
+    /**
+    * @notice Set new minimum balance for ledger
+    * @param _minimumBalance - new minimum balance for ledger
+    */
+    function _updateLedgerMinimumBalance(uint128 _minNominatorBalance, uint128 _minimumBalance) internal {
+        for (uint i = 0; i < enabledLedgers.length; i++) {
+            ILedger(enabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
+        }
+
+        for (uint i = 0; i < disabledLedgers.length; i++) {
+            ILedger(disabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
+        }
     }
 
     /**
@@ -437,7 +448,7 @@ contract Lido is stKSM, Initializable {
             address(vKSM),
             controller,
             RELAY_SPEC.minNominatorBalance,
-            ledgerMinimumActiveBalance    
+            RELAY_SPEC.ledgerMinimumActiveBalance
         );
 
         enabledLedgers.push(ledger);
@@ -497,22 +508,6 @@ contract Lido is stKSM, Initializable {
         vKSM.approve(address(ledger), 0);
 
         emit LedgerRemove(_ledgerAddress);
-    }
-
-    /**
-    * @notice Set new minimum balance for ledger
-    * @param _minimumBalance - new minimum balance for ledger
-    */
-    function updateLedgerMinimumBalance(uint128 _minimumBalance) external auth(ROLE_LEDGER_MANAGER) {
-        ledgerMinimumActiveBalance = _minimumBalance;
-        
-        for (uint i = 0; i < enabledLedgers.length; i++) {
-            ILedger(enabledLedgers[i]).setMinimumBalance(_minimumBalance);
-        }
-
-        for (uint i = 0; i < disabledLedgers.length; i++) {
-            ILedger(disabledLedgers[i]).setMinimumBalance(_minimumBalance);
-        }
     }
 
     /**

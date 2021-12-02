@@ -54,5 +54,6 @@ interface Types {
         uint64 unbondingPeriod;
         uint16 maxValidatorsPerLedger;
         uint128 minNominatorBalance;
+        uint128 ledgerMinimumActiveBalance;
     }
 }
