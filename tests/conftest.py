@@ -127,3 +127,9 @@ def mocklido(Lido, LedgerMock, LedgerBeacon, LedgerFactory, Oracle, OracleMaster
 def mockledger(mocklido, admin, LedgerMock):
     mocklido.addLedger(0x01, 0x01, 0, {'from': admin})
     return LedgerMock.at(mocklido.findLedger(0x01))
+
+
+@pytest.fixture(scope="module")
+def wstKSM(lido, WstKSM, admin):
+    _wstKSM = WstKSM.deploy(lido, {'from': admin})
+    return _wstKSM
