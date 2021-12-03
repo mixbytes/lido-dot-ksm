@@ -81,7 +81,8 @@ class RelayLedger:
             self.active_balance + self._unlocking_sum(),
             self.unlocking_chunks,
             [],
-            self.total_balance()
+            self.total_balance(),
+            0 # ledger slashing spans (for test always 0)
         )
 
 

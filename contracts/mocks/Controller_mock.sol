@@ -83,11 +83,11 @@ contract Controller_mock {
         emit Unbond(msg.sender, getSenderAccount(), amount);
     }
 
-    function withdrawUnbonded() external {
+    function withdrawUnbonded(uint32 slashingSpans) external {
         emit Withdraw(msg.sender, getSenderAccount());
     }
 
-    function rebond(uint256 amount) external {
+    function rebond(uint256 amount, uint256 unbondingChunks) external {
         emit Rebond(msg.sender, getSenderAccount(), amount);
     }
 

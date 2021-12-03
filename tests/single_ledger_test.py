@@ -394,7 +394,7 @@ def test_multi_redeem_mixed_timeout(lido, oracle_master, vKSM, accounts):
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger("0x10", "0x11")
     relay_spec_raw = lido.RELAY_SPEC()
-    relay_spec_array = [relay_spec_raw[0], relay_spec_raw[1], relay_spec_raw[2], relay_spec_raw[3], relay_spec_raw[4]]
+    relay_spec_array = [relay_spec_raw[0], relay_spec_raw[1], relay_spec_raw[2], relay_spec_raw[3], relay_spec_raw[4], relay_spec_raw[5]]
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[1]})

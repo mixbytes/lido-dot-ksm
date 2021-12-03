@@ -20,6 +20,7 @@ networks:
             era_duratation: 21600
             max_validators_per_ledger: 16
             min_nominator_bond: 1_000_000_000_000
+            min_active_balance: 0
         roles:
             ROLE_BEACON_MANAGER: "0xcEF5AE54c26F6C9A9a92436966B4aa4e29671c05"
             ROLE_SPEC_MANAGER: "0xcEF5AE54c26F6C9A9a92436966B4aa4e29671c05"

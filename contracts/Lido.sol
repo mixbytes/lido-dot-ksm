@@ -322,11 +322,25 @@ contract Lido is stKSM, Initializable {
         require(_relaySpec.unbondingPeriod > 0, "LIDO: BAD_UNBONDING_PERIOD");
         require(_relaySpec.maxValidatorsPerLedger > 0, "LIDO: BAD_MAX_VALIDATORS_PER_LEDGER");
 
-        //TODO loop through ledgerByAddress and oracles if some params changed
-
         RELAY_SPEC = _relaySpec;
 
         IOracleMaster(ORACLE_MASTER).setRelayParams(_relaySpec.genesisTimestamp, _relaySpec.secondsPerEra);
+
+        _updateLedgerRelaySpecs(_relaySpec.minNominatorBalance, _relaySpec.ledgerMinimumActiveBalance);
+    }
+
+    /**
+    * @notice Set new minimum balance for ledger
+    * @param _minimumBalance - new minimum balance for ledger
+    */
+    function _updateLedgerRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance) internal {
+        for (uint i = 0; i < enabledLedgers.length; i++) {
+            ILedger(enabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
+        }
+
+        for (uint i = 0; i < disabledLedgers.length; i++) {
+            ILedger(disabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
+        }
     }
 
     /**
@@ -433,7 +447,9 @@ contract Lido is stKSM, Initializable {
             _controllerAccount,
             address(vKSM),
             controller,
-            RELAY_SPEC.minNominatorBalance);
+            RELAY_SPEC.minNominatorBalance,
+            RELAY_SPEC.ledgerMinimumActiveBalance
+        );
 
         enabledLedgers.push(ledger);
         ledgerByStash[_stashAccount] = ledger;

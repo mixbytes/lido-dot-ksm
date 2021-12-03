@@ -13,9 +13,9 @@ interface IController {
 
     function unbond(uint256 amount) external;
 
-    function withdrawUnbonded() external;
+    function withdrawUnbonded(uint32 slashingSpans) external;
 
-    function rebond(uint256 amount) external;
+    function rebond(uint256 amount, uint256 unbondingChunks) external;
 
     function chill() external;
 
