@@ -756,15 +756,11 @@ contract Lido is stKSM, Initializable {
     */
     function _softRebalanceStakes() internal {
         if (bufferedDeposits > 0 || bufferedRedeems > 0 || disabledLedgersRedeem > 0) {
-            if ((bufferedRedeems > 0) && (disabledLedgersRedeem > 0)) {
+            if (disabledLedgersRedeem > 0) {
+                pendingBalance += bufferedRedeems > disabledLedgersRedeem ? 0 : disabledLedgersRedeem - bufferedRedeems;
+                bufferedRedeems = bufferedRedeems > disabledLedgersRedeem ? bufferedRedeems : disabledLedgersRedeem;
                 disabledLedgersRedeem = 0;
-            }
-
-            if ((bufferedRedeems == 0) && (disabledLedgersRedeem > 0)) {
-                bufferedRedeems = disabledLedgersRedeem;
-                pendingBalance += disabledLedgersRedeem;
                 unlockTimestamp = uint64(block.timestamp) + RELAY_SPEC.unbondingPeriod;
-                disabledLedgersRedeem = 0;
             }
 
             // first try to distribute redeems accross disabled ledgers
