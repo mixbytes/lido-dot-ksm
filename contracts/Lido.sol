@@ -326,14 +326,14 @@ contract Lido is stKSM, Initializable {
 
         IOracleMaster(ORACLE_MASTER).setRelayParams(_relaySpec.genesisTimestamp, _relaySpec.secondsPerEra);
 
-        _updateLedgerMinimumBalance(_relaySpec.minNominatorBalance, _relaySpec.ledgerMinimumActiveBalance);
+        _updateLedgerRelaySpecs(_relaySpec.minNominatorBalance, _relaySpec.ledgerMinimumActiveBalance);
     }
 
     /**
     * @notice Set new minimum balance for ledger
     * @param _minimumBalance - new minimum balance for ledger
     */
-    function _updateLedgerMinimumBalance(uint128 _minNominatorBalance, uint128 _minimumBalance) internal {
+    function _updateLedgerRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance) internal {
         for (uint i = 0; i < enabledLedgers.length; i++) {
             ILedger(enabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
         }
