@@ -126,6 +126,15 @@ contract Lido is stKSM, Initializable {
     // ledger factory
     address public LEDGER_FACTORY;
 
+    // KSM balance which must be returned from disabled ledgers
+    uint256 public pendingBalance;
+
+    // KSM amount which must be subtracted in next era from disabled ledgers
+    uint256 public disabledLedgersRedeem;
+
+    // Timestamp when pending balance become available
+    uint64 public unlockTimestamp;
+
     // default interest value in base points.
     uint16 internal constant DEFAULT_DEVELOPERS_FEE = 140;
     uint16 internal constant DEFAULT_OPERATORS_FEE = 300;
@@ -331,7 +340,8 @@ contract Lido is stKSM, Initializable {
 
     /**
     * @notice Set new minimum balance for ledger
-    * @param _minimumBalance - new minimum balance for ledger
+    * @param _minNominatorBalance - new minimum nominator balance
+    * @param _minimumBalance - new minimum active balance for ledger
     */
     function _updateLedgerRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance) internal {
         for (uint i = 0; i < enabledLedgers.length; i++) {
@@ -552,6 +562,11 @@ contract Lido is stKSM, Initializable {
         _burnShares(msg.sender, _shares);
         fundRaisedBalance -= _amount;
         bufferedRedeems += _amount;
+        if (pendingBalance > 0) {
+            uint256 minAmount = pendingBalance > _amount ? _amount : pendingBalance; 
+            bufferedRedeems -= minAmount;
+            pendingBalance -= minAmount;
+        }
 
         Claim memory newClaim = Claim(_amount, uint64(block.timestamp) + RELAY_SPEC.unbondingPeriod);
         claimOrders[msg.sender].push(newClaim);
@@ -674,6 +689,27 @@ contract Lido is stKSM, Initializable {
         _softRebalanceStakes();
     }
 
+    function redeemFromDisabledLedgers(uint256 _amount) external auth(ROLE_STAKE_MANAGER) {
+        require(disabledLedgers.length > 0, "LIDO: NO_DISABLED_LEDGERS");
+
+        uint256 availableStake;
+        for (uint i = 0; i < disabledLedgers.length; i++) {
+            availableStake += ledgerStake[disabledLedgers[i]];
+        }
+        require(availableStake >= _amount + disabledLedgersRedeem, "LIDO: INSUFFICIENT_STAKE");
+
+        disabledLedgersRedeem += _amount;
+    }
+
+    function depositToEnabledLedgers() external auth(ROLE_STAKE_MANAGER) {
+        require(pendingBalance > 0, "LIDO: NOTHING_TO_DEPOSIT");
+        require(uint64(block.timestamp) > unlockTimestamp, "LIDO: INSUFFICIENT_TIME_PASS");
+        require(vKSM.balanceOf(address(this)) >= pendingBalance, "LIDO: NOT_ENOUGH_BALANCE");
+
+        bufferedDeposits += pendingBalance;
+        pendingBalance = 0;
+    }
+
     /**
     * @notice Force rebalance stake accross ledgers, allowed to call only by ROLE_STAKE_MANAGER
     * @dev In some cases(due to rewards distribution) real ledger stakes can become different
@@ -719,11 +755,23 @@ contract Lido is stKSM, Initializable {
     * @notice Rebalance stake accross ledgers by soft manner.
     */
     function _softRebalanceStakes() internal {
-        if (bufferedDeposits > 0 || bufferedRedeems > 0) {
+        if (bufferedDeposits > 0 || bufferedRedeems > 0 || disabledLedgersRedeem > 0) {
+            if ((bufferedRedeems > 0) && (disabledLedgersRedeem > 0)) {
+                disabledLedgersRedeem = 0;
+            }
+
+            if ((bufferedRedeems == 0) && (disabledLedgersRedeem > 0)) {
+                bufferedRedeems = disabledLedgersRedeem;
+                pendingBalance += disabledLedgersRedeem;
+                unlockTimestamp = uint64(block.timestamp) + RELAY_SPEC.unbondingPeriod;
+                disabledLedgersRedeem = 0;
+            }
+
             // first try to distribute redeems accross disabled ledgers
-            if (disabledLedgers.length > 0) {
+            if ((disabledLedgers.length > 0) && (bufferedRedeems > 0)) {
                 bufferedRedeems = _processDisabledLedgers(bufferedRedeems);
             }
+
             // distribute remaining stakes and redeems accross enabled
             if (enabledLedgers.length > 0) {
                 int256 stake = bufferedDeposits.toInt256() - bufferedRedeems.toInt256();
@@ -750,6 +798,8 @@ contract Lido is stKSM, Initializable {
         for (uint256 i = 0; i < disabledLength; ++i) {
             stakesSum += ledgerStake[disabledLedgers[i]];
         }
+
+        if (stakesSum == 0) return redeems;
 
         for (uint256 i = 0; i < disabledLength; ++i) {
             uint256 currentStake = ledgerStake[disabledLedgers[i]];
