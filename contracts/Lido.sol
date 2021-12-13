@@ -701,13 +701,18 @@ contract Lido is stKSM, Initializable {
         disabledLedgersRedeem += _amount;
     }
 
-    function depositToEnabledLedgers() external auth(ROLE_STAKE_MANAGER) {
+    /**
+    * @notice Deposit redeemed tokens from disabled ledgers to enabled ledgers
+    * @param _amount - amount of vKSM for deposit to enabled ledgers (due to slashing it is possible to amount < pendingBalance)
+    */
+    function depositToEnabledLedgers(uint256 _amount) external auth(ROLE_STAKE_MANAGER) {
         require(pendingBalance > 0, "LIDO: NOTHING_TO_DEPOSIT");
         require(uint64(block.timestamp) > unlockTimestamp, "LIDO: INSUFFICIENT_TIME_PASS");
-        require(vKSM.balanceOf(address(this)) >= pendingBalance, "LIDO: NOT_ENOUGH_BALANCE");
+        require(pendingBalance >= _amount, "LIDO: AMOUNT_EXCEEDS_AVAILABLE");
+        require(vKSM.balanceOf(address(this)) >= _amount, "LIDO: NOT_ENOUGH_BALANCE");
 
-        bufferedDeposits += pendingBalance;
-        pendingBalance = 0;
+        bufferedDeposits += _amount;
+        pendingBalance -= _amount;
     }
 
     /**
