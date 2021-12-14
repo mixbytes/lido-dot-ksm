@@ -27,4 +27,6 @@ interface ILedger {
     function totalBalance() external view returns (uint128);
 
     function setRelaySpecs(uint128 minNominatorBalance, uint128 minimumBalance) external;
+
+    function cachedTotalBalance() external view returns (uint128);
 }
