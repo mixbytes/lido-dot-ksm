@@ -16,6 +16,7 @@ NETWORK="moonbase"
 
 def get_derivative_account(root_account, index):
     seed_bytes = b'modlpy/utilisuba'
+    
     root_account_bytes = bytes.fromhex(Keypair(root_account).public_key[2:])
     index_bytes = int(index).to_bytes(2, 'little')
 
@@ -33,7 +34,7 @@ else:
 
 
 def load_deployments(network):
-    path = "./deployments/" + network + '.json'
+    path = './deployments/' + network + '.json'
     if Path(path).is_file():
         with open(path) as file:
             return json.load(file)
@@ -42,8 +43,8 @@ def load_deployments(network):
 
 
 def save_deployments(deployments, network):
-    path = "./deployments/" + network + '.json'
-    with open(path, 'w') as file:
+    path = './deployments/' + network + '.json'
+    with open(path, 'w+') as file:
         json.dump(deployments, file)
 
 
@@ -170,31 +171,36 @@ def deploy_oracle_clone(deployer):
     return deploy(Oracle, deployer)
 
 
-def deploy_oracle_master(deployer):
-    return deploy(OracleMaster, deployer)
+def deploy_oracle_master(deployer, proxy_admin, oracle_clone, oracle_quorum):
+    return deploy_with_proxy(OracleMaster, proxy_admin, deployer, oracle_clone, oracle_quorum)
 
 
 def deploy_ledger_clone(deployer):
     return deploy(Ledger, deployer)
 
 
-def deploy_controller(deployer, proxy_admin):
-    return deploy_with_proxy(Controller, proxy_admin, deployer)
+def deploy_wstksm(deployer, lido, vksm):
+    return deploy(WstKSM, deployer, lido, vksm)
+
+
+def deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token):
+    return deploy_with_proxy(Controller, proxy_admin, deployer, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token)
 
 
 def deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers):
-    return deploy_with_proxy(Lido, proxy_admin, deployer, auth_manager, vksm, controller, treasury, developers)
+    return deploy_with_proxy(Lido, proxy_admin, deployer, auth_manager, vksm, controller, developers, treasury)
 
 def deploy_ledger_beacon(deployer, _ledger_clone, _lido):
-    return deploy(LedgerBeacon, deployer)
+    return deploy(LedgerBeacon, deployer, _ledger_clone, _lido)
 
 def deploy_leger_factory(deployer, _lido, _ledger_beacon):
-    return deploy(LedgerFactory, deployer)
+    return deploy(LedgerFactory, deployer, _lido, _ledger_beacon)
 
 
 # deployment
 def main():
-    deployer = accounts.at(CONFIG['deployer'])
+    #deployer = accounts.at(CONFIG['deployer'])
+    deployer = accounts.load(CONFIG['deployer'])
 
     auth_super_admin = CONFIG['auth_sudo']
     treasury = CONFIG['treasury']
@@ -224,12 +230,7 @@ def main():
 
     proxy_admin = deploy_proxy_admin(deployer)
 
-    controller = deploy_controller(deployer, proxy_admin)
-
-    print(f"\n{Fore.GREEN}Configuring controller...")
-    controller.init(root_derivative_index, root_derivative_account, vksm, relay_encoder, xcm_transactor, x_token, get_opts(deployer))
-    controller.setMaxWeight(xcm_max_weight, get_opts(deployer))
-    controller.setWeights([w | (1<<65) for w in xcm_weights], get_opts(deployer))
+    controller = deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token)
 
     auth_manager = deploy_auth_manager(deployer, proxy_admin, auth_super_admin)
 
@@ -242,11 +243,17 @@ def main():
 
     lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers)
 
+    print(f"\n{Fore.GREEN}Configuring controller...")
+    controller.setLido(lido, get_opts(deployer))
+    controller.setMaxWeight(xcm_max_weight, get_opts(roles['ROLE_CONTROLLER_MANAGER']))
+    controller.setWeights([w | (1<<65) for w in xcm_weights], get_opts(roles['ROLE_CONTROLLER_MANAGER']))
+
     oracle_clone = deploy_oracle_clone(deployer)
 
-    oracle_master = deploy_oracle_master(deployer)
+    oracle_master = deploy_oracle_master(deployer, proxy_admin, oracle_clone, oracle_quorum)
 
-    oracle_master.initialize(oracle_clone, oracle_quorum, get_opts(deployer))
+    print(f"\n{Fore.GREEN}Setting OracleMaster for LIDO...")
+    lido.setOracleMaster(oracle_master, get_opts(roles['ROLE_ORACLE_MANAGER']))
 
     ledger_clone = deploy_ledger_clone(deployer)
 
@@ -255,14 +262,13 @@ def main():
     ledger_factory = deploy_leger_factory(deployer, lido, ledger_beacon)
 
     print(f'\n{Fore.GREEN}Lido configuration...')
-    lido.setOracleMaster(oracle_master, get_opts(roles['ROLE_ORACLE_MANAGER']))
     lido.setLedgerBeacon(ledger_beacon, get_opts(roles['ROLE_BEACON_MANAGER']))
     lido.setLedgerFactory(ledger_factory, get_opts(roles['ROLE_BEACON_MANAGER']))
     lido.setRelaySpec((1, era_sec, era_sec * (28+3), max_validators_per_ledger, min_nominator_bond, min_active_balance), get_opts(roles['ROLE_SPEC_MANAGER']))
-    oracle_master.setAnchorEra(0, 1, era_sec)
+    oracle_master.setAnchorEra(0, 1, era_sec, get_opts(roles['ROLE_SPEC_MANAGER']))
 
     print(f'\n{Fore.GREEN}Adding oracle members...')
-    for oracle in ORACLES:
+    for oracle in oracles:
         print(f"{Fore.YELLOW}Adding oracle member: {oracle}")
         oracle_master.addOracleMember(oracle, get_opts(roles['ROLE_ORACLE_MEMBERS_MANAGER']))
 
@@ -271,20 +277,16 @@ def main():
     for i in range(len(stashes)):
         s_bytes = ss58decode(stashes[i])
         print(f"{Fore.GREEN}Added ledger, idx: {stash_idxs[i]} stash: {stashes[i]}")
-        lido.addLedger(s_bytes, s_bytes, stash_idxs[i], 100, get_opts(roles['ROLE_LEDGER_MANAGER']))
+        lido.addLedger(s_bytes, s_bytes, stash_idxs[i], get_opts(roles['ROLE_LEDGER_MANAGER']))
         ledgers.append(lido.findLedger(s_bytes))
 
-#    for ledger in ledgers:
-#        print("Refreshing allowances for ledger:", ledger)
-#        Ledger.at(ledger).refreshAllowances(get_opts(deployer))
-#
-#    print("Refreshing allowances for lido")
-#    lido.refreshAllowances(get_opts(roles['ROLE_LEDGER_MANAGER']));
+    wStKSM = deploy_wstksm(deployer, lido, vksm)
+
+    for ledger in ledgers:
+        print("Refreshing allowances for ledger:", ledger)
+        Ledger.at(ledger).refreshAllowances(get_opts(roles['ROLE_LEDGER_MANAGER']))
 
 
 
 def prompt():
     pass
-
-
-

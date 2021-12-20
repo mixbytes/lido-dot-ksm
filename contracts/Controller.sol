@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -18,16 +18,16 @@ contract Controller is Initializable {
     uint16 public rootDerivativeIndex;
 
     // vKSM precompile
-    IERC20 internal vKSM;
+    IERC20 internal VKSM;
 
     // relay call builder precompile
-    IRelayEncoder internal relayEncoder;
+    IRelayEncoder internal RELAY_ENCODER;
 
     // xcm transactor precompile
-    IXcmTransactor internal xcmTransactor;
+    IXcmTransactor internal XCM_TRANSACTOR;
 
     // xTokens precompile
-    IxTokens internal xTokens;
+    IxTokens internal X_TOKENS;
 
     // LIDO address
     address public LIDO;
@@ -35,8 +35,6 @@ contract Controller is Initializable {
     // Second layer derivative-proxy account to index
     mapping(address => uint16) public senderToIndex;
     mapping(uint16 => bytes32) public indexToAccount;
-
-    uint16 public tododelete;
 
     enum WEIGHT {
         AS_DERIVATIVE,              // 410_000_000
@@ -142,26 +140,22 @@ contract Controller is Initializable {
     * @param _relayEncoder - relayEncoder(relaychain calls builder) contract address
     * @param _xcmTransactor - xcmTransactor(relaychain calls relayer) contract address
     * @param _xTokens - minimal allowed nominator balance
-    * @param _lido - LIDO address on para chain
     */
     function initialize(
         uint16 _rootDerivativeIndex,
         address _vKSM,
         address _relayEncoder,
         address _xcmTransactor,
-        address _xTokens,
-        address _lido
+        address _xTokens
     ) external initializer {
-        require(address(vKSM) == address(0), "CONTROLLER: ALREADY_INITIALIZED");
+        require(address(VKSM) == address(0), "CONTROLLER: ALREADY_INITIALIZED");
 
         rootDerivativeIndex = _rootDerivativeIndex;
 
-        vKSM = IERC20(_vKSM);
-        relayEncoder = IRelayEncoder(_relayEncoder);
-        xcmTransactor = IXcmTransactor(_xcmTransactor);
-        xTokens = IxTokens(_xTokens);
-
-        LIDO = _lido;
+        VKSM = IERC20(_vKSM);
+        RELAY_ENCODER = IRelayEncoder(_relayEncoder);
+        XCM_TRANSACTOR = IXcmTransactor(_xcmTransactor);
+        X_TOKENS = IxTokens(_xTokens);
     }
 
 
@@ -172,6 +166,12 @@ contract Controller is Initializable {
 
     function setMaxWeight(uint64 _maxWeight) external auth(ROLE_CONTROLLER_MANAGER) {
         MAX_WEIGHT = _maxWeight;
+    }
+
+
+    function setLido(address _lido) external {
+        require(LIDO == address(0) && _lido != address(0), "CONTROLLER: LIDO_ALREADY_INITIALIZED");
+        LIDO = _lido;
     }
 
     function setWeights(
@@ -206,7 +206,7 @@ contract Controller is Initializable {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.NOMINATE_BASE) + getWeight(WEIGHT.NOMINATE_PER_UNIT) * uint64(validators.length),
-            relayEncoder.encode_nominate(convertedValidators)
+            RELAY_ENCODER.encode_nominate(convertedValidators)
         );
 
         emit Nominate(msg.sender, getSenderAccount(), validators);
@@ -216,7 +216,7 @@ contract Controller is Initializable {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.BOND_BASE),
-            relayEncoder.encode_bond(uint256(controller), amount, bytes(hex"00"))
+            RELAY_ENCODER.encode_bond(uint256(controller), amount, bytes(hex"00"))
         );
 
         emit Bond(msg.sender, getSenderAccount(), controller, amount);
@@ -226,7 +226,7 @@ contract Controller is Initializable {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.BOND_EXTRA_BASE),
-            relayEncoder.encode_bond_extra(amount)
+            RELAY_ENCODER.encode_bond_extra(amount)
         );
 
         emit BondExtra(msg.sender, getSenderAccount(), amount);
@@ -236,7 +236,7 @@ contract Controller is Initializable {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.UNBOND_BASE),
-            relayEncoder.encode_unbond(amount)
+            RELAY_ENCODER.encode_unbond(amount)
         );
 
         emit Unbond(msg.sender, getSenderAccount(), amount);
@@ -251,7 +251,7 @@ contract Controller is Initializable {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.WITHDRAW_UNBONDED_BASE) + getWeight(WEIGHT.WITHDRAW_UNBONDED_PER_UNIT) * slashingSpans,
-            relayEncoder.encode_withdraw_unbonded(slashingSpans)
+            RELAY_ENCODER.encode_withdraw_unbonded(slashingSpans)
         );
 
         emit Withdraw(msg.sender, getSenderAccount());
@@ -261,7 +261,7 @@ contract Controller is Initializable {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.REBOND_BASE) + getWeight(WEIGHT.REBOND_PER_UNIT) * uint64(unbondingChunks),
-            relayEncoder.encode_rebond(amount)
+            RELAY_ENCODER.encode_rebond(amount)
         );
 
         emit Rebond(msg.sender, getSenderAccount(), amount);
@@ -271,7 +271,7 @@ contract Controller is Initializable {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.CHILL_BASE),
-            relayEncoder.encode_chill()
+            RELAY_ENCODER.encode_chill()
         );
 
         emit Chill(msg.sender, getSenderAccount());
@@ -290,12 +290,12 @@ contract Controller is Initializable {
 
     function transferToRelaychain(uint256 amount) external onlyRegistred {
         // to - getSenderIndex(), from - msg.sender
-        vKSM.transferFrom(msg.sender, address(this), amount);
+        VKSM.transferFrom(msg.sender, address(this), amount);
         IxTokens.Multilocation memory destination;
         destination.parents = 1;
         destination.interior = new bytes[](1);
         destination.interior[0] = bytes.concat(bytes1(hex"01"), getSenderAccount(), bytes1(hex"00")); // X2, NetworkId: Any
-        xTokens.transfer(address(vKSM), amount + 18900000000, destination, getWeight(WEIGHT.TRANSFER_TO_RELAY_BASE));
+        X_TOKENS.transfer(address(VKSM), amount + 18900000000, destination, getWeight(WEIGHT.TRANSFER_TO_RELAY_BASE));
 
         emit TransferToRelaychain(msg.sender, getSenderAccount(), amount);
     }
@@ -317,10 +317,10 @@ contract Controller is Initializable {
         uint64 total_weight = weight + getWeight(WEIGHT.AS_DERIVATIVE);
         require(total_weight <= MAX_WEIGHT, "CONTROLLER: TOO_MUCH_WEIGHT");
 
-        xcmTransactor.transact_through_derivative(
+        XCM_TRANSACTOR.transact_through_derivative(
             0, // The transactor to be used
             rootDerivativeIndex, // The index to be used
-            address(vKSM), // Address of the currencyId of the asset to be used for fees
+            address(VKSM), // Address of the currencyId of the asset to be used for fees
             total_weight, // The weight we want to buy in the destination chain
             bytes.concat(hex"1001", le_index, call) // The inner call to be executed in the destination chain
         );

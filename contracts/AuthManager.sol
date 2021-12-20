@@ -8,7 +8,7 @@ import "../interfaces/IAuthManager.sol";
 
 contract AuthManager is IAuthManager, Initializable {
     mapping(address => bytes32[])  internal members;
-    uint256 internal constant NOTFOUND = type(uint256).max;
+    uint256 internal constant NOT_FOUND = type(uint256).max;
     bytes32 public constant SUPER_ROLE = keccak256("SUPER_ROLE");
 
     event AddMember(address member, bytes32 role);
@@ -29,38 +29,38 @@ contract AuthManager is IAuthManager, Initializable {
     }
 
     function has(bytes32 role, address _member) external override view returns (bool) {
-        return _find(members[_member], role) != NOTFOUND;
+        return _find(members[_member], role) != NOT_FOUND;
     }
 
     function add(bytes32 role, address member) external override {
-        require(_find(members[msg.sender], SUPER_ROLE) != NOTFOUND, "FORBIDDEN");
+        require(_find(members[msg.sender], SUPER_ROLE) != NOT_FOUND, "FORBIDDEN");
 
         bytes32[] storage _roles = members[member];
 
-        require(_find(_roles, role) == NOTFOUND, "ALREADY_MEMBER");
+        require(_find(_roles, role) == NOT_FOUND, "ALREADY_MEMBER");
         _roles.push(role);
         emit AddMember(member, role);
     }
 
     function addByString(string calldata roleString, address member) external {
-        require(_find(members[msg.sender], SUPER_ROLE) != NOTFOUND, "FORBIDDEN");
+        require(_find(members[msg.sender], SUPER_ROLE) != NOT_FOUND, "FORBIDDEN");
 
         bytes32[] storage _roles = members[member];
         bytes32 role = keccak256(bytes(roleString));
 
-        require(_find(_roles, role) == NOTFOUND, "ALREADY_MEMBER");
+        require(_find(_roles, role) == NOT_FOUND, "ALREADY_MEMBER");
         _roles.push(role);
         emit AddMember(member, role);
     }
 
     function remove(bytes32 role, address member) external override {
-        require(_find(members[msg.sender], SUPER_ROLE) != NOTFOUND, "FORBIDDEN");
+        require(_find(members[msg.sender], SUPER_ROLE) != NOT_FOUND, "FORBIDDEN");
         require(msg.sender != member || role != SUPER_ROLE, "INVALID");
 
         bytes32[] storage _roles = members[member];
 
         uint256 i = _find(_roles, role);
-        require(i != NOTFOUND, "MEMBER_NOT_FOUND");
+        require(i != NOT_FOUND, "MEMBER_NOT_FOUND");
         if (_roles.length == 1) {
             delete members[member];
         } else {
@@ -79,7 +79,7 @@ contract AuthManager is IAuthManager, Initializable {
                 return i;
             }
         }
-        return NOTFOUND;
+        return NOT_FOUND;
     }
 
 }

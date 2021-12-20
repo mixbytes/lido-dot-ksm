@@ -81,6 +81,8 @@ def test_move_funds_from_disable_ledger(lido, oracle_master, vKSM, accounts):
     assert ledger_1.active_balance == deposit // 2
     assert ledger_1.free_balance == deposit // 2
 
+    lido.removeLedger(ledger_2.ledger_address, {'from': accounts[0]})
+
 
 def test_redeem_after_move(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)

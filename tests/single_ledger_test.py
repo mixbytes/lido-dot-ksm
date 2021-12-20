@@ -11,6 +11,7 @@ def test_add_stash(lido, oracle_master, vKSM, Ledger, accounts):
     assert ledger.stashAccount() == "0x10"
     assert ledger.controllerAccount() == "0x20"
 
+
 def test_relay_direct_transfer(lido, oracle_master, vKSM, accounts):
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger("0x10", "0x11")
@@ -26,6 +27,31 @@ def test_relay_direct_transfer(lido, oracle_master, vKSM, accounts):
     relay.new_era([reward])
     assert relay.ledgers[0].active_balance == reward
     assert lido.getTotalPooledKSM() == reward
+
+
+def test_nominate_ledger(lido, oracle_master, vKSM, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+
+    deposit = 20 * 10**18
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    relay.new_era()
+
+    assert relay.ledgers[0].free_balance == deposit
+    assert relay.ledgers[0].active_balance == 0
+
+    relay.new_era()
+
+    assert relay.ledgers[0].free_balance == 0
+    assert relay.ledgers[0].active_balance == deposit
+
+    relay.new_era()
+
+    lido.nominate(relay.ledgers[0].stash_account, ['0x123'])
+
 
 def test_deposit_bond_disable(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
@@ -441,3 +467,29 @@ def test_is_reported_indicator(lido, oracle_master, vKSM, accounts):
 
     relay.new_era()
     assert oracle_master.isReportedLastEra(accounts[0], relay.ledgers[0].stash_account) == (relay.era, True)
+
+
+def test_soften_quorum(lido, oracle_master, vKSM, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+    ledger_1 = relay.ledgers[0]
+
+    oracle_master.setQuorum(2, {'from': accounts[0]})
+
+    deposit = 20 * 10**18
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    relay.new_era()
+
+    assert ledger_1.free_balance == 0
+
+    tx = oracle_master.setQuorum(1, {'from': accounts[0]})
+
+    relay._after_report(tx)
+
+    assert ledger_1.free_balance == deposit
+
+    oracle_master.addOracleMember(accounts[2], {'from': accounts[0]})
+    oracle_master.removeOracleMember(accounts[2], {'from': accounts[0]})

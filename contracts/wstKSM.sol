@@ -1,18 +1,30 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interfaces/ILido.sol";
 
 contract WstKSM is ERC20 {
     // LIDO contract
     ILido public LIDO;
 
+    // vKSM precompile
+    IERC20 public VKSM;
+
     /**
      * @param _lido address of the StKSM token to wrap
      */
-    constructor(ILido _lido) ERC20("Wrapped liquid staked KSM", "wstKSM") {
+    constructor(ILido _lido, IERC20 _vKSM) ERC20("Wrapped liquid staked KSM", "wstKSM") {
         LIDO = _lido;
+        VKSM = _vKSM;
+    }
+
+    /**
+    * @notice Stub fallback for native token, always reverting
+    */
+    fallback() external {
+        revert("WSTKSM: FORBIDDEN");
     }
 
     /**
@@ -23,10 +35,20 @@ contract WstKSM is ERC20 {
     }
 
     /**
-    * @notice Stub fallback for native token, always reverting
-    */
-    fallback() external {
-        revert("WSTKSM: FORBIDDEN");
+     * @notice Stake vKSM to stKSM and wrap stKSM to wstKSM
+     * @param _vKSMAmount amount of vKSM
+     * @return Amount of wstKSM for a given vKSM amount
+     */
+    function submit(uint256 _vKSMAmount) external returns (uint256) {
+        require(_vKSMAmount > 0, "WSTKSM: ZERO_VKSM");
+        VKSM.transferFrom(msg.sender, address(this), _vKSMAmount);
+        if (VKSM.allowance(address(this), address(LIDO)) < _vKSMAmount) {
+            VKSM.approve(address(LIDO), type(uint256).max);
+        }
+        uint256 shares = LIDO.deposit(_vKSMAmount);
+        require(shares > 0, "WSTKSM: ZERO_SHARES");
+        _mint(msg.sender, shares);
+        return shares;
     }
 
     /**
