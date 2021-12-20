@@ -31,4 +31,12 @@ interface ILido {
     function AUTH_MANAGER() external returns(address);
 
     function ORACLE_MASTER() external view returns (address);
+
+    function getPooledKSMByShares(uint256 sharesAmount) external view returns (uint256);
+
+    function getSharesByPooledKSM(uint256 amount) external view returns (uint256);
+
+    function transfer(address recipient, uint256 amount) external returns (bool);
+
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 }

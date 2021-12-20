@@ -126,6 +126,15 @@ contract Lido is stKSM, Initializable {
     // ledger factory
     address public LEDGER_FACTORY;
 
+    // true if manager start moving funds from disabled ledgres in current epoch
+    bool private isMovingFromDisabledLedgers;
+
+    // addresses of disabled ledgers from which manager moving assets
+    address[] private disabledLedgersToRedeem;
+
+    // amount of vKSM which would be redeposit after returning from disabled ledgers
+    uint256 private stakeToRedeposit;
+
     // default interest value in base points.
     uint16 internal constant DEFAULT_DEVELOPERS_FEE = 140;
     uint16 internal constant DEFAULT_OPERATORS_FEE = 300;
@@ -331,7 +340,8 @@ contract Lido is stKSM, Initializable {
 
     /**
     * @notice Set new minimum balance for ledger
-    * @param _minimumBalance - new minimum balance for ledger
+    * @param _minNominatorBalance - new minimum nominator balance
+    * @param _minimumBalance - new minimum active balance for ledger
     */
     function _updateLedgerRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance) internal {
         for (uint i = 0; i < enabledLedgers.length; i++) {
@@ -552,6 +562,11 @@ contract Lido is stKSM, Initializable {
         _burnShares(msg.sender, _shares);
         fundRaisedBalance -= _amount;
         bufferedRedeems += _amount;
+        if (stakeToRedeposit > 0) {
+            uint256 minAmount = stakeToRedeposit > _amount ? _amount : stakeToRedeposit; 
+            bufferedRedeems -= minAmount;
+            stakeToRedeposit -= minAmount;
+        }
 
         Claim memory newClaim = Claim(_amount, uint64(block.timestamp) + RELAY_SPEC.unbondingPeriod);
         claimOrders[msg.sender].push(newClaim);
@@ -611,6 +626,12 @@ contract Lido is stKSM, Initializable {
         ledgerStake[msg.sender] += _totalRewards;
         ledgerBorrow[msg.sender] += _totalRewards;
 
+        // In case if disabled ledger receive rewards after manager call moveDisabledLedgersStake
+        // Than `stakeToRedeposit` must be increased
+        if ((findLedgerForRedeem(msg.sender) != type(uint256).max) && isMovingFromDisabledLedgers){
+            stakeToRedeposit += _totalRewards;
+        }
+
         uint256 _rewards = _totalRewards * _feeDevTreasure / uint256(10000 - _fee.operators);
         uint256 denom = _getTotalPooledKSM()  - _rewards;
         uint256 shares2mint = _getTotalPooledKSM();
@@ -637,6 +658,10 @@ contract Lido is stKSM, Initializable {
         ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= _totalLosses ? _totalLosses : ledgerStake[msg.sender];
         ledgerBorrow[msg.sender] -= _totalLosses;
 
+        if (findLedgerForRedeem(msg.sender) != type(uint256).max) {
+            stakeToRedeposit -= stakeToRedeposit > _totalLosses ? _totalLosses : stakeToRedeposit;
+        }
+
         emit Losses(msg.sender, _totalLosses, _ledgerBalance);
     }
 
@@ -654,6 +679,17 @@ contract Lido is stKSM, Initializable {
         }
 
         vKSM.transferFrom(msg.sender, address(this), _amount);
+
+        uint256 ledgerIndex = findLedgerForRedeem(msg.sender);
+        if (ledgerIndex != type(uint256).max) {
+            uint256 redeposit = stakeToRedeposit > _amount ? _amount : stakeToRedeposit;
+            stakeToRedeposit -= redeposit;
+            bufferedDeposits += redeposit;
+
+            address lastLedger = disabledLedgersToRedeem[disabledLedgersToRedeem.length - 1];
+            disabledLedgersToRedeem[ledgerIndex] = lastLedger;
+            disabledLedgersToRedeem.pop();
+        }
     }
 
     function transferToLedger(uint256 _amount) external {
@@ -672,6 +708,37 @@ contract Lido is stKSM, Initializable {
         require(msg.sender == ORACLE_MASTER, "LIDO: NOT_FROM_ORACLE_MASTER");
 
         _softRebalanceStakes();
+    }
+
+    function moveDisabledLedgersStake(address[] calldata _ledgers) external auth(ROLE_STAKE_MANAGER) returns (uint256) {
+        require(disabledLedgers.length > 0, "LIDO: NO_DISABLED_LEDGERS");
+
+        uint256 maxRedeem;
+        for (uint256 i = 0; i < _ledgers.length; ++i) {
+            uint256 ledgerIdx = findDisabledLedger(_ledgers[i]);
+            require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_DISABLED");
+            require(ledgerStake[_ledgers[i]] == ILedger(_ledgers[i]).cachedTotalBalance());
+
+            maxRedeem += ledgerStake[_ledgers[i]];
+            disabledLedgersToRedeem.push(_ledgers[i]);
+        }
+
+        uint256 minVal = maxRedeem > bufferedRedeems ? bufferedRedeems : maxRedeem;
+        bufferedRedeems -= minVal;
+        maxRedeem -= minVal;
+
+        stakeToRedeposit += maxRedeem;
+        isMovingFromDisabledLedgers = true;
+        return maxRedeem;
+    }
+
+    function findLedgerForRedeem(address _ledgerAddress) internal view returns(uint256) {
+        for (uint256 i = 0; i < disabledLedgersToRedeem.length; ++i) {
+            if (disabledLedgersToRedeem[i] == _ledgerAddress) {
+                return i;
+            }
+        }
+        return type(uint256).max;
     }
 
     /**
@@ -719,11 +786,12 @@ contract Lido is stKSM, Initializable {
     * @notice Rebalance stake accross ledgers by soft manner.
     */
     function _softRebalanceStakes() internal {
-        if (bufferedDeposits > 0 || bufferedRedeems > 0) {
+        if (bufferedDeposits > 0 || bufferedRedeems > 0 || isMovingFromDisabledLedgers) {
             // first try to distribute redeems accross disabled ledgers
-            if (disabledLedgers.length > 0) {
+            if ((disabledLedgers.length > 0) && (bufferedRedeems > 0 || isMovingFromDisabledLedgers)) {
                 bufferedRedeems = _processDisabledLedgers(bufferedRedeems);
             }
+
             // distribute remaining stakes and redeems accross enabled
             if (enabledLedgers.length > 0) {
                 int256 stake = bufferedDeposits.toInt256() - bufferedRedeems.toInt256();
@@ -749,6 +817,15 @@ contract Lido is stKSM, Initializable {
 
         for (uint256 i = 0; i < disabledLength; ++i) {
             stakesSum += ledgerStake[disabledLedgers[i]];
+        }
+
+        if (stakesSum == 0) return redeems;
+
+        if (isMovingFromDisabledLedgers) {
+            for (uint256 i = 0; i < disabledLedgersToRedeem.length; ++i) {
+                ledgerStake[disabledLedgersToRedeem[i]] = 0;
+            }
+            isMovingFromDisabledLedgers = false;
         }
 
         for (uint256 i = 0; i < disabledLength; ++i) {
