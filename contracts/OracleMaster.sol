@@ -72,12 +72,13 @@ contract OracleMaster is Pausable {
     // Oracle members manager role
     bytes32 internal constant ROLE_ORACLE_QUORUM_MANAGER = keccak256("ROLE_ORACLE_QUORUM_MANAGER");
 
-
+    // Allows function calls only from member with specific role
     modifier auth(bytes32 role) {
         require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "OM: UNAUTHOROZED");
         _;
     }
 
+    // Allows function calls only from LIDO
     modifier onlyLido() {
         require(msg.sender == LIDO, "OM: CALLER_NOT_LIDO");
         _;

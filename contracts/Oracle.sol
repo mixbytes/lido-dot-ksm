@@ -31,7 +31,7 @@ contract Oracle {
     // linked ledger contract address
     address public LEDGER;
 
-
+    // Allows function calls only from OracleMaster
     modifier onlyOracleMaster() {
         require(msg.sender == ORACLE_MASTER);
         _;

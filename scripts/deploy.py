@@ -286,6 +286,10 @@ def main():
         print("Refreshing allowances for ledger:", ledger)
         Ledger.at(ledger).refreshAllowances(get_opts(roles['ROLE_LEDGER_MANAGER']))
 
+    print(f'\n{Fore.GREEN}Sending vKSM to Controller...')
+    vksm_contract = vKSM_mock.at(vksm)
+    vksm_contract.transfer(controller, CONFIG['controller_initial_balance'], get_opts(deployer))
+
 
 
 def prompt():

@@ -34,8 +34,11 @@ contract Controller is Initializable {
 
     // Second layer derivative-proxy account to index
     mapping(address => uint16) public senderToIndex;
+
+    // Index to second layer derivative-proxy account
     mapping(uint16 => bytes32) public indexToAccount;
 
+    // Enumerator for weights
     enum WEIGHT {
         AS_DERIVATIVE,              // 410_000_000
         BOND_BASE,                  // 600_000_000
@@ -52,18 +55,22 @@ contract Controller is Initializable {
         TRANSFER_TO_RELAY_BASE      // 4_000_000_000
     }
 
+    // Constant for max weight
     uint64 public MAX_WEIGHT;// = 1_835_300_000;
 
+    // Array with current weights
     uint64[] public weights;
 
     // Controller manager role
     bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
 
+    // Event emitted when weight updated
     event WeightUpdated (
         uint8 index,
         uint64 newValue
     );
 
+    // Event emitted when bond called on relay chain
     event Bond (
         address caller,
         bytes32 stash,
@@ -71,63 +78,73 @@ contract Controller is Initializable {
         uint256 amount
     );
 
+    // Event emitted when bond extra called on relay chain
     event BondExtra (
         address caller,
         bytes32 stash,
         uint256 amount
     );
 
+    // Event emitted when unbond on relay chain
     event Unbond (
         address caller,
         bytes32 stash,
         uint256 amount
     );
 
+    // Event emitted when rebond called on relay chain
     event Rebond (
         address caller,
         bytes32 stash,
         uint256 amount
     );
 
+    // Event emitted when withdraw called on relay chain
     event Withdraw (
         address caller,
         bytes32 stash
     );
 
+    // Event emitted when nominate called on relay chain
     event Nominate (
         address caller,
         bytes32 stash,
         bytes32[] validators
     );
 
+    // Event emitted when chill called on relay chain
     event Chill (
         address caller,
         bytes32 stash
     );
 
+    // Event emitted when transfer vKSM from parachain to relay chain called
     event TransferToRelaychain (
         address from,
         bytes32 to,
         uint256 amount
     );
 
+    // Event emitted when transfer KSM from relay chain to parachain called
     event TransferToParachain (
         bytes32 from,
         address to,
         uint256 amount
     );
 
-
+    // Allows function calls only for registered ledgers
     modifier onlyRegistred() {
         require(senderToIndex[msg.sender] != 0, "CONTROLLER: UNREGISTERED_SENDER");
         _;
     }
 
+    // Allows function calls only for members with role
     modifier auth(bytes32 role) {
         require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "CONTROLLER: UNAUTHOROZED");
         _;
     }
 
+    // Allows function calls only for LIDO contract
     modifier onlyLido() {
         require(msg.sender == LIDO, "CONTROLLER: CALLER_NOT_LIDO");
         _;
@@ -158,22 +175,35 @@ contract Controller is Initializable {
         X_TOKENS = IxTokens(_xTokens);
     }
 
-
-    function getWeight(WEIGHT weightType) public returns(uint64) {
+    /**
+    * @notice Get current weight by enum
+    * @param weightType - enum index of weight
+    */
+    function getWeight(WEIGHT weightType) public view returns(uint64) {
         return weights[uint256(weightType)];
     }
 
-
+    /**
+    * @notice Set new max weight. Can be called only by ROLE_CONTROLLER_MANAGER
+    * @param _maxWeight - max weight
+    */
     function setMaxWeight(uint64 _maxWeight) external auth(ROLE_CONTROLLER_MANAGER) {
         MAX_WEIGHT = _maxWeight;
     }
 
-
+    /**
+    * @notice Set LIDO address. Function can be called only once
+    * @param _lido - LIDO address
+    */
     function setLido(address _lido) external {
         require(LIDO == address(0) && _lido != address(0), "CONTROLLER: LIDO_ALREADY_INITIALIZED");
         LIDO = _lido;
     }
 
+    /**
+    * @notice Update weights array. Weight updated only if weight = _weight | 1 << 65
+    * @param _weights - weights array
+    */
     function setWeights(
         uint128[] calldata _weights
     ) external auth(ROLE_CONTROLLER_MANAGER) {
@@ -190,6 +220,12 @@ contract Controller is Initializable {
         }
     }
 
+    /**
+    * @notice Register new ledger contract
+    * @param index - index of ledger contract
+    * @param accountId - relay chain address of ledger
+    * @param paraAddress - parachain address of ledger
+    */
     function newSubAccount(uint16 index, bytes32 accountId, address paraAddress) external onlyLido {
         require(indexToAccount[index + 1] == bytes32(0), "CONTROLLER: ALREADY_REGISTERED");
 
@@ -197,7 +233,10 @@ contract Controller is Initializable {
         indexToAccount[index + 1] = accountId;
     }
 
-
+    /**
+    * @notice Nominate validators from ledger on relay chain
+    * @param validators - validators addresses to nominate
+    */
     function nominate(bytes32[] calldata validators) external onlyRegistred {
         uint256[] memory convertedValidators = new uint256[](validators.length);
         for (uint256 i = 0; i < validators.length; ++i) {
@@ -212,6 +251,11 @@ contract Controller is Initializable {
         emit Nominate(msg.sender, getSenderAccount(), validators);
     }
 
+    /**
+    * @notice Bond KSM of ledger on relay chain
+    * @param controller - controller which used to bond
+    * @param amount - amount of KSM to bond
+    */
     function bond(bytes32 controller, uint256 amount) external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
@@ -222,6 +266,10 @@ contract Controller is Initializable {
         emit Bond(msg.sender, getSenderAccount(), controller, amount);
     }
 
+    /**
+    * @notice Bond extra KSM of ledger on relay chain
+    * @param amount - extra amount of KSM to bond
+    */
     function bondExtra(uint256 amount) external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
@@ -232,6 +280,10 @@ contract Controller is Initializable {
         emit BondExtra(msg.sender, getSenderAccount(), amount);
     }
 
+    /**
+    * @notice Unbond KSM of ledger on relay chain
+    * @param amount - amount of KSM to unbond
+    */
     function unbond(uint256 amount) external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
@@ -257,6 +309,11 @@ contract Controller is Initializable {
         emit Withdraw(msg.sender, getSenderAccount());
     }
 
+    /**
+    * @notice Rebond KSM of ledger from unbonded chunks on relay chain
+    * @param amount - amount of KSM to rebond
+    * @param unbondingChunks - amount of unbonding chunks to rebond
+    */
     function rebond(uint256 amount, uint256 unbondingChunks) external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
@@ -267,6 +324,9 @@ contract Controller is Initializable {
         emit Rebond(msg.sender, getSenderAccount(), amount);
     }
 
+    /**
+    * @notice Put ledger to chill mode
+    */
     function chill() external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
@@ -277,6 +337,10 @@ contract Controller is Initializable {
         emit Chill(msg.sender, getSenderAccount());
     }
 
+    /**
+    * @notice Transfer KSM from relay chain to parachain
+    * @param amount - amount of KSM to transfer
+    */
     function transferToParachain(uint256 amount) external onlyRegistred {
         // to - msg.sender, from - getSenderIndex()
         callThroughDerivative(
@@ -288,6 +352,10 @@ contract Controller is Initializable {
         emit TransferToParachain(getSenderAccount(), msg.sender, amount);
     }
 
+    /**
+    * @notice Transfer vKSM from parachain to relay chain
+    * @param amount - amount of vKSM to transfer
+    */
     function transferToRelaychain(uint256 amount) external onlyRegistred {
         // to - getSenderIndex(), from - msg.sender
         VKSM.transferFrom(msg.sender, address(this), amount);
@@ -300,15 +368,26 @@ contract Controller is Initializable {
         emit TransferToRelaychain(msg.sender, getSenderAccount(), amount);
     }
 
-
+    /**
+    * @notice Get index of registered ledger
+    */
     function getSenderIndex() internal returns(uint16) {
         return senderToIndex[msg.sender] - 1;
     }
 
+    /**
+    * @notice Get relay chain address of msg.sender
+    */
     function getSenderAccount() internal returns(bytes32) {
         return indexToAccount[senderToIndex[msg.sender]];
     }
 
+    /**
+    * @notice Send call to relay cahin through xcm transactor
+    * @param index - index of ledger on relay chain
+    * @param weight - fees on tx execution
+    * @param call - bytes for tx execution
+    */
     function callThroughDerivative(uint16 index, uint64 weight, bytes memory call) internal {
         bytes memory le_index = new bytes(2);
         le_index[0] = bytes1(uint8(index));
@@ -326,6 +405,11 @@ contract Controller is Initializable {
         );
     }
 
+    /**
+    * @notice Encoding bytes to call transfer on relay chain
+    * @param to - address of KSM receiver
+    * @param amount - amount of KSM to send
+    */
     function encodeReverseTransfer(address to, uint256 amount) internal returns(bytes memory) {
         return bytes.concat(
             hex"630201000100a10f0100010300",
@@ -336,6 +420,11 @@ contract Controller is Initializable {
         );
     }
 
+    /**
+    * @notice Converting uint256 value to le bytes
+    * @param value - uint256 value
+    * @param len - length of output bytes array
+    */
     function toLeBytes(uint256 value, uint256 len) internal returns(bytes memory) {
         bytes memory out = new bytes(len);
         for (uint256 idx = 0; idx < len; ++idx) {
@@ -345,6 +434,10 @@ contract Controller is Initializable {
         return out;
     }
 
+    /**
+    * @notice Converting uint256 value to bytes
+    * @param value - uint256 value
+    */
     function scaleCompactUint(uint256 value) internal returns(bytes memory) {
         if (value < 1<<6) {
             return toLeBytes(value << 2, 1);

@@ -32,6 +32,7 @@ networks:
             ROLE_ORACLE_MEMBERS_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
             ROLE_ORACLE_QUORUM_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
             ROLE_CONTROLLER_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+        controller_initial_balance: 15 * 10**12
         xcm_max_weight: 1_835_300_000
         xcm_weights:
          - 410_000_000      #AS_DERIVATIVE

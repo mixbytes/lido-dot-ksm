@@ -53,6 +53,7 @@ contract Lido is stKSM, Initializable {
         address addr
     );
 
+    // Redeemed vKSM claimed
     struct Claim {
         uint256 balance;
         uint64 timeout;
@@ -174,7 +175,7 @@ contract Lido is stKSM, Initializable {
     // max amount of claims in parallel
     uint16 internal constant MAX_CLAIMS = 10;
 
-
+    // Allow function calls only from member with specific role
     modifier auth(bytes32 role) {
         require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "LIDO: UNAUTHORIZED");
         _;
@@ -653,6 +654,10 @@ contract Lido is stKSM, Initializable {
         emit Losses(msg.sender, _totalLosses, _ledgerBalance);
     }
 
+    /**
+    * @notice Transfer vKSM from ledger to LIDO. Can be called only from ledger
+    * @param _amount - amount of transfered vKSM
+    */
     function transferFromLedger(uint256 _amount) external {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
@@ -680,6 +685,10 @@ contract Lido is stKSM, Initializable {
         }
     }
 
+    /**
+    * @notice Transfer vKSM from LIDO to ledger. Can be called only from ledger
+    * @param _amount - amount of transfered vKSM
+    */
     function transferToLedger(uint256 _amount) external {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
         require(ledgerBorrow[msg.sender] + _amount <= ledgerStake[msg.sender], "LIDO: LEDGER_NOT_ENOUGH_STAKE");
@@ -698,6 +707,10 @@ contract Lido is stKSM, Initializable {
         _softRebalanceStakes();
     }
 
+    /**
+    * @notice Transfer vKSM from disabled ledgers to LIDO in case if users don't call redeem
+    * @param _ledgers - array of disabled ledgers
+    */
     function moveDisabledLedgersStake(address[] calldata _ledgers) external auth(ROLE_STAKE_MANAGER) returns (uint256) {
         require(disabledLedgers.length > 0, "LIDO: NO_DISABLED_LEDGERS");
 
@@ -930,6 +943,10 @@ contract Lido is stKSM, Initializable {
         return type(uint256).max;
     }
 
+    /**
+    * @notice Returns disabled ledger index for which moveFunds was called by given address
+    * @return disabled ledger index or uint256_max if not found
+    */
     function _findLedgerForRedeem(address _ledgerAddress) internal view returns(uint256) {
         for (uint256 i = 0; i < disabledLedgersToRedeem.length; ++i) {
             if (disabledLedgersToRedeem[i] == _ledgerAddress) {
