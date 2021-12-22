@@ -72,6 +72,7 @@ brownie test --coverage
 
 ## Contract deployments
 ### Moonbase
+Deploy commit: 617b60fd8a0da43e44e11d62793334053269fa1a
 |Contract|Address|
 |-|-|
 |Controller|[0x4b1a55F7c3b5A7C8b2161D0ce572B8409E65D3f2](https://moonbase-blockscout.testnet.moonbeam.network/address/0x4b1a55F7c3b5A7C8b2161D0ce572B8409E65D3f2/transactions)|

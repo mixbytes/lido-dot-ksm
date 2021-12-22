@@ -25,6 +25,8 @@ DEPLOYMENTS = load_deployments(NETWORK)
 def main():
     user = accounts.load(CONFIG['deployer'])
 
+    proxy_admin = ProxyAdminMock.at(DEPLOYMENTS['ProxyAdmin'])
+
     lido = Lido.at(DEPLOYMENTS['Lido'])
     vksm = vKSM_mock.at(CONFIG['precompiles']['vksm'])
     oracle_master = OracleMaster.at(DEPLOYMENTS['OracleMaster'])
@@ -43,4 +45,4 @@ def main():
     validator_4 = Keypair("5FCEmzonc34D2SXXv2CMsDoFWCVivH2a2Mwe32t9BT1TcpAD").public_key
     validator_5 = Keypair("5Ehgvgk1LERD5aTEWw6HLdKZurBqcRYbHXvrAtTgYPhUpr1R").public_key
 
-    return (user, lido, vksm, oracle_master, wstksm, auth_manager, controller, ledger_1, ledger_2, ledger_3)
+    return (user, proxy_admin, lido, vksm, oracle_master, wstksm, auth_manager, controller, ledger_1, ledger_2, ledger_3)
