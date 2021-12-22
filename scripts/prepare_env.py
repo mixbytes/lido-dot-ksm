@@ -2,6 +2,7 @@ import json
 import yaml
 from pathlib import Path
 from brownie import *
+from substrateinterface import Keypair
 
 NETWORK="moonbase"
 
@@ -31,4 +32,15 @@ def main():
     auth_manager = AuthManager.at(DEPLOYMENTS['AuthManager'])
     controller = Controller.at(DEPLOYMENTS['Controller'])
 
-    return (user, lido, vksm, oracle_master, wstksm, auth_manager, controller)
+    ledger_1 = Ledger.at(lido.enabledLedgers(0))
+    ledger_2 = Ledger.at(lido.enabledLedgers(1))
+    ledger_3 = Ledger.at(lido.enabledLedgers(2))
+
+    # current validators in moonbase
+    validator_1 = Keypair("5CX2ov8tmW6nZwy6Eouzc7VxFHcAyZioNm5QjEUYc7zjbS66").public_key
+    validator_2 = Keypair("5FRiNmoi9HFGFrY3K9xsSCeewRtA2pcXTZVZrwLacPCfvHum").public_key
+    validator_3 = Keypair("5EcdgHV81hu6YpPucSMrWbdQRBUr18XypiiGsgQ7HREYdrWG").public_key
+    validator_4 = Keypair("5FCEmzonc34D2SXXv2CMsDoFWCVivH2a2Mwe32t9BT1TcpAD").public_key
+    validator_5 = Keypair("5Ehgvgk1LERD5aTEWw6HLdKZurBqcRYbHXvrAtTgYPhUpr1R").public_key
+
+    return (user, lido, vksm, oracle_master, wstksm, auth_manager, controller, ledger_1, ledger_2, ledger_3)
