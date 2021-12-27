@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
@@ -11,14 +11,15 @@ contract LedgerMock {
         bytes32 _stashAccount,
         bytes32 _controllerAccount,
         address _vKSM,
-        address _AUX,
-        address _vAccounts,
-        uint128 _minNominatorBalance
+        address _controller,
+        uint128 _minNominatorBalance,
+        address _lido,
+        uint128 _minimumBalance
     ) external {
-        LIDO = ILido(msg.sender);
+        LIDO = ILido(_lido);
     }
 
-    function distributeRewards(uint256 _totalRewards) external {
-        LIDO.distributeRewards(_totalRewards);
+    function distributeRewards(uint256 _totalRewards, uint256 _balance) external {
+        LIDO.distributeRewards(_totalRewards, _balance);
     }
 }

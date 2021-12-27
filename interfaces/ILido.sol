@@ -1,12 +1,16 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import "./Types.sol";
 
 interface ILido {
-    function distributeRewards(uint256 totalRewards) external;
+    function developers() external view returns(address);
 
-    function distributeLosses(uint256 _totalLosses) external;
+    function deposit(uint256 amount) external returns (uint256);
+    
+    function distributeRewards(uint256 totalRewards, uint256 ledgerBalance) external;
+
+    function distributeLosses(uint256 totalLosses, uint256 ledgerBalance) external;
 
     function getStashAccounts() external view returns (bytes32[] memory);
 
@@ -14,7 +18,13 @@ interface ILido {
 
     function ledgerStake(address ledger) external view returns (uint256);
 
+    function ledgerShares(address ledger) external view returns (uint256);
+
     function avaliableForStake() external view returns (uint256);
+
+    function transferFromLedger(uint256 amount) external;
+
+    function transferToLedger(uint256 amount) external;
 
     function flushStakes() external;
 
@@ -23,4 +33,12 @@ interface ILido {
     function AUTH_MANAGER() external returns(address);
 
     function ORACLE_MASTER() external view returns (address);
+
+    function getPooledKSMByShares(uint256 sharesAmount) external view returns (uint256);
+
+    function getSharesByPooledKSM(uint256 amount) external view returns (uint256);
+
+    function transfer(address recipient, uint256 amount) external returns (bool);
+
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 }

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 interface Types {
@@ -44,6 +44,8 @@ interface Types {
         // stash account balance. It includes locked (totalBalance) balance assigned
         // to a controller.
         uint128 stashBalance;
+        // slashing spans for ledger
+        uint32 slashingSpans;
     }
 
     struct RelaySpec {
@@ -52,5 +54,6 @@ interface Types {
         uint64 unbondingPeriod;
         uint16 maxValidatorsPerLedger;
         uint128 minNominatorBalance;
+        uint128 ledgerMinimumActiveBalance;
     }
 }

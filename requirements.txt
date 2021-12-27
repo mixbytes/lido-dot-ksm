@@ -1,2 +1,2 @@
-substrate-interface==0.13.12
+substrate-interface==1.0.2
 eth-brownie>=1.16.0,<2.0.0

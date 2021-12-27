@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
@@ -45,12 +45,23 @@ contract OracleMaster is Pausable {
     // Relay seconds per era
     uint64 public RELAY_SECONDS_PER_ERA;
 
+    // Relay era id on updating
+    uint64 public ANCHOR_ERA_ID;
+
+    // Relay timestamp on updating
+    uint64 public ANCHOR_TIMESTAMP;
+
+    // Relay seconds per era
+    uint64 public SECONDS_PER_ERA;
 
     /// Maximum number of oracle committee members
     uint256 public constant MAX_MEMBERS = 255;
 
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;
+
+    // Spec manager role
+    bytes32 internal constant ROLE_SPEC_MANAGER = keccak256("ROLE_SPEC_MANAGER");
 
     // General oracle manager role
     bytes32 internal constant ROLE_ORACLE_MANAGER = keccak256("ROLE_ORACLE_MANAGER");
@@ -61,12 +72,13 @@ contract OracleMaster is Pausable {
     // Oracle members manager role
     bytes32 internal constant ROLE_ORACLE_QUORUM_MANAGER = keccak256("ROLE_ORACLE_QUORUM_MANAGER");
 
-
+    // Allows function calls only from member with specific role
     modifier auth(bytes32 role) {
         require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "OM: UNAUTHOROZED");
         _;
     }
 
+    // Allows function calls only from LIDO
     modifier onlyLido() {
         require(msg.sender == LIDO, "OM: CALLER_NOT_LIDO");
         _;
@@ -83,6 +95,8 @@ contract OracleMaster is Pausable {
         uint8 _quorum
     ) external {
         require(ORACLE_CLONE == address(0), "OM: ALREADY_INITIALIZED");
+        require(_oracleClone != address(0), "OM: INCORRECT_CLONE_ADDRESS");
+        require(_quorum > 0 && _quorum < MAX_MEMBERS, "OM: INCORRECT_QUORUM");
 
         ORACLE_CLONE = _oracleClone;
         QUORUM = _quorum;
@@ -94,6 +108,8 @@ contract OracleMaster is Pausable {
     */
     function setLido(address _lido) external {
         require(LIDO == address(0), "OM: LIDO_ALREADY_DEFINED");
+        require(_lido != address(0), "OM: INCORRECT_LIDO_ADDRESS");
+
         LIDO = _lido;
     }
 
@@ -113,7 +129,7 @@ contract OracleMaster is Pausable {
     * @param _quorum new value of quorum threshold
     */
     function setQuorum(uint8 _quorum) external auth(ROLE_ORACLE_QUORUM_MANAGER) {
-        require(0 != _quorum, "OM: QUORUM_WONT_BE_MADE");
+        require(_quorum > 0 && _quorum < MAX_MEMBERS, "OM: QUORUM_WONT_BE_MADE");
         uint8 oldQuorum = QUORUM;
         QUORUM = _quorum;
 
@@ -276,6 +292,23 @@ contract OracleMaster is Pausable {
     }
 
     /**
+    * @notice Set parameters from relay chain for accurately calculation of current era id
+    * @param _anchorEraId - current relay chain era id
+    * @param _anchorTimestamp - current relay chain timestamp
+    * @param _secondsPerEra - current relay chain era duration in seconds
+    */
+    function setAnchorEra(uint64 _anchorEraId, uint64 _anchorTimestamp, uint64 _secondsPerEra) external auth(ROLE_SPEC_MANAGER) {
+        require(_secondsPerEra > 0, "OM: BAD_SECONDS_PER_ERA");
+        require(uint64(block.timestamp) >= _anchorTimestamp, "OM: BAD_TIMESTAMP");
+        uint64 newEra = _anchorEraId + (uint64(block.timestamp) - _anchorTimestamp) / _secondsPerEra;
+        require(newEra >= eraId, "OM: ERA_COLLISION");
+
+        ANCHOR_ERA_ID = _anchorEraId;
+        ANCHOR_TIMESTAMP = _anchorTimestamp;
+        SECONDS_PER_ERA = _secondsPerEra;
+    }
+
+    /**
     * @notice Return oracle instance index in the member array
     * @param _member member address
     * @return member index
@@ -296,7 +329,7 @@ contract OracleMaster is Pausable {
     * @return current era id
     */
     function _getCurrentEraId() internal view returns (uint64) {
-        return (uint64(block.timestamp) - RELAY_GENESIS_TIMESTAMP ) / RELAY_SECONDS_PER_ERA;
+        return ANCHOR_ERA_ID + (uint64(block.timestamp) - ANCHOR_TIMESTAMP) / SECONDS_PER_ERA;
     }
 
     /**

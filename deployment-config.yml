@@ -1,0 +1,50 @@
+networks:
+    moonbase:
+        deployer: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+        auth_sudo: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+        treasury: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+        developers: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+        sovereign_account: "5Ec4AhPZk8STuex8Wsi9TwDtJQxKqzPJRCH7348Xtcs9vZLJ"
+        root_derivative_index: 10
+        stash_indexes: [40, 41, 42]
+        oracles:
+         - "0x04a72797360815e33Fc6676Bf0b02F7D3E901c78"
+         - "0x21aeb270e48bFB111F8d1e64EACe51C3fE43E944"
+        quorum: 2
+        precompiles:
+            vksm: "0xFFFFFFFF1FCACBD218EDC0EBA20FC2308C778080"
+            xcm_transactor: "0x0000000000000000000000000000000000000806"
+            relay_encoder: "0x0000000000000000000000000000000000000805"
+            x_token: "0x0000000000000000000000000000000000000804"
+        relay_spec:
+            era_duratation: 21600
+            max_validators_per_ledger: 16
+            min_nominator_bond: 1_000_000_000_000
+            min_active_balance: 0
+        roles:
+            ROLE_BEACON_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+            ROLE_SPEC_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+            ROLE_PAUSE_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+            ROLE_FEE_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+            ROLE_ORACLE_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+            ROLE_LEDGER_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+            ROLE_STAKE_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+            ROLE_ORACLE_MEMBERS_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+            ROLE_ORACLE_QUORUM_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+            ROLE_CONTROLLER_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
+        controller_initial_balance: 15 * 10**12
+        xcm_max_weight: 1_835_300_000
+        xcm_weights:
+         - 410_000_000      #AS_DERIVATIVE
+         - 600_000_000      #BOND_BASE
+         - 1_100_000_000    #BOND_EXTRA_BASE
+         - 1_250_000_000    #UNBOND_BASE
+         - 500_000_000      #WITHDRAW_UNBONDED_BASE
+         - 60_000           #WITHDRAW_UNBONDED_PER_UNIT
+         - 1_200_000_000    #REBOND_BASE
+         - 40_000           #REBOND_PER_UNIT
+         - 900_000_000      #CHILL_BASE
+         - 1_000_000_000    #NOMINATE_BASE
+         - 31_000_000       #NOMINATE_PER_UNIT
+         - 700_000_000      #TRANSFER_TO_PARA_BASE
+         - 4_000_000_000    #TRANSFER_TO_RELAY_BASE
