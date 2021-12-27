@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
@@ -72,12 +72,13 @@ contract OracleMaster is Pausable {
     // Oracle members manager role
     bytes32 internal constant ROLE_ORACLE_QUORUM_MANAGER = keccak256("ROLE_ORACLE_QUORUM_MANAGER");
 
-
+    // Allows function calls only from member with specific role
     modifier auth(bytes32 role) {
         require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "OM: UNAUTHOROZED");
         _;
     }
 
+    // Allows function calls only from LIDO
     modifier onlyLido() {
         require(msg.sender == LIDO, "OM: CALLER_NOT_LIDO");
         _;
@@ -291,21 +292,6 @@ contract OracleMaster is Pausable {
     }
 
     /**
-    * @notice Return oracle instance index in the member array
-    * @param _member member address
-    * @return member index
-    */
-    function _getMemberId(address _member) internal view returns (uint256) {
-        uint256 length = members.length;
-        for (uint256 i = 0; i < length; ++i) {
-            if (members[i] == _member) {
-                return i;
-            }
-        }
-        return MEMBER_NOT_FOUND;
-    }
-
-    /**
     * @notice Set parameters from relay chain for accurately calculation of current era id
     * @param _anchorEraId - current relay chain era id
     * @param _anchorTimestamp - current relay chain timestamp
@@ -320,6 +306,21 @@ contract OracleMaster is Pausable {
         ANCHOR_ERA_ID = _anchorEraId;
         ANCHOR_TIMESTAMP = _anchorTimestamp;
         SECONDS_PER_ERA = _secondsPerEra;
+    }
+
+    /**
+    * @notice Return oracle instance index in the member array
+    * @param _member member address
+    * @return member index
+    */
+    function _getMemberId(address _member) internal view returns (uint256) {
+        uint256 length = members.length;
+        for (uint256 i = 0; i < length; ++i) {
+            if (members[i] == _member) {
+                return i;
+            }
+        }
+        return MEMBER_NOT_FOUND;
     }
 
     /**

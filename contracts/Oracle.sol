@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import "../interfaces/Types.sol";
@@ -12,6 +12,9 @@ contract Oracle {
     using ReportUtils for uint256;
 
     event Completed(uint256);
+
+    // is already pushed flag
+    bool public isPushed;
 
     // Current era report  hashes
     uint256[] internal currentReportVariants;
@@ -28,10 +31,7 @@ contract Oracle {
     // linked ledger contract address
     address public LEDGER;
 
-    // is already pushed flag
-    bool public isPushed;
-
-
+    // Allows function calls only from OracleMaster
     modifier onlyOracleMaster() {
         require(msg.sender == ORACLE_MASTER);
         _;

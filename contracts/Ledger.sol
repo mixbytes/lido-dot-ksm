@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
@@ -73,18 +73,20 @@ contract Ledger {
     // Ledger manager role
     bytes32 internal constant ROLE_LEDGER_MANAGER = keccak256("ROLE_LEDGER_MANAGER");
 
-
+    // Allows function calls only from LIDO
     modifier onlyLido() {
         require(msg.sender == address(LIDO), "LEDGED: NOT_LIDO");
         _;
     }
 
+    // Allows function calls only from Oracle
     modifier onlyOracle() {
         address oracle = IOracleMaster(ILido(LIDO).ORACLE_MASTER()).getOracle(address(this));
         require(msg.sender == oracle, "LEDGED: NOT_ORACLE");
         _;
     }
 
+    // Allows function calls only from member with specific role
     modifier auth(bytes32 role) {
         require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "LEDGED: UNAUTHOROZED");
         _;
@@ -141,6 +143,9 @@ contract Ledger {
         MINIMUM_BALANCE = _minimumBalance;
     }
 
+    /**
+    * @notice Refresh allowances for ledger
+    */
     function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
         VKSM.approve(address(LIDO), type(uint256).max);
         VKSM.approve(address(CONTROLLER), type(uint256).max);
@@ -296,6 +301,10 @@ contract Ledger {
         cachedTotalBalance = _report.stashBalance;
     }
 
+    /**
+    * @notice Await for all transfers from/to relay chain
+    * @param _report - data that represent state of ledger on relaychain
+    */
     function _processRelayTransfers(Types.OracleData memory _report) internal returns(bool) {
         // wait for the downward transfer to complete
         uint128 _transferDownwardBalance = transferDownwardBalance;

@@ -81,3 +81,52 @@ def test_direct_transfer(lido, Ledger, oracle_master, vKSM, accounts):
         relay.new_era()
 
     assert lido.getTotalPooledKSM() == direct_transfer
+
+
+def test_deposit_reward(lido, Ledger, oracle_master, vKSM, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+    relay.new_ledger("0x20", "0x21")
+    relay.new_ledger("0x30", "0x31")
+    ledger_1 = relay.ledgers[0]
+    ledger_2 = relay.ledgers[1]
+    ledger_3 = relay.ledgers[2]
+
+    deposit = 90 * 10**18
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    relay.new_era()
+
+    assert ledger_1.free_balance == deposit // 3
+    assert ledger_2.free_balance == deposit // 3
+    assert ledger_3.free_balance == deposit // 3
+
+    relay.new_era()
+
+    assert ledger_1.active_balance == deposit // 3
+    assert ledger_2.active_balance == deposit // 3
+    assert ledger_3.active_balance == deposit // 3
+
+    rewards = 15 * 10**18
+    relay.new_era([rewards])
+
+    assert ledger_1.active_balance == deposit // 3 + rewards
+    assert ledger_2.active_balance == deposit // 3
+    assert ledger_3.active_balance == deposit // 3
+
+    deposit_2 = 3 * 10**18
+    lido.deposit(deposit_2, {'from': accounts[0]})
+
+    relay.new_era()
+
+    # NOTE: see lido._processEnabled() to understand this distribution
+    assert ledger_1.active_balance == deposit // 3 + rewards
+    assert ledger_2.active_balance == deposit // 3
+    assert ledger_3.active_balance == deposit // 3
+    assert ledger_1.free_balance == 0
+    assert ledger_2.free_balance == deposit_2 // 2
+    assert ledger_3.free_balance == deposit_2 // 2
+
+    relay.new_era()

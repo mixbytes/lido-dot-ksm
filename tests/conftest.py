@@ -130,6 +130,6 @@ def mockledger(mocklido, admin, LedgerMock):
 
 
 @pytest.fixture(scope="module")
-def wstKSM(lido, WstKSM, admin):
-    _wstKSM = WstKSM.deploy(lido, {'from': admin})
+def wstKSM(lido, WstKSM, vKSM, admin):
+    _wstKSM = WstKSM.deploy(lido, vKSM, {'from': admin})
     return _wstKSM

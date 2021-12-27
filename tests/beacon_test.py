@@ -37,3 +37,9 @@ def test_update_revision(lido, LedgerBeacon, LedgerMock, accounts):
     ledger_old_rev = ledgers[0]
     with reverts():
         ledger_old_rev.distributeRewards(10**9, 0, {'from': accounts[0]})
+
+    # set new revision for all ledgers
+    beacon.setCurrentRevision(2, {'from': accounts[0]})
+
+    # now must work because we update  revision
+    ledger_old_rev.distributeRewards(10**9, 0, {'from': accounts[0]})

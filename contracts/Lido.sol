@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 pragma abicoder v2;
 
@@ -53,24 +53,20 @@ contract Lido is stKSM, Initializable {
         address addr
     );
 
-    // sum of all deposits and rewards
-    uint256 private fundRaisedBalance;
-
+    // Redeemed vKSM claimed
     struct Claim {
         uint256 balance;
         uint64 timeout;
     }
+
+    // sum of all deposits and rewards
+    uint256 public fundRaisedBalance;
+
     // one claim for account
     mapping(address => Claim[]) public claimOrders;
 
     // pending claims total
     uint256 public pendingClaimsTotal;
-
-    // Ledger address by stash account id
-    mapping(bytes32 => address) private ledgerByStash;
-
-    // Map to check ledger existence by address
-    mapping(address => bool) private ledgerByAddress;
 
     // haven't executed buffrered deposits
     uint256 public bufferedDeposits;
@@ -91,22 +87,16 @@ contract Lido is stKSM, Initializable {
     address[] public enabledLedgers;
 
     // vKSM precompile
-    IERC20 public vKSM;
+    IERC20 public VKSM;
 
     // controller
-    address public controller;
+    address public CONTROLLER;
 
     // auth manager contract address
     address public AUTH_MANAGER;
 
     // Maximum number of ledgers
     uint256 public MAX_LEDGERS_AMOUNT;
-
-    /* fee interest in basis points.
-    It's packed uint256 consist of three uint16 (total_fee, treasury_fee, developers_fee).
-    where total_fee = treasury_fee + developers_fee + 3000 (3% operators fee)
-    */
-    Types.Fee private FEE;
 
     // oracle master contract
     address public ORACLE_MASTER;
@@ -126,6 +116,12 @@ contract Lido is stKSM, Initializable {
     // ledger factory
     address public LEDGER_FACTORY;
 
+    // Ledger address by stash account id
+    mapping(bytes32 => address) private ledgerByStash;
+
+    // Map to check ledger existence by address
+    mapping(address => bool) private ledgerByAddress;
+
     // true if manager start moving funds from disabled ledgres in current epoch
     bool private isMovingFromDisabledLedgers;
 
@@ -134,6 +130,12 @@ contract Lido is stKSM, Initializable {
 
     // amount of vKSM which would be redeposit after returning from disabled ledgers
     uint256 private stakeToRedeposit;
+
+    /* fee interest in basis points.
+    It's packed uint256 consist of three uint16 (total_fee, treasury_fee, developers_fee).
+    where total_fee = treasury_fee + developers_fee + 3000 (3% operators fee)
+    */
+    Types.Fee private FEE;
 
     // default interest value in base points.
     uint16 internal constant DEFAULT_DEVELOPERS_FEE = 140;
@@ -173,7 +175,7 @@ contract Lido is stKSM, Initializable {
     // max amount of claims in parallel
     uint16 internal constant MAX_CLAIMS = 10;
 
-
+    // Allow function calls only from member with specific role
     modifier auth(bytes32 role) {
         require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "LIDO: UNAUTHORIZED");
         _;
@@ -196,8 +198,8 @@ contract Lido is stKSM, Initializable {
     ) external initializer {
         require(_vKSM != address(0), "LIDO: INCORRECT_VKSM_ADDRESS");
 
-        vKSM = IERC20(_vKSM);
-        controller = _controller;
+        VKSM = IERC20(_vKSM);
+        CONTROLLER = _controller;
         AUTH_MANAGER = _authManager;
 
         MAX_LEDGERS_AMOUNT = 200;
@@ -249,6 +251,56 @@ contract Lido is stKSM, Initializable {
     function setDevelopers(address _developers) external auth(ROLE_DEVELOPERS) {
         require(_developers != address(0), "LIDO: INCORRECT_DEVELOPERS_ADDRESS");
         developers = _developers;
+    }
+
+    /**
+    * @notice Set relay chain spec, allowed to call only by ROLE_SPEC_MANAGER
+    * @dev if some params are changed function will iterate over oracles and ledgers, be careful
+    * @param _relaySpec - new relaychain spec
+    */
+    function setRelaySpec(Types.RelaySpec calldata _relaySpec) external auth(ROLE_SPEC_MANAGER) {
+        require(ORACLE_MASTER != address(0), "LIDO: ORACLE_MASTER_UNDEFINED");
+        require(_relaySpec.genesisTimestamp > 0, "LIDO: BAD_GENESIS_TIMESTAMP");
+        require(_relaySpec.secondsPerEra > 0, "LIDO: BAD_SECONDS_PER_ERA");
+        require(_relaySpec.unbondingPeriod > 0, "LIDO: BAD_UNBONDING_PERIOD");
+        require(_relaySpec.maxValidatorsPerLedger > 0, "LIDO: BAD_MAX_VALIDATORS_PER_LEDGER");
+
+        RELAY_SPEC = _relaySpec;
+
+        IOracleMaster(ORACLE_MASTER).setRelayParams(_relaySpec.genesisTimestamp, _relaySpec.secondsPerEra);
+
+        _updateLedgerRelaySpecs(_relaySpec.minNominatorBalance, _relaySpec.ledgerMinimumActiveBalance);
+    }
+
+    /**
+    * @notice Set oracle master address, allowed to call only by ROLE_ORACLE_MANAGER and only once
+    * @dev After setting non zero address it cannot be changed more
+    * @param _oracleMaster - oracle master address
+    */
+    function setOracleMaster(address _oracleMaster) external auth(ROLE_ORACLE_MANAGER) {
+        require(ORACLE_MASTER == address(0), "LIDO: ORACLE_MASTER_ALREADY_DEFINED");
+        require(_oracleMaster != address(0), "LIDO: INCORRECT_ORACLE_MASTER_ADDRESS");
+        ORACLE_MASTER = _oracleMaster;
+        IOracleMaster(ORACLE_MASTER).setLido(address(this));
+    }
+
+    /**
+    * @notice Set new lido fee, allowed to call only by ROLE_FEE_MANAGER
+    * @param _feeOperators - Operators percentage in basis points. It's always 3%
+    * @param _feeTreasury - Treasury fund percentage in basis points
+    * @param _feeDevelopers - Developers percentage in basis points
+    */
+    function setFee(uint16 _feeOperators, uint16 _feeTreasury,  uint16 _feeDevelopers) external auth(ROLE_FEE_MANAGER) {
+        Types.Fee memory _fee;
+        _fee.total = _feeTreasury + _feeOperators + _feeDevelopers;
+        require(_fee.total <= 10000 && (_feeTreasury > 0 || _feeDevelopers > 0) && _feeOperators < 10000, "LIDO: FEE_DONT_ADD_UP");
+
+        emit FeeSet(_fee.total, _feeOperators, _feeTreasury, _feeDevelopers);
+
+        _fee.developers = _feeDevelopers;
+        _fee.operators = _feeOperators;
+        _fee.treasury = _feeTreasury;
+        FEE = _fee;
     }
 
     /**
@@ -317,71 +369,6 @@ contract Lido is stKSM, Initializable {
     */
     function findLedger(bytes32 _stashAccount) external view returns (address) {
         return ledgerByStash[_stashAccount];
-    }
-
-    /**
-    * @notice Set relay chain spec, allowed to call only by ROLE_SPEC_MANAGER
-    * @dev if some params are changed function will iterate over oracles and ledgers, be careful
-    * @param _relaySpec - new relaychain spec
-    */
-    function setRelaySpec(Types.RelaySpec calldata _relaySpec) external auth(ROLE_SPEC_MANAGER) {
-        require(ORACLE_MASTER != address(0), "LIDO: ORACLE_MASTER_UNDEFINED");
-        require(_relaySpec.genesisTimestamp > 0, "LIDO: BAD_GENESIS_TIMESTAMP");
-        require(_relaySpec.secondsPerEra > 0, "LIDO: BAD_SECONDS_PER_ERA");
-        require(_relaySpec.unbondingPeriod > 0, "LIDO: BAD_UNBONDING_PERIOD");
-        require(_relaySpec.maxValidatorsPerLedger > 0, "LIDO: BAD_MAX_VALIDATORS_PER_LEDGER");
-
-        RELAY_SPEC = _relaySpec;
-
-        IOracleMaster(ORACLE_MASTER).setRelayParams(_relaySpec.genesisTimestamp, _relaySpec.secondsPerEra);
-
-        _updateLedgerRelaySpecs(_relaySpec.minNominatorBalance, _relaySpec.ledgerMinimumActiveBalance);
-    }
-
-    /**
-    * @notice Set new minimum balance for ledger
-    * @param _minNominatorBalance - new minimum nominator balance
-    * @param _minimumBalance - new minimum active balance for ledger
-    */
-    function _updateLedgerRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance) internal {
-        for (uint i = 0; i < enabledLedgers.length; i++) {
-            ILedger(enabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
-        }
-
-        for (uint i = 0; i < disabledLedgers.length; i++) {
-            ILedger(disabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
-        }
-    }
-
-    /**
-    * @notice Set oracle master address, allowed to call only by ROLE_ORACLE_MANAGER and only once
-    * @dev After setting non zero address it cannot be changed more
-    * @param _oracleMaster - oracle master address
-    */
-    function setOracleMaster(address _oracleMaster) external auth(ROLE_ORACLE_MANAGER) {
-        require(ORACLE_MASTER == address(0), "LIDO: ORACLE_MASTER_ALREADY_DEFINED");
-        require(_oracleMaster != address(0), "LIDO: INCORRECT_ORACLE_MASTER_ADDRESS");
-        ORACLE_MASTER = _oracleMaster;
-        IOracleMaster(ORACLE_MASTER).setLido(address(this));
-    }
-
-    /**
-    * @notice Set new lido fee, allowed to call only by ROLE_FEE_MANAGER
-    * @param _feeOperators - Operators percentage in basis points. It's always 3%
-    * @param _feeTreasury - Treasury fund percentage in basis points
-    * @param _feeDevelopers - Developers percentage in basis points
-    */
-    function setFee(uint16 _feeOperators, uint16 _feeTreasury,  uint16 _feeDevelopers) external auth(ROLE_FEE_MANAGER) {
-        Types.Fee memory _fee;
-        _fee.total = _feeTreasury + _feeOperators + _feeDevelopers;
-        require(_fee.total <= 10000 && (_feeTreasury > 0 || _feeDevelopers > 0) && _feeOperators < 10000, "LIDO: FEE_DONT_ADD_UP");
-
-        emit FeeSet(_fee.total, _feeOperators, _feeTreasury, _feeDevelopers);
-
-        _fee.developers = _feeDevelopers;
-        _fee.operators = _feeOperators;
-        _fee.treasury = _feeTreasury;
-        FEE = _fee;
     }
 
     /**
@@ -455,8 +442,8 @@ contract Lido is stKSM, Initializable {
         address ledger = ILedgerFactory(LEDGER_FACTORY).createLedger( 
             _stashAccount,
             _controllerAccount,
-            address(vKSM),
-            controller,
+            address(VKSM),
+            CONTROLLER,
             RELAY_SPEC.minNominatorBalance,
             RELAY_SPEC.ledgerMinimumActiveBalance
         );
@@ -467,7 +454,7 @@ contract Lido is stKSM, Initializable {
 
         IOracleMaster(ORACLE_MASTER).addLedger(ledger);
 
-        IController(controller).newSubAccount(_index, _stashAccount, ledger);
+        IController(CONTROLLER).newSubAccount(_index, _stashAccount, ledger);
 
         emit LedgerAdd(ledger, _stashAccount, _controllerAccount);
         return ledger;
@@ -480,7 +467,7 @@ contract Lido is stKSM, Initializable {
     */
     function disableLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
         require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
-        uint256 ledgerIdx = findEnabledLedger(_ledgerAddress);
+        uint256 ledgerIdx = _findEnabledLedger(_ledgerAddress);
         require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_ENABLED");
 
         address lastLedger = enabledLedgers[enabledLedgers.length - 1];
@@ -500,7 +487,7 @@ contract Lido is stKSM, Initializable {
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
         require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
         require(ledgerStake[_ledgerAddress] == 0, "LIDO: LEDGER_HAS_NON_ZERO_STAKE");
-        uint256 ledgerIdx = findDisabledLedger(_ledgerAddress);
+        uint256 ledgerIdx = _findDisabledLedger(_ledgerAddress);
         require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_DISABLED");
 
         ILedger ledger = ILedger(_ledgerAddress);
@@ -515,7 +502,7 @@ contract Lido is stKSM, Initializable {
 
         IOracleMaster(ORACLE_MASTER).removeLedger(_ledgerAddress);
 
-        vKSM.approve(address(ledger), 0);
+        VKSM.approve(address(ledger), 0);
 
         emit LedgerRemove(_ledgerAddress);
     }
@@ -539,12 +526,14 @@ contract Lido is stKSM, Initializable {
     * @dev Method accoumulate vKSMs on contract
     * @param _amount - amount of vKSM tokens to be deposited
     */
-    function deposit(uint256 _amount) external whenNotPaused {
-        vKSM.transferFrom(msg.sender, address(this), _amount);
+    function deposit(uint256 _amount) external whenNotPaused returns (uint256) {
+        VKSM.transferFrom(msg.sender, address(this), _amount);
 
-        _submit(_amount);
+        uint256 shares = _submit(_amount);
 
         emit Deposited(msg.sender, _amount);
+
+        return shares;
     }
 
     /**
@@ -603,8 +592,8 @@ contract Lido is stKSM, Initializable {
 
         if (readyToClaim > 0) {
             // In case if ledgers receive big slashing after redeem
-            require(readyToClaim <= vKSM.balanceOf(address(this)), "LIDO: CLAIM_EXCEEDS_BALANCE");
-            vKSM.transfer(msg.sender, readyToClaim);
+            require(readyToClaim <= VKSM.balanceOf(address(this)), "LIDO: CLAIM_EXCEEDS_BALANCE");
+            VKSM.transfer(msg.sender, readyToClaim);
             pendingClaimsTotal -= readyToClaim;
             emit Claimed(msg.sender, readyToClaim);
         }
@@ -628,7 +617,7 @@ contract Lido is stKSM, Initializable {
 
         // In case if disabled ledger receive rewards after manager call moveDisabledLedgersStake
         // Than `stakeToRedeposit` must be increased
-        if ((findLedgerForRedeem(msg.sender) != type(uint256).max) && isMovingFromDisabledLedgers){
+        if ((_findLedgerForRedeem(msg.sender) != type(uint256).max) && isMovingFromDisabledLedgers){
             stakeToRedeposit += _totalRewards;
         }
 
@@ -658,13 +647,17 @@ contract Lido is stKSM, Initializable {
         ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= _totalLosses ? _totalLosses : ledgerStake[msg.sender];
         ledgerBorrow[msg.sender] -= _totalLosses;
 
-        if (findLedgerForRedeem(msg.sender) != type(uint256).max) {
+        if (_findLedgerForRedeem(msg.sender) != type(uint256).max) {
             stakeToRedeposit -= stakeToRedeposit > _totalLosses ? _totalLosses : stakeToRedeposit;
         }
 
         emit Losses(msg.sender, _totalLosses, _ledgerBalance);
     }
 
+    /**
+    * @notice Transfer vKSM from ledger to LIDO. Can be called only from ledger
+    * @param _amount - amount of transfered vKSM
+    */
     function transferFromLedger(uint256 _amount) external {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
@@ -678,9 +671,9 @@ contract Lido is stKSM, Initializable {
             ledgerBorrow[msg.sender] -= _amount;
         }
 
-        vKSM.transferFrom(msg.sender, address(this), _amount);
+        VKSM.transferFrom(msg.sender, address(this), _amount);
 
-        uint256 ledgerIndex = findLedgerForRedeem(msg.sender);
+        uint256 ledgerIndex = _findLedgerForRedeem(msg.sender);
         if (ledgerIndex != type(uint256).max) {
             uint256 redeposit = stakeToRedeposit > _amount ? _amount : stakeToRedeposit;
             stakeToRedeposit -= redeposit;
@@ -692,12 +685,16 @@ contract Lido is stKSM, Initializable {
         }
     }
 
+    /**
+    * @notice Transfer vKSM from LIDO to ledger. Can be called only from ledger
+    * @param _amount - amount of transfered vKSM
+    */
     function transferToLedger(uint256 _amount) external {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
         require(ledgerBorrow[msg.sender] + _amount <= ledgerStake[msg.sender], "LIDO: LEDGER_NOT_ENOUGH_STAKE");
 
         ledgerBorrow[msg.sender] += _amount;
-        vKSM.transfer(msg.sender, _amount);
+        VKSM.transfer(msg.sender, _amount);
     }
 
     /**
@@ -710,12 +707,16 @@ contract Lido is stKSM, Initializable {
         _softRebalanceStakes();
     }
 
+    /**
+    * @notice Transfer vKSM from disabled ledgers to LIDO in case if users don't call redeem
+    * @param _ledgers - array of disabled ledgers
+    */
     function moveDisabledLedgersStake(address[] calldata _ledgers) external auth(ROLE_STAKE_MANAGER) returns (uint256) {
         require(disabledLedgers.length > 0, "LIDO: NO_DISABLED_LEDGERS");
 
         uint256 maxRedeem;
         for (uint256 i = 0; i < _ledgers.length; ++i) {
-            uint256 ledgerIdx = findDisabledLedger(_ledgers[i]);
+            uint256 ledgerIdx = _findDisabledLedger(_ledgers[i]);
             require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_DISABLED");
             require(ledgerStake[_ledgers[i]] == ILedger(_ledgers[i]).cachedTotalBalance());
 
@@ -730,56 +731,6 @@ contract Lido is stKSM, Initializable {
         stakeToRedeposit += maxRedeem;
         isMovingFromDisabledLedgers = true;
         return maxRedeem;
-    }
-
-    function findLedgerForRedeem(address _ledgerAddress) internal view returns(uint256) {
-        for (uint256 i = 0; i < disabledLedgersToRedeem.length; ++i) {
-            if (disabledLedgersToRedeem[i] == _ledgerAddress) {
-                return i;
-            }
-        }
-        return type(uint256).max;
-    }
-
-    /**
-    * @notice Force rebalance stake accross ledgers, allowed to call only by ROLE_STAKE_MANAGER
-    * @dev In some cases(due to rewards distribution) real ledger stakes can become different
-        from target, so that method fixes that lag.
-    */
-    function forceRebalanceStake() external auth(ROLE_STAKE_MANAGER) {
-        if (enabledLedgers.length > 0) {
-            _forceRebalanceStakes();
-            bufferedDeposits = 0;
-            bufferedRedeems = 0;
-        }
-    }
-
-    /**
-    * @notice Rebalance stake accross ledgers.
-    */
-    function _forceRebalanceStakes() internal {
-        uint ledegrsLength = enabledLedgers.length;
-        assert(ledegrsLength > 0);
-
-        uint256 totalStake = getTotalPooledKSM();
-
-        // subtract disabled ledgers stake
-        for (uint i = 0; i < disabledLedgers.length; i++) {
-            totalStake -= ledgerStake[disabledLedgers[i]];
-        }
-
-        uint256 stakesSum = 0;
-        uint256 stake = totalStake / ledegrsLength;
-        for (uint i = 0; i < ledegrsLength; i++) {
-            stakesSum += stake;
-            ledgerStake[enabledLedgers[i]] = stake;
-        }
-
-        // need to compensate remainder of integer division
-        uint256 remainingDust = totalStake - stakesSum;
-        if (remainingDust > 0) {
-            ledgerStake[enabledLedgers[0]] += remainingDust;
-        }
     }
 
     /**
@@ -912,6 +863,21 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
+    * @notice Set new minimum balance for ledger
+    * @param _minNominatorBalance - new minimum nominator balance
+    * @param _minimumBalance - new minimum active balance for ledger
+    */
+    function _updateLedgerRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance) internal {
+        for (uint i = 0; i < enabledLedgers.length; i++) {
+            ILedger(enabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
+        }
+
+        for (uint i = 0; i < disabledLedgers.length; i++) {
+            ILedger(disabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
+        }
+    }
+
+    /**
     * @notice Process user deposit, mints stKSM and increase the pool buffer
     * @return amount of stKSM shares generated
     */
@@ -955,7 +921,7 @@ contract Lido is stKSM, Initializable {
     * @notice Returns enabled ledger index by given address
     * @return enabled ledger index or uint256_max if not found
     */
-    function findEnabledLedger(address _ledgerAddress) internal view returns(uint256) {
+    function _findEnabledLedger(address _ledgerAddress) internal view returns(uint256) {
         for (uint256 i = 0; i < enabledLedgers.length; ++i) {
             if (enabledLedgers[i] == _ledgerAddress) {
                 return i;
@@ -968,9 +934,22 @@ contract Lido is stKSM, Initializable {
     * @notice Returns disabled ledger index by given address
     * @return disabled ledger index or uint256_max if not found
     */
-    function findDisabledLedger(address _ledgerAddress) internal view returns(uint256) {
+    function _findDisabledLedger(address _ledgerAddress) internal view returns(uint256) {
         for (uint256 i = 0; i < disabledLedgers.length; ++i) {
             if (disabledLedgers[i] == _ledgerAddress) {
+                return i;
+            }
+        }
+        return type(uint256).max;
+    }
+
+    /**
+    * @notice Returns disabled ledger index for which moveFunds was called by given address
+    * @return disabled ledger index or uint256_max if not found
+    */
+    function _findLedgerForRedeem(address _ledgerAddress) internal view returns(uint256) {
+        for (uint256 i = 0; i < disabledLedgersToRedeem.length; ++i) {
+            if (disabledLedgersToRedeem[i] == _ledgerAddress) {
                 return i;
             }
         }

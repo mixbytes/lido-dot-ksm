@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -18,26 +18,27 @@ contract Controller is Initializable {
     uint16 public rootDerivativeIndex;
 
     // vKSM precompile
-    IERC20 internal vKSM;
+    IERC20 internal VKSM;
 
     // relay call builder precompile
-    IRelayEncoder internal relayEncoder;
+    IRelayEncoder internal RELAY_ENCODER;
 
     // xcm transactor precompile
-    IXcmTransactor internal xcmTransactor;
+    IXcmTransactor internal XCM_TRANSACTOR;
 
     // xTokens precompile
-    IxTokens internal xTokens;
+    IxTokens internal X_TOKENS;
 
     // LIDO address
     address public LIDO;
 
     // Second layer derivative-proxy account to index
     mapping(address => uint16) public senderToIndex;
+
+    // Index to second layer derivative-proxy account
     mapping(uint16 => bytes32) public indexToAccount;
 
-    uint16 public tododelete;
-
+    // Enumerator for weights
     enum WEIGHT {
         AS_DERIVATIVE,              // 410_000_000
         BOND_BASE,                  // 600_000_000
@@ -54,18 +55,22 @@ contract Controller is Initializable {
         TRANSFER_TO_RELAY_BASE      // 4_000_000_000
     }
 
+    // Constant for max weight
     uint64 public MAX_WEIGHT;// = 1_835_300_000;
 
+    // Array with current weights
     uint64[] public weights;
 
     // Controller manager role
     bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
 
+    // Event emitted when weight updated
     event WeightUpdated (
         uint8 index,
         uint64 newValue
     );
 
+    // Event emitted when bond called on relay chain
     event Bond (
         address caller,
         bytes32 stash,
@@ -73,63 +78,73 @@ contract Controller is Initializable {
         uint256 amount
     );
 
+    // Event emitted when bond extra called on relay chain
     event BondExtra (
         address caller,
         bytes32 stash,
         uint256 amount
     );
 
+    // Event emitted when unbond on relay chain
     event Unbond (
         address caller,
         bytes32 stash,
         uint256 amount
     );
 
+    // Event emitted when rebond called on relay chain
     event Rebond (
         address caller,
         bytes32 stash,
         uint256 amount
     );
 
+    // Event emitted when withdraw called on relay chain
     event Withdraw (
         address caller,
         bytes32 stash
     );
 
+    // Event emitted when nominate called on relay chain
     event Nominate (
         address caller,
         bytes32 stash,
         bytes32[] validators
     );
 
+    // Event emitted when chill called on relay chain
     event Chill (
         address caller,
         bytes32 stash
     );
 
+    // Event emitted when transfer vKSM from parachain to relay chain called
     event TransferToRelaychain (
         address from,
         bytes32 to,
         uint256 amount
     );
 
+    // Event emitted when transfer KSM from relay chain to parachain called
     event TransferToParachain (
         bytes32 from,
         address to,
         uint256 amount
     );
 
-
+    // Allows function calls only for registered ledgers
     modifier onlyRegistred() {
         require(senderToIndex[msg.sender] != 0, "CONTROLLER: UNREGISTERED_SENDER");
         _;
     }
 
+    // Allows function calls only for members with role
     modifier auth(bytes32 role) {
         require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "CONTROLLER: UNAUTHOROZED");
         _;
     }
 
+    // Allows function calls only for LIDO contract
     modifier onlyLido() {
         require(msg.sender == LIDO, "CONTROLLER: CALLER_NOT_LIDO");
         _;
@@ -142,38 +157,53 @@ contract Controller is Initializable {
     * @param _relayEncoder - relayEncoder(relaychain calls builder) contract address
     * @param _xcmTransactor - xcmTransactor(relaychain calls relayer) contract address
     * @param _xTokens - minimal allowed nominator balance
-    * @param _lido - LIDO address on para chain
     */
     function initialize(
         uint16 _rootDerivativeIndex,
         address _vKSM,
         address _relayEncoder,
         address _xcmTransactor,
-        address _xTokens,
-        address _lido
+        address _xTokens
     ) external initializer {
-        require(address(vKSM) == address(0), "CONTROLLER: ALREADY_INITIALIZED");
+        require(address(VKSM) == address(0), "CONTROLLER: ALREADY_INITIALIZED");
 
         rootDerivativeIndex = _rootDerivativeIndex;
 
-        vKSM = IERC20(_vKSM);
-        relayEncoder = IRelayEncoder(_relayEncoder);
-        xcmTransactor = IXcmTransactor(_xcmTransactor);
-        xTokens = IxTokens(_xTokens);
-
-        LIDO = _lido;
+        VKSM = IERC20(_vKSM);
+        RELAY_ENCODER = IRelayEncoder(_relayEncoder);
+        XCM_TRANSACTOR = IXcmTransactor(_xcmTransactor);
+        X_TOKENS = IxTokens(_xTokens);
     }
 
-
-    function getWeight(WEIGHT weightType) public returns(uint64) {
+    /**
+    * @notice Get current weight by enum
+    * @param weightType - enum index of weight
+    */
+    function getWeight(WEIGHT weightType) public view returns(uint64) {
         return weights[uint256(weightType)];
     }
 
-
+    /**
+    * @notice Set new max weight. Can be called only by ROLE_CONTROLLER_MANAGER
+    * @param _maxWeight - max weight
+    */
     function setMaxWeight(uint64 _maxWeight) external auth(ROLE_CONTROLLER_MANAGER) {
         MAX_WEIGHT = _maxWeight;
     }
 
+    /**
+    * @notice Set LIDO address. Function can be called only once
+    * @param _lido - LIDO address
+    */
+    function setLido(address _lido) external {
+        require(LIDO == address(0) && _lido != address(0), "CONTROLLER: LIDO_ALREADY_INITIALIZED");
+        LIDO = _lido;
+    }
+
+    /**
+    * @notice Update weights array. Weight updated only if weight = _weight | 1 << 65
+    * @param _weights - weights array
+    */
     function setWeights(
         uint128[] calldata _weights
     ) external auth(ROLE_CONTROLLER_MANAGER) {
@@ -190,6 +220,12 @@ contract Controller is Initializable {
         }
     }
 
+    /**
+    * @notice Register new ledger contract
+    * @param index - index of ledger contract
+    * @param accountId - relay chain address of ledger
+    * @param paraAddress - parachain address of ledger
+    */
     function newSubAccount(uint16 index, bytes32 accountId, address paraAddress) external onlyLido {
         require(indexToAccount[index + 1] == bytes32(0), "CONTROLLER: ALREADY_REGISTERED");
 
@@ -197,7 +233,10 @@ contract Controller is Initializable {
         indexToAccount[index + 1] = accountId;
     }
 
-
+    /**
+    * @notice Nominate validators from ledger on relay chain
+    * @param validators - validators addresses to nominate
+    */
     function nominate(bytes32[] calldata validators) external onlyRegistred {
         uint256[] memory convertedValidators = new uint256[](validators.length);
         for (uint256 i = 0; i < validators.length; ++i) {
@@ -206,37 +245,50 @@ contract Controller is Initializable {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.NOMINATE_BASE) + getWeight(WEIGHT.NOMINATE_PER_UNIT) * uint64(validators.length),
-            relayEncoder.encode_nominate(convertedValidators)
+            RELAY_ENCODER.encode_nominate(convertedValidators)
         );
 
         emit Nominate(msg.sender, getSenderAccount(), validators);
     }
 
+    /**
+    * @notice Bond KSM of ledger on relay chain
+    * @param controller - controller which used to bond
+    * @param amount - amount of KSM to bond
+    */
     function bond(bytes32 controller, uint256 amount) external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.BOND_BASE),
-            relayEncoder.encode_bond(uint256(controller), amount, bytes(hex"00"))
+            RELAY_ENCODER.encode_bond(uint256(controller), amount, bytes(hex"00"))
         );
 
         emit Bond(msg.sender, getSenderAccount(), controller, amount);
     }
 
+    /**
+    * @notice Bond extra KSM of ledger on relay chain
+    * @param amount - extra amount of KSM to bond
+    */
     function bondExtra(uint256 amount) external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.BOND_EXTRA_BASE),
-            relayEncoder.encode_bond_extra(amount)
+            RELAY_ENCODER.encode_bond_extra(amount)
         );
 
         emit BondExtra(msg.sender, getSenderAccount(), amount);
     }
 
+    /**
+    * @notice Unbond KSM of ledger on relay chain
+    * @param amount - amount of KSM to unbond
+    */
     function unbond(uint256 amount) external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.UNBOND_BASE),
-            relayEncoder.encode_unbond(amount)
+            RELAY_ENCODER.encode_unbond(amount)
         );
 
         emit Unbond(msg.sender, getSenderAccount(), amount);
@@ -251,32 +303,44 @@ contract Controller is Initializable {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.WITHDRAW_UNBONDED_BASE) + getWeight(WEIGHT.WITHDRAW_UNBONDED_PER_UNIT) * slashingSpans,
-            relayEncoder.encode_withdraw_unbonded(slashingSpans)
+            RELAY_ENCODER.encode_withdraw_unbonded(slashingSpans)
         );
 
         emit Withdraw(msg.sender, getSenderAccount());
     }
 
+    /**
+    * @notice Rebond KSM of ledger from unbonded chunks on relay chain
+    * @param amount - amount of KSM to rebond
+    * @param unbondingChunks - amount of unbonding chunks to rebond
+    */
     function rebond(uint256 amount, uint256 unbondingChunks) external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.REBOND_BASE) + getWeight(WEIGHT.REBOND_PER_UNIT) * uint64(unbondingChunks),
-            relayEncoder.encode_rebond(amount)
+            RELAY_ENCODER.encode_rebond(amount)
         );
 
         emit Rebond(msg.sender, getSenderAccount(), amount);
     }
 
+    /**
+    * @notice Put ledger to chill mode
+    */
     function chill() external onlyRegistred {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.CHILL_BASE),
-            relayEncoder.encode_chill()
+            RELAY_ENCODER.encode_chill()
         );
 
         emit Chill(msg.sender, getSenderAccount());
     }
 
+    /**
+    * @notice Transfer KSM from relay chain to parachain
+    * @param amount - amount of KSM to transfer
+    */
     function transferToParachain(uint256 amount) external onlyRegistred {
         // to - msg.sender, from - getSenderIndex()
         callThroughDerivative(
@@ -288,27 +352,42 @@ contract Controller is Initializable {
         emit TransferToParachain(getSenderAccount(), msg.sender, amount);
     }
 
+    /**
+    * @notice Transfer vKSM from parachain to relay chain
+    * @param amount - amount of vKSM to transfer
+    */
     function transferToRelaychain(uint256 amount) external onlyRegistred {
         // to - getSenderIndex(), from - msg.sender
-        vKSM.transferFrom(msg.sender, address(this), amount);
+        VKSM.transferFrom(msg.sender, address(this), amount);
         IxTokens.Multilocation memory destination;
         destination.parents = 1;
         destination.interior = new bytes[](1);
         destination.interior[0] = bytes.concat(bytes1(hex"01"), getSenderAccount(), bytes1(hex"00")); // X2, NetworkId: Any
-        xTokens.transfer(address(vKSM), amount + 18900000000, destination, getWeight(WEIGHT.TRANSFER_TO_RELAY_BASE));
+        X_TOKENS.transfer(address(VKSM), amount + 18900000000, destination, getWeight(WEIGHT.TRANSFER_TO_RELAY_BASE));
 
         emit TransferToRelaychain(msg.sender, getSenderAccount(), amount);
     }
 
-
+    /**
+    * @notice Get index of registered ledger
+    */
     function getSenderIndex() internal returns(uint16) {
         return senderToIndex[msg.sender] - 1;
     }
 
+    /**
+    * @notice Get relay chain address of msg.sender
+    */
     function getSenderAccount() internal returns(bytes32) {
         return indexToAccount[senderToIndex[msg.sender]];
     }
 
+    /**
+    * @notice Send call to relay cahin through xcm transactor
+    * @param index - index of ledger on relay chain
+    * @param weight - fees on tx execution
+    * @param call - bytes for tx execution
+    */
     function callThroughDerivative(uint16 index, uint64 weight, bytes memory call) internal {
         bytes memory le_index = new bytes(2);
         le_index[0] = bytes1(uint8(index));
@@ -317,15 +396,20 @@ contract Controller is Initializable {
         uint64 total_weight = weight + getWeight(WEIGHT.AS_DERIVATIVE);
         require(total_weight <= MAX_WEIGHT, "CONTROLLER: TOO_MUCH_WEIGHT");
 
-        xcmTransactor.transact_through_derivative(
+        XCM_TRANSACTOR.transact_through_derivative(
             0, // The transactor to be used
             rootDerivativeIndex, // The index to be used
-            address(vKSM), // Address of the currencyId of the asset to be used for fees
+            address(VKSM), // Address of the currencyId of the asset to be used for fees
             total_weight, // The weight we want to buy in the destination chain
             bytes.concat(hex"1001", le_index, call) // The inner call to be executed in the destination chain
         );
     }
 
+    /**
+    * @notice Encoding bytes to call transfer on relay chain
+    * @param to - address of KSM receiver
+    * @param amount - amount of KSM to send
+    */
     function encodeReverseTransfer(address to, uint256 amount) internal returns(bytes memory) {
         return bytes.concat(
             hex"630201000100a10f0100010300",
@@ -336,6 +420,11 @@ contract Controller is Initializable {
         );
     }
 
+    /**
+    * @notice Converting uint256 value to le bytes
+    * @param value - uint256 value
+    * @param len - length of output bytes array
+    */
     function toLeBytes(uint256 value, uint256 len) internal returns(bytes memory) {
         bytes memory out = new bytes(len);
         for (uint256 idx = 0; idx < len; ++idx) {
@@ -345,6 +434,10 @@ contract Controller is Initializable {
         return out;
     }
 
+    /**
+    * @notice Converting uint256 value to bytes
+    * @param value - uint256 value
+    */
     function scaleCompactUint(uint256 value) internal returns(bytes memory) {
         if (value < 1<<6) {
             return toLeBytes(value << 2, 1);
