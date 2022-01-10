@@ -64,7 +64,7 @@ contract OracleMaster is Pausable {
     bytes32 internal constant ROLE_SPEC_MANAGER = keccak256("ROLE_SPEC_MANAGER");
 
     // General oracle manager role
-    bytes32 internal constant ROLE_ORACLE_MANAGER = keccak256("ROLE_ORACLE_MANAGER");
+    bytes32 internal constant ROLE_PAUSE_MANAGER = keccak256("ROLE_PAUSE_MANAGER");
 
     // Oracle members manager role
     bytes32 internal constant ROLE_ORACLE_MEMBERS_MANAGER = keccak256("ROLE_ORACLE_MEMBERS_MANAGER");
@@ -203,16 +203,16 @@ contract OracleMaster is Pausable {
     }
 
     /**
-    * @notice Stop pool routine operations (reportRelay), allowed to call only by ROLE_ORACLE_MANAGER
+    * @notice Stop pool routine operations (reportRelay), allowed to call only by ROLE_PAUSE_MANAGER
     */
-    function pause() external auth(ROLE_ORACLE_MANAGER) {
+    function pause() external auth(ROLE_PAUSE_MANAGER) {
         _pause();
     }
 
     /**
-    * @notice Resume pool routine operations (reportRelay), allowed to call only by ROLE_ORACLE_MANAGER
+    * @notice Resume pool routine operations (reportRelay), allowed to call only by ROLE_PAUSE_MANAGER
     */
-    function resume() external auth(ROLE_ORACLE_MANAGER) {
+    function resume() external auth(ROLE_PAUSE_MANAGER) {
         _unpause();
     }
 

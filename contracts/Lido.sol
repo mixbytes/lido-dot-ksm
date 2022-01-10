@@ -157,9 +157,6 @@ contract Lido is stKSM, Initializable {
     // Fee manager role
     bytes32 internal constant ROLE_FEE_MANAGER = keccak256("ROLE_FEE_MANAGER");
 
-    // Oracle manager role
-    bytes32 internal constant ROLE_ORACLE_MANAGER = keccak256("ROLE_ORACLE_MANAGER");
-
     // Ledger manager role
     bytes32 internal constant ROLE_LEDGER_MANAGER = keccak256("ROLE_LEDGER_MANAGER");
 
@@ -188,15 +185,18 @@ contract Lido is stKSM, Initializable {
     * @param _controller - relay controller address
     * @param _developers - devs address
     * @param _treasury - treasury address
+    * @param _oracleMaster - oracle master address
     */
     function initialize(
         address _authManager,
         address _vKSM,
         address _controller,
         address _developers,
-        address _treasury
+        address _treasury,
+        address _oracleMaster
     ) external initializer {
         require(_vKSM != address(0), "LIDO: INCORRECT_VKSM_ADDRESS");
+        require(_oracleMaster != address(0), "LIDO: INCORRECT_ORACLE_MASTER_ADDRESS");
 
         VKSM = IERC20(_vKSM);
         CONTROLLER = _controller;
@@ -212,6 +212,9 @@ contract Lido is stKSM, Initializable {
 
         treasury = _treasury;
         developers =_developers;
+
+        ORACLE_MASTER = _oracleMaster;
+        IOracleMaster(ORACLE_MASTER).setLido(address(this));
     }
 
     /**
@@ -270,18 +273,6 @@ contract Lido is stKSM, Initializable {
         IOracleMaster(ORACLE_MASTER).setRelayParams(_relaySpec.genesisTimestamp, _relaySpec.secondsPerEra);
 
         _updateLedgerRelaySpecs(_relaySpec.minNominatorBalance, _relaySpec.ledgerMinimumActiveBalance);
-    }
-
-    /**
-    * @notice Set oracle master address, allowed to call only by ROLE_ORACLE_MANAGER and only once
-    * @dev After setting non zero address it cannot be changed more
-    * @param _oracleMaster - oracle master address
-    */
-    function setOracleMaster(address _oracleMaster) external auth(ROLE_ORACLE_MANAGER) {
-        require(ORACLE_MASTER == address(0), "LIDO: ORACLE_MASTER_ALREADY_DEFINED");
-        require(_oracleMaster != address(0), "LIDO: INCORRECT_ORACLE_MASTER_ADDRESS");
-        ORACLE_MASTER = _oracleMaster;
-        IOracleMaster(ORACLE_MASTER).setLido(address(this));
     }
 
     /**

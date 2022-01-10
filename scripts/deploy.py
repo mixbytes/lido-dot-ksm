@@ -59,7 +59,7 @@ DEPLOYMENTS = load_deployments(NETWORK)
 
 # global configs
 CONFS = 1
-GAS_PRICE = "3 gwei"
+GAS_PRICE = "1 gwei"
 GAS_LIMIT = 10*10**6
 
 
@@ -187,8 +187,8 @@ def deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_
     return deploy_with_proxy(Controller, proxy_admin, deployer, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token)
 
 
-def deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers):
-    return deploy_with_proxy(Lido, proxy_admin, deployer, auth_manager, vksm, controller, developers, treasury)
+def deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master):
+    return deploy_with_proxy(Lido, proxy_admin, deployer, auth_manager, vksm, controller, developers, treasury, oracle_master)
 
 def deploy_ledger_beacon(deployer, _ledger_clone, _lido):
     return deploy(LedgerBeacon, deployer, _ledger_clone, _lido)
@@ -241,19 +241,16 @@ def main():
         else:
             auth_manager.addByString(role, roles[role], get_opts(deployer))
 
-    lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers)
+    oracle_clone = deploy_oracle_clone(deployer)
+
+    oracle_master = deploy_oracle_master(deployer, proxy_admin, oracle_clone, oracle_quorum)
+
+    lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master)
 
     print(f"\n{Fore.GREEN}Configuring controller...")
     controller.setLido(lido, get_opts(deployer))
     controller.setMaxWeight(xcm_max_weight, get_opts(roles['ROLE_CONTROLLER_MANAGER']))
     controller.setWeights([w | (1<<65) for w in xcm_weights], get_opts(roles['ROLE_CONTROLLER_MANAGER']))
-
-    oracle_clone = deploy_oracle_clone(deployer)
-
-    oracle_master = deploy_oracle_master(deployer, proxy_admin, oracle_clone, oracle_quorum)
-
-    print(f"\n{Fore.GREEN}Setting OracleMaster for LIDO...")
-    lido.setOracleMaster(oracle_master, get_opts(roles['ROLE_ORACLE_MANAGER']))
 
     ledger_clone = deploy_ledger_clone(deployer)
 
