@@ -55,11 +55,11 @@ contract LedgerProxy is Proxy {
     function _setBeacon(address newBeacon) private {
         require(
             Address.isContract(newBeacon),
-            "LEDGED_PROXY: new beacon is not a contract"
+            "LEDGER_PROXY: new beacon is not a contract"
         );
         require(
             Address.isContract(IBeacon(newBeacon).implementation()),
-            "LEDGED_PROXY: beacon implementation is not a contract"
+            "LEDGER_PROXY: beacon implementation is not a contract"
         );
         StorageSlot.getAddressSlot(_BEACON_SLOT).value = newBeacon;
     }

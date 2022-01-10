@@ -75,20 +75,20 @@ contract Ledger {
 
     // Allows function calls only from LIDO
     modifier onlyLido() {
-        require(msg.sender == address(LIDO), "LEDGED: NOT_LIDO");
+        require(msg.sender == address(LIDO), "LEDGER: NOT_LIDO");
         _;
     }
 
     // Allows function calls only from Oracle
     modifier onlyOracle() {
         address oracle = IOracleMaster(ILido(LIDO).ORACLE_MASTER()).getOracle(address(this));
-        require(msg.sender == oracle, "LEDGED: NOT_ORACLE");
+        require(msg.sender == oracle, "LEDGER: NOT_ORACLE");
         _;
     }
 
     // Allows function calls only from member with specific role
     modifier auth(bytes32 role) {
-        require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "LEDGED: UNAUTHOROZED");
+        require(IAuthManager(ILido(LIDO).AUTH_MANAGER()).has(role, msg.sender), "LEDGER: UNAUTHOROZED");
         _;
     }
 
@@ -111,7 +111,7 @@ contract Ledger {
         address _lido,
         uint128 _minimumBalance
     ) external {
-        require(address(VKSM) == address(0), "LEDGED: ALREADY_INITIALIZED");
+        require(address(VKSM) == address(0), "LEDGER: ALREADY_INITIALIZED");
 
         // The owner of the funds
         stashAccount = _stashAccount;
@@ -172,7 +172,7 @@ contract Ledger {
     * @param _validators - array of choosen validator to be nominated
     */
     function nominate(bytes32[] calldata _validators) external onlyLido {
-        require(activeBalance >= MIN_NOMINATOR_BALANCE, "LEDGED: NOT_ENOUGH_STAKE");
+        require(activeBalance >= MIN_NOMINATOR_BALANCE, "LEDGER: NOT_ENOUGH_STAKE");
         CONTROLLER.nominate(_validators);
     }
 
@@ -185,7 +185,7 @@ contract Ledger {
     * @param _report - data that represent state of ledger on relaychain for `_eraId`
     */
     function pushData(uint64 _eraId, Types.OracleData memory _report) external onlyOracle {
-        require(stashAccount == _report.stashAccount, "LEDGED: STASH_ACCOUNT_MISMATCH");
+        require(stashAccount == _report.stashAccount, "LEDGER: STASH_ACCOUNT_MISMATCH");
 
         status = _report.stakeStatus;
         activeBalance = _report.activeBalance;
