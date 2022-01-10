@@ -50,7 +50,6 @@ def auth_manager(AuthManager, proxy_admin, accounts):
     am.addByString('ROLE_BEACON_MANAGER', accounts[0], {'from': accounts[0]})
     am.addByString('ROLE_PAUSE_MANAGER', accounts[0], {'from': accounts[0]})
     am.addByString('ROLE_FEE_MANAGER', accounts[0], {'from': accounts[0]})
-    am.addByString('ROLE_ORACLE_MANAGER', accounts[0], {'from': accounts[0]})
     am.addByString('ROLE_LEDGER_MANAGER', accounts[0], {'from': accounts[0]})
     am.addByString('ROLE_STAKE_MANAGER', accounts[0], {'from': accounts[0]})
     am.addByString('ROLE_ORACLE_MEMBERS_MANAGER', accounts[0], {'from': accounts[0]})
@@ -93,12 +92,11 @@ def developers(accounts):
 @pytest.fixture(scope="module")
 def lido(Lido, vKSM, controller, auth_manager, oracle_master, proxy_admin, chain, Ledger, LedgerBeacon, LedgerFactory, accounts, developers, treasury):
     lc = Ledger.deploy({'from': accounts[0]})
-    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury)
+    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury, oracle_master)
     ledger_beacon = LedgerBeacon.deploy(lc, _lido, {'from': accounts[0]})
     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': accounts[0]})
     _lido.setLedgerBeacon(ledger_beacon)
     _lido.setLedgerFactory(ledger_factory)
-    _lido.setOracleMaster(oracle_master)
     era_sec = 60 * 60 * 6
     _lido.setRelaySpec((chain.time(), era_sec, era_sec * 28, 16, 1, 0))  # kusama settings except min nominator bond
     oracle_master.setAnchorEra(0, chain.time(), era_sec)
@@ -113,12 +111,11 @@ def mocklido(Lido, LedgerMock, LedgerBeacon, LedgerFactory, Oracle, OracleMaster
     om.initialize(o, 1, {'from': admin})
 
     _lido = Lido.deploy({'from': admin})
-    _lido.initialize(auth_manager, vKSM, controller, developers, treasury, {'from': admin})
+    _lido.initialize(auth_manager, vKSM, controller, developers, treasury, om, {'from': admin})
     ledger_beacon = LedgerBeacon.deploy(lc, _lido, {'from': admin})
     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': admin})
     _lido.setLedgerBeacon(ledger_beacon, {'from': admin})
     _lido.setLedgerFactory(ledger_factory, {'from': admin})
-    _lido.setOracleMaster(om, {'from': admin})
 
     return _lido
 

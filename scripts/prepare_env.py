@@ -36,7 +36,7 @@ def main():
 
     ledger_1 = Ledger.at(lido.enabledLedgers(0))
     ledger_2 = Ledger.at(lido.enabledLedgers(1))
-    ledger_3 = Ledger.at(lido.enabledLedgers(2))
+    ledger_3 = Ledger.at(lido.disabledLedgers(0))
 
     # current validators in moonbase
     validator_1 = Keypair("5CX2ov8tmW6nZwy6Eouzc7VxFHcAyZioNm5QjEUYc7zjbS66").public_key
