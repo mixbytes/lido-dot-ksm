@@ -270,8 +270,6 @@ contract Lido is stKSM, Initializable {
 
         RELAY_SPEC = _relaySpec;
 
-        IOracleMaster(ORACLE_MASTER).setRelayParams(_relaySpec.genesisTimestamp, _relaySpec.secondsPerEra);
-
         _updateLedgerRelaySpecs(_relaySpec.minNominatorBalance, _relaySpec.ledgerMinimumActiveBalance);
     }
 

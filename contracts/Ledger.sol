@@ -274,7 +274,7 @@ contract Ledger {
             // withdraw if we have some unlocked
             if (deficit > 0 && withdrawableBalance > 0) {
                 uint32 slashSpans = 0;
-                if ((_report.unlocking.length == 0) && (_report.activeBalance < MINIMUM_BALANCE)) {
+                if ((_report.unlocking.length == 0) && (_report.activeBalance <= MINIMUM_BALANCE)) {
                     slashSpans = _report.slashingSpans;
                 }
                 CONTROLLER.withdrawUnbonded(slashSpans);
