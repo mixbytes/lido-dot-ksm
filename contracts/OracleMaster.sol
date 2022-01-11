@@ -39,12 +39,6 @@ contract OracleMaster is Pausable {
     // Quorum threshold
     uint8 public QUORUM;
 
-    // Relay genesis timestamp
-    uint64 public RELAY_GENESIS_TIMESTAMP;
-
-    // Relay seconds per era
-    uint64 public RELAY_SECONDS_PER_ERA;
-
     // Relay era id on updating
     uint64 public ANCHOR_ERA_ID;
 
@@ -111,16 +105,6 @@ contract OracleMaster is Pausable {
         require(_lido != address(0), "OM: INCORRECT_LIDO_ADDRESS");
 
         LIDO = _lido;
-    }
-
-    /**
-    * @notice Set relaychain params required for oracles, allowed to call only by lido contract
-    * @param _relayGenesisTs relaychain genesis timestamp
-    * @param _relaySecondsPerEra relaychain era duratation in seconds
-    */
-    function setRelayParams(uint64 _relayGenesisTs, uint64 _relaySecondsPerEra) external onlyLido {
-        RELAY_GENESIS_TIMESTAMP = _relayGenesisTs;
-        RELAY_SECONDS_PER_ERA = _relaySecondsPerEra;
     }
 
     /**
