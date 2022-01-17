@@ -14,9 +14,10 @@ init(autoreset=True)
 
 NETWORK="moonbase"
 
+
 def get_derivative_account(root_account, index):
     seed_bytes = b'modlpy/utilisuba'
-    
+
     root_account_bytes = bytes.fromhex(Keypair(root_account).public_key[2:])
     index_bytes = int(index).to_bytes(2, 'little')
 
@@ -221,8 +222,11 @@ def main():
 
     root_derivative_index = CONFIG['root_derivative_index']
     root_derivative_account = ss58decode(get_derivative_account(CONFIG['sovereign_account'], root_derivative_index))
+    print(f'{Fore.GREEN}Root derivative account: {root_derivative_account}')
+
     stash_idxs = CONFIG['stash_indexes']
     stashes = [ss58decode(get_derivative_account(root_derivative_account, idx)) for idx in stash_idxs]
+    print(f'{Fore.GREEN}Stash accounts: {stashes}')
 
     xcm_max_weight = CONFIG['xcm_max_weight']
     xcm_weights = CONFIG['xcm_weights']
