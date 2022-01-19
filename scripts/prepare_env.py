@@ -75,4 +75,8 @@ def main():
 
     validators = [validator_1, validator_2, validator_3, validator_4, validator_5]
 
+    # 5CxXVE7pHqzR4kzfz6nop529odm8eVemFFtStruyNQvdTopo
+    # 5GxgDNMhbvMhuJzXC2voX5nKUyNaNQFCZxgnoa18eGiBBZwt
+    # 5Cqb9WXVQQF73a1dcJEBFS2bWrukaC6dmzjeWZeJHj3NMwvB
+
     return Contracts(user, proxy_admin, lido, vksm, oracle_master, wstksm, auth_manager, controller, ledger_1, ledger_2, ledger_3, validators)
