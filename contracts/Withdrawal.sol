@@ -183,8 +183,6 @@ contract Withdrawal is Initializable {
         xcKSM = IERC20(_xcKSM);
     }
 
-    // TODO: check contract on storage -> memory links
-
     /**
     * @notice Burn pool shares from first element of queue and move index for allow claiming. After that add new batch
     */
@@ -197,7 +195,7 @@ contract Withdrawal is Initializable {
             // batchSharePrice = pool_xcKSM_balance / pool_shares
             // when user try to claim: user_KSM = user_pool_share * batchSharePrice
             uint256 sharePriceForBatch = getBatchSharePrice(topBatch);
-            uint256 xcKSMForBatch = topBatch.batchTotalShares * batchSharePrice[topId] / 10**12;
+            uint256 xcKSMForBatch = topBatch.batchTotalShares * sharePriceForBatch / 10**12;
             if (diff >= xcKSMForBatch) {
                 batchSharePrice[topId] = sharePriceForBatch;
 
@@ -212,7 +210,7 @@ contract Withdrawal is Initializable {
         }
 
         if (queue.size == queue.cap) {
-            // TODO: do smth
+            // TODO: do smth (Maybe skip era and wait for transfers from relay chain)
         }
 
         if (eraVirtualXcKSMAmount > 0) {
@@ -240,6 +238,7 @@ contract Withdrawal is Initializable {
     */
     function redeem(address _from, uint256 _amount) external onlyLido {
         // TODO: shares amount on Lido side must be burned after this function
+        // and fundRaisedBalance must be decreased
         uint256 userShares = stKSM.getSharesByPooledKSM(_amount);
         
         eraBatchShares += userShares;
@@ -296,7 +295,7 @@ contract Withdrawal is Initializable {
         Request[] storage requests = userRequests[_holder];
 
         for (uint256 i = 0; i < requests.length; ++i) {
-            if (requests[i].batchId < claimableId) {
+            if (requests[i].batchId <= claimableId) {
                 _available += requests[i].share * batchSharePrice[requests[i].batchId] / 10**12;
             }
             else {
@@ -333,10 +332,10 @@ contract Withdrawal is Initializable {
     * @param _amount amount of xcKSM tokens
     */
     function getKSMPoolShares(uint256 _amount) internal view returns (uint256) {
-        uint256 KSMShares;
         if (totalVirtualXcKSMAmount > 0) {
-            KSMShares = _amount * totalXcKSMPoolShares / totalVirtualXcKSMAmount;
+            uint256 KSMShares = _amount * totalXcKSMPoolShares / totalVirtualXcKSMAmount;
+            return KSMShares;
         }
-        return KSMShares;
+        return _amount;
     }
 }
