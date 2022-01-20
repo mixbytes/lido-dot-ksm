@@ -3,14 +3,15 @@ pragma solidity ^0.8.0;
 pragma abicoder v2;
 
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "../interfaces/ILido.sol";
 
 
 library WithdrawalQueue {
     struct Batch {
-        uint256 eraStKSMShares; // Sum of stKSM shares for specific era
-        uint256 eraTotalShares; // Sum of pool shares for specific era
+        uint256 batchTotalShares; // Total shares amount for batch
+        uint256 batchXcKSMShares; // Batch xcKSM shares in xcKSM pool
     }
 
     struct Queue {
@@ -28,7 +29,9 @@ library WithdrawalQueue {
     * @param cap max amount of elements in the queue
     */
     function init(Queue storage queue, uint256 cap) external {
-        queue.items = new Batch[](cap);
+        for (uint256 i = 0; i < cap; ++i) {
+            queue.items.push(Batch(0, 0));
+        }
         queue.ids = new uint256[](cap);
         queue.first = 0;
         queue.size = 0;
@@ -40,7 +43,7 @@ library WithdrawalQueue {
     * @param queue current queue
     * @param elem element for adding
     */
-    function push(Queue storage queue, Batch memory elem) external returns(uint256 _id) {
+    function push(Queue storage queue, Batch memory elem) external returns (uint256 _id) {
         require(queue.size < queue.cap, "WithdrawalQueue: capacity exceeded");
         queue.items[(queue.first + queue.size) % queue.cap] = elem;
         if ((queue.first + queue.size) != 0) {
@@ -57,7 +60,7 @@ library WithdrawalQueue {
     * @notice Remove element from top of the queue
     * @param queue current queue
     */
-    function pop(Queue storage queue) external returns(Batch memory _item, uint256 _id) {
+    function pop(Queue storage queue) external returns (Batch memory _item, uint256 _id) {
         require(queue.size > 0, "WithdrawalQueue: queue is empty");
         _item = queue.items[queue.first];
         _id = queue.ids[queue.first];
@@ -71,10 +74,25 @@ library WithdrawalQueue {
     }
 
     /**
+    * @notice Return batch for specific index
+    * @param queue current queue
+    * @param index index of batch
+    */
+    function findBatch(Queue storage queue, uint256 index) external view returns (Batch memory _item) {
+        uint256 start = queue.first;
+        for (uint256 i = start; i < start + queue.size; ++i) {
+            if (queue.ids[i] == index) {
+                return queue.items[i];
+            }
+        }
+        return Batch(0, 0);
+    }
+
+    /**
     * @notice Return first element of the queue
     * @param queue current queue
     */
-    function top(Queue storage queue) external view returns(Batch memory _item, uint256 _id) {
+    function top(Queue storage queue) external view returns (Batch memory _item, uint256 _id) {
         _item = queue.items[queue.first];
         _id = queue.ids[queue.first];
     }
@@ -83,7 +101,7 @@ library WithdrawalQueue {
     * @notice Return last element of the queue
     * @param queue current queue
     */
-    function last(Queue storage queue) external view returns(Batch memory _item, uint256 _id) {
+    function last(Queue storage queue) external view returns (Batch memory _item, uint256 _id) {
         _item = queue.items[(queue.first + queue.size - 1) % queue.cap];
         _id = queue.ids[(queue.first + queue.size - 1) % queue.cap];
     }
@@ -92,7 +110,7 @@ library WithdrawalQueue {
     * @notice Return last element id + 1
     * @param queue current queue
     */
-    function nextId(Queue storage queue) external view returns(uint256 _id) {
+    function nextId(Queue storage queue) external view returns (uint256 _id) {
         _id = queue.ids[(queue.first + queue.size - 1) % queue.cap] + 1;
     }
 }
@@ -103,12 +121,15 @@ contract Withdrawal is Initializable {
     // stKSM smart contract
     ILido public stKSM;
 
+    // xcKSM precompile
+    IERC20 public xcKSM;
+
     // withdrawal queue
     WithdrawalQueue.Queue public queue;
 
     // batch id => price for pool shares to xcKSM 
-    // to retrive xcKSM amount for user: user_pool_shares * readyToClaim[batch_id]
-    mapping(uint256 => uint256) public batchXcKSMPrice;
+    // to retrive xcKSM amount for user: user_pool_shares * batchSharePrice[batch_id]
+    mapping(uint256 => uint256) public batchSharePrice;
 
     struct Request {
         uint256 share;
@@ -118,20 +139,26 @@ contract Withdrawal is Initializable {
     // user's withdrawal requests (unclaimed)
     mapping(address => Request[]) public userRequests;
 
-    // total stKSM shares amount on contract
-    uint256 public totalStKSMShares;
+    // total virtual xcKSM amount on contract
+    uint256 public totalVirtualXcKSMAmount;
 
-    // stKSM shares amount for era
-    uint256 public eraStKSMShares;
+    // total amount of xcKSM pool shares
+    uint256 public totalXcKSMPoolShares;
 
-    // pool shares for era
-    uint256 public eraPoolShares;
+    // stKSM(xcKSM) amount for era
+    uint256 public eraVirtualXcKSMAmount;
 
-    // total amount of pool shares
-    uint256 public totalPoolShares;
+    // batch total shares for era
+    uint256 public eraBatchShares;
 
     // Last Id of queue element which can be claimed
     uint256 public claimableId;
+
+    // Last saved xcKSM balance on contract
+    uint256 public xcKSMTotalBalance;
+
+    // Balance for claiming
+    uint256 public pendingForClaiming;
 
 
     modifier onlyLido() {
@@ -143,60 +170,80 @@ contract Withdrawal is Initializable {
     * @notice Initialize redeemPool contract.
     * @param _stKSM - stKSM address
     * @param _cap - cap for queue
+    * @param _xcKSM - xcKSM precompile address
     */
     function initialize(
         address _stKSM,
-        uint256 _cap
+        uint256 _cap,
+        address _xcKSM
     ) external initializer {
         require(_stKSM != address(0), "WITHDRAWAL: INCORRECT_STKSM_ADDRESS");
         stKSM = ILido(_stKSM);
         queue.init(_cap);
+        xcKSM = IERC20(_xcKSM);
     }
+
+    // TODO: check contract on storage -> memory links
 
     /**
     * @notice Burn pool shares from first element of queue and move index for allow claiming. After that add new batch
     */
-    function newEra() external onlyLido returns (uint256) {
-        uint256 sharesForBurn;
+    function newEra() external onlyLido {
+        uint256 newXcKSMAmount = xcKSM.balanceOf(address(this)) - pendingForClaiming;
 
-        if (queue.size == queue.cap) {
+        if (newXcKSMAmount > xcKSMTotalBalance) {
+            uint256 diff = newXcKSMAmount - xcKSMTotalBalance;
             (WithdrawalQueue.Batch memory topBatch, uint256 topId) = queue.top();
-            // batchKSMPrice = stKSM_price_to_KSM * (stKSM_shares / pool_shares)
-            // when user try to claim: user_KSM = user_pool_share * batchKSMPrice
-            batchXcKSMPrice[topId] = getCurrentPoolSharePrice();
-            queue.pop();
-            totalPoolShares -= topBatch.eraTotalShares;
-            sharesForBurn = topBatch.eraStKSMShares;
-            totalStKSMShares -= topBatch.eraStKSMShares;
-            claimableId = topId;
+            // batchSharePrice = pool_xcKSM_balance / pool_shares
+            // when user try to claim: user_KSM = user_pool_share * batchSharePrice
+            uint256 sharePriceForBatch = getBatchSharePrice(topBatch);
+            uint256 xcKSMForBatch = topBatch.batchTotalShares * batchSharePrice[topId] / 10**12;
+            if (diff >= xcKSMForBatch) {
+                batchSharePrice[topId] = sharePriceForBatch;
+
+                totalXcKSMPoolShares -= topBatch.batchXcKSMShares;
+                totalVirtualXcKSMAmount -= xcKSMForBatch;
+
+                claimableId = topId;
+                pendingForClaiming += xcKSMForBatch;
+
+                queue.pop();
+            }
         }
 
-        WithdrawalQueue.Batch memory newBatch = WithdrawalQueue.Batch(eraStKSMShares, eraPoolShares);
-        queue.push(newBatch);
+        if (queue.size == queue.cap) {
+            // TODO: do smth
+        }
 
-        eraStKSMShares = 0;
-        eraPoolShares = 0;
+        if (eraVirtualXcKSMAmount > 0) {
+            uint256 batchKSMPoolShares = getKSMPoolShares(eraVirtualXcKSMAmount);
 
-        // TODO: this amount of stKSM shares must be burned on Lido
-        return sharesForBurn;
+            WithdrawalQueue.Batch memory newBatch = WithdrawalQueue.Batch(eraBatchShares, batchKSMPoolShares);
+            queue.push(newBatch);
+
+            totalVirtualXcKSMAmount += eraVirtualXcKSMAmount;
+            totalXcKSMPoolShares += batchKSMPoolShares;
+
+            eraVirtualXcKSMAmount = 0;
+            eraBatchShares = 0;
+        }
+
+        xcKSMTotalBalance = newXcKSMAmount;
     }
 
     /**
-    * @notice Mint pool shares for user according to current exchange rate
+    * @notice 1. Mint equal amount of pool shares for user 
+    * @notice 2. Adjust current amount of virtual xcKSM on Withdrawal contract
+    * @notice 3. Burn shares on LIDO side
     * @param _from user address for minting
     * @param _amount amount of stKSM which user wants to redeem
     */
     function redeem(address _from, uint256 _amount) external onlyLido {
-        uint256 stKSMShares = stKSM.getSharesByPooledKSM(_amount);
-        stKSM.transferFrom(address(stKSM), address(this), _amount);
+        // TODO: shares amount on Lido side must be burned after this function
+        uint256 userShares = stKSM.getSharesByPooledKSM(_amount);
         
-        // they should burned only after removing queue element
-        uint256 userShares = toShares(stKSMShares);
-        eraPoolShares += userShares;
-        totalPoolShares += userShares;
-
-        totalStKSMShares += stKSMShares;
-        eraStKSMShares += stKSMShares;
+        eraBatchShares += userShares;
+        eraVirtualXcKSMAmount += _amount;
 
         Request memory req = Request(userShares, queue.nextId());
         userRequests[_from].push(req);
@@ -214,7 +261,7 @@ contract Withdrawal is Initializable {
 
         for (uint256 i = 0; i < requests.length; ++i) {
             if (requests[i].batchId < claimableId) {
-                readyToClaim += requests[i].share * batchXcKSMPrice[requests[i].batchId] / 10**12;
+                readyToClaim += requests[i].share * batchSharePrice[requests[i].batchId] / 10**12;
                 readyToClaimCount += 1;
             }
             else {
@@ -225,7 +272,20 @@ contract Withdrawal is Initializable {
         // remove claimed items
         for (uint256 i = 0; i < readyToClaimCount; ++i) { requests.pop(); }
 
+        require(readyToClaim <= xcKSM.balanceOf(address(this)), "WITHDRAWAL: CLAIM_EXCEEDS_BALANCE");
+        xcKSM.transfer(_holder, readyToClaim);
+        pendingForClaiming -= readyToClaim;
+
         return readyToClaim;
+    }
+
+    /**
+    * @notice Apply losses to current stKSM shares on this contract
+    * @param _losses user address for claiming
+    */
+    function ditributeLosses(uint256 _losses) external onlyLido {
+        // TODO: add check on LIDO that losses not exceeds balance
+        totalVirtualXcKSMAmount -= _losses;
     }
 
     /**
@@ -237,36 +297,46 @@ contract Withdrawal is Initializable {
 
         for (uint256 i = 0; i < requests.length; ++i) {
             if (requests[i].batchId < claimableId) {
-                _available += requests[i].share * batchXcKSMPrice[requests[i].batchId] / 10**12;
+                _available += requests[i].share * batchSharePrice[requests[i].batchId] / 10**12;
             }
             else {
-                _waiting += requests[i].share * getCurrentPoolSharePrice() / 10**12;
+                _waiting += requests[i].share * getBatchSharePrice(queue.findBatch(requests[i].batchId)) / 10**12;
             }
         }
         return (_waiting, _available);
     }
 
     /**
-    * @notice Calculate current pool share to xcKSM price
+    * @notice Calculate share price to KSM for specific batch
+    * @param _batch batch
     */
-    function getCurrentPoolSharePrice() public view returns (uint256) {
+    function getBatchSharePrice(WithdrawalQueue.Batch memory _batch) internal view returns (uint256) {
         uint256 batchKSMPrice;
-        if (totalPoolShares > 0) {
-            batchKSMPrice = stKSM.getPooledKSMByShares(10**12) * totalStKSMShares / totalPoolShares;
+        if (totalXcKSMPoolShares > 0) {
+            if (_batch.batchTotalShares > 0) {
+                batchKSMPrice = (10**12 * _batch.batchXcKSMShares * totalVirtualXcKSMAmount) / 
+                                (_batch.batchTotalShares * totalXcKSMPoolShares);
+            }
+            else {
+                // NOTE: This means that batch not added to queue currently
+                if (eraBatchShares > 0) {
+                    batchKSMPrice = (10**12 * getKSMPoolShares(eraVirtualXcKSMAmount) * totalVirtualXcKSMAmount) / 
+                                    (eraBatchShares * totalXcKSMPoolShares);
+                }
+            }
         }
         return batchKSMPrice;
     }
 
     /**
-    * @notice Calculate pool share for given stKSM shares amount
-    * @param _tokens amount of stKSM shares
+    * @notice Calculate shares amount in KSM pool for specific xcKSM amount
+    * @param _amount amount of xcKSM tokens
     */
-    function toShares(uint256 _tokens) internal view returns(uint256) {
-        if (totalPoolShares > 0) {
-            return _tokens * totalStKSMShares / totalPoolShares;
+    function getKSMPoolShares(uint256 _amount) internal view returns (uint256) {
+        uint256 KSMShares;
+        if (totalVirtualXcKSMAmount > 0) {
+            KSMShares = _amount * totalXcKSMPoolShares / totalVirtualXcKSMAmount;
         }
-        else {
-            return _tokens;
-        }
+        return KSMShares;
     }
 }
