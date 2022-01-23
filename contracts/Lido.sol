@@ -11,6 +11,7 @@ import "../interfaces/ILedgerFactory.sol";
 import "../interfaces/ILedger.sol";
 import "../interfaces/IController.sol";
 import "../interfaces/IAuthManager.sol";
+import "../interfaces/IWithdrawal.sol";
 
 import "./stKSM.sol";
 
@@ -116,6 +117,9 @@ contract Lido is stKSM, Initializable {
     // ledger factory
     address public LEDGER_FACTORY;
 
+    // withdrawal contract
+    address public WITHDRAWAL;
+
     // Ledger address by stash account id
     mapping(bytes32 => address) private ledgerByStash;
 
@@ -188,6 +192,7 @@ contract Lido is stKSM, Initializable {
     * @param _developers - devs address
     * @param _treasury - treasury address
     * @param _oracleMaster - oracle master address
+    * @param _withdrawal - withdrawal address
     */
     function initialize(
         address _authManager,
@@ -195,10 +200,12 @@ contract Lido is stKSM, Initializable {
         address _controller,
         address _developers,
         address _treasury,
-        address _oracleMaster
+        address _oracleMaster,
+        address _withdrawal
     ) external initializer {
         require(_vKSM != address(0), "LIDO: INCORRECT_VKSM_ADDRESS");
         require(_oracleMaster != address(0), "LIDO: INCORRECT_ORACLE_MASTER_ADDRESS");
+        require(_withdrawal != address(0), "LIDO: INCORRECT_WITHDRAWAL_ADDRESS");
 
         VKSM = IERC20(_vKSM);
         CONTROLLER = _controller;
@@ -217,6 +224,10 @@ contract Lido is stKSM, Initializable {
 
         ORACLE_MASTER = _oracleMaster;
         IOracleMaster(ORACLE_MASTER).setLido(address(this));
+
+        // TODO: change deploy script
+        WITHDRAWAL = _withdrawal;
+        IWithdrawal(WITHDRAWAL).setStKSM(address(this));
     }
 
     /**
@@ -303,16 +314,20 @@ contract Lido is stKSM, Initializable {
     function getUnbonded(address _holder) external view returns (uint256 waiting, uint256 unbonded) {
         uint256 waitingToUnbonding = 0;
         uint256 readyToClaim = 0;
-        Claim[] storage orders = claimOrders[_holder];
 
-        for (uint256 i = 0; i < orders.length; ++i) {
-            if (orders[i].timeout < block.timestamp) {
-                readyToClaim += orders[i].balance;
-            }
-            else {
-                waitingToUnbonding += orders[i].balance;
-            }
-        }
+        (waitingToUnbonding, readyToClaim) = IWithdrawal(WITHDRAWAL).getRedeemStatus(_holder);
+
+        // NOTE: this used in previous version for redeem
+        // Claim[] storage orders = claimOrders[_holder];
+
+        // for (uint256 i = 0; i < orders.length; ++i) {
+        //     if (orders[i].timeout < block.timestamp) {
+        //         readyToClaim += orders[i].balance;
+        //     }
+        //     else {
+        //         waitingToUnbonding += orders[i].balance;
+        //     }
+        // }
         return (waitingToUnbonding, readyToClaim);
     }
 
@@ -543,15 +558,18 @@ contract Lido is stKSM, Initializable {
         fundRaisedBalance -= _amount;
         bufferedRedeems += _amount;
 
+        IWithdrawal(WITHDRAWAL).redeem(msg.sender, _amount);
+
         // if (stakeToRedeposit > 0) {
         //     uint256 minAmount = stakeToRedeposit > _amount ? _amount : stakeToRedeposit; 
         //     bufferedRedeems -= minAmount;
         //     stakeToRedeposit -= minAmount;
         // }
 
-        Claim memory newClaim = Claim(_amount, uint64(block.timestamp) + RELAY_SPEC.unbondingPeriod);
-        claimOrders[msg.sender].push(newClaim);
-        pendingClaimsTotal += _amount;
+        // NOTE: this used in previous version for redeem
+        // Claim memory newClaim = Claim(_amount, uint64(block.timestamp) + RELAY_SPEC.unbondingPeriod);
+        // claimOrders[msg.sender].push(newClaim);
+        // pendingClaimsTotal += _amount;
 
         // emit event about burning (compatible with ERC20)
         emit Transfer(msg.sender, address(0), _amount);
@@ -565,30 +583,33 @@ contract Lido is stKSM, Initializable {
               and approproate amount of vKSM transferred to calling account.
     */
     function claimUnbonded() external whenNotPaused {
-        uint256 readyToClaim = 0;
-        uint256 readyToClaimCount = 0;
-        Claim[] storage orders = claimOrders[msg.sender];
+        IWithdrawal(WITHDRAWAL).claim(msg.sender);
 
-        for (uint256 i = 0; i < orders.length; ++i) {
-            if (orders[i].timeout < block.timestamp) {
-                readyToClaim += orders[i].balance;
-                readyToClaimCount += 1;
-            }
-            else {
-                orders[i - readyToClaimCount] = orders[i];
-            }
-        }
+        // NOTE: this used in previous version for redeem
+        // uint256 readyToClaim = 0;
+        // uint256 readyToClaimCount = 0;
+        // Claim[] storage orders = claimOrders[msg.sender];
 
-        // remove claimed items
-        for (uint256 i = 0; i < readyToClaimCount; ++i) { orders.pop(); }
+        // for (uint256 i = 0; i < orders.length; ++i) {
+        //     if (orders[i].timeout < block.timestamp) {
+        //         readyToClaim += orders[i].balance;
+        //         readyToClaimCount += 1;
+        //     }
+        //     else {
+        //         orders[i - readyToClaimCount] = orders[i];
+        //     }
+        // }
 
-        if (readyToClaim > 0) {
-            // In case if ledgers receive big slashing after redeem
-            require(readyToClaim <= VKSM.balanceOf(address(this)), "LIDO: CLAIM_EXCEEDS_BALANCE");
-            VKSM.transfer(msg.sender, readyToClaim);
-            pendingClaimsTotal -= readyToClaim;
-            emit Claimed(msg.sender, readyToClaim);
-        }
+        // // remove claimed items
+        // for (uint256 i = 0; i < readyToClaimCount; ++i) { orders.pop(); }
+
+        // if (readyToClaim > 0) {
+        //     // In case if ledgers receive big slashing after redeem
+        //     require(readyToClaim <= VKSM.balanceOf(address(this)), "LIDO: CLAIM_EXCEEDS_BALANCE");
+        //     VKSM.transfer(msg.sender, readyToClaim);
+        //     pendingClaimsTotal -= readyToClaim;
+        //     emit Claimed(msg.sender, readyToClaim);
+        // }
     }
 
     /**
@@ -634,7 +655,15 @@ contract Lido is stKSM, Initializable {
     function distributeLosses(uint256 _totalLosses, uint256 _ledgerBalance) external {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
-        fundRaisedBalance -= _totalLosses;
+        uint256 withdrawalBalance = IWithdrawal(WITHDRAWAL).totalBalanceForLosses();
+        // lidoPart = _totalLosses * lido_xcKSM_balance / sum_xcKSM_balance
+        uint256 lidoPart = (_totalLosses * fundRaisedBalance) / (fundRaisedBalance + withdrawalBalance);
+
+        fundRaisedBalance -= lidoPart;
+        if ((_totalLosses - lidoPart) > 0) {
+            IWithdrawal(WITHDRAWAL).ditributeLosses(_totalLosses - lidoPart);
+        }
+
         // edge case when loss can be more than stake
         ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= _totalLosses ? _totalLosses : ledgerStake[msg.sender];
         ledgerBorrow[msg.sender] -= _totalLosses;
@@ -658,13 +687,16 @@ contract Lido is stKSM, Initializable {
             fundRaisedBalance += excess; //just distribute it as rewards
             bufferedDeposits += excess;
             ledgerBorrow[msg.sender] = 0;
+            VKSM.transferFrom(msg.sender, address(this), excess);
+            VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount - excess);
         }
         else {
             ledgerBorrow[msg.sender] -= _amount;
+            VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount);
         }
 
-        // TODO: not transfer excess to Withdrawal contract
-        VKSM.transferFrom(msg.sender, address(this), _amount);
+        // NOTE: this used in previous version for redeem
+        // VKSM.transferFrom(msg.sender, address(this), _amount);
 
         // uint256 ledgerIndex = _findLedgerForRedeem(msg.sender);
         // if (ledgerIndex != type(uint256).max) {
@@ -697,6 +729,7 @@ contract Lido is stKSM, Initializable {
     function flushStakes() external {
         require(msg.sender == ORACLE_MASTER, "LIDO: NOT_FROM_ORACLE_MASTER");
 
+        IWithdrawal(WITHDRAWAL).newEra();
         _softRebalanceStakes();
     }
 

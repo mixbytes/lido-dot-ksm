@@ -69,6 +69,13 @@ def oracle_master(Oracle, OracleMaster, Ledger, accounts, chain):
 
 
 @pytest.fixture(scope="module")
+def withdrawal(Withdrawal, vKSM, accounts):
+    wdr = Withdrawal.deploy({'from': accounts[0]})
+    wdr.initialize(35, vKSM, {'from': accounts[0]})
+    return wdr
+
+
+@pytest.fixture(scope="module")
 def controller(Controller_mock, accounts, chain):
     c = Controller_mock.deploy({'from': accounts[0]})
     return c
@@ -90,9 +97,9 @@ def developers(accounts):
 
 
 @pytest.fixture(scope="module")
-def lido(Lido, vKSM, controller, auth_manager, oracle_master, proxy_admin, chain, Ledger, LedgerBeacon, LedgerFactory, accounts, developers, treasury):
+def lido(Lido, vKSM, controller, auth_manager, oracle_master, withdrawal, proxy_admin, chain, Ledger, LedgerBeacon, LedgerFactory, accounts, developers, treasury):
     lc = Ledger.deploy({'from': accounts[0]})
-    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury, oracle_master)
+    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury, oracle_master, withdrawal)
     ledger_beacon = LedgerBeacon.deploy(lc, _lido, {'from': accounts[0]})
     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': accounts[0]})
     _lido.setLedgerBeacon(ledger_beacon)
@@ -104,14 +111,16 @@ def lido(Lido, vKSM, controller, auth_manager, oracle_master, proxy_admin, chain
 
 
 @pytest.fixture(scope="module")
-def mocklido(Lido, LedgerMock, LedgerBeacon, LedgerFactory, Oracle, OracleMaster, vKSM, controller, auth_manager, admin, developers, treasury):
+def mocklido(Lido, LedgerMock, LedgerBeacon, LedgerFactory, Oracle, OracleMaster, Withdrawal, vKSM, controller, auth_manager, admin, developers, treasury):
     lc = LedgerMock.deploy({'from': admin})
     o = Oracle.deploy({'from': admin})
     om = OracleMaster.deploy({'from': admin})
     om.initialize(o, 1, {'from': admin})
+    wdr = Withdrawal.deploy({'from': admin})
+    wdr.initialize(35, vKSM, {'from': admin})
 
     _lido = Lido.deploy({'from': admin})
-    _lido.initialize(auth_manager, vKSM, controller, developers, treasury, om, {'from': admin})
+    _lido.initialize(auth_manager, vKSM, controller, developers, treasury, om, wdr, {'from': admin})
     ledger_beacon = LedgerBeacon.deploy(lc, _lido, {'from': admin})
     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': admin})
     _lido.setLedgerBeacon(ledger_beacon, {'from': admin})

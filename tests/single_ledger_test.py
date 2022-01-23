@@ -260,7 +260,7 @@ def test_multi_deposit(lido, oracle_master, vKSM, accounts, developers, treasury
     ) <= 1000
 
 
-def test_redeem(lido, oracle_master, vKSM, accounts):
+def test_redeem(lido, oracle_master, vKSM, withdrawal, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
@@ -281,8 +281,18 @@ def test_redeem(lido, oracle_master, vKSM, accounts):
     assert lido.getTotalPooledKSM() == deposit1 + deposit2 + deposit3 + reward
 
     balance_for_redeem = lido.balanceOf(accounts[1])
+
     lido.redeem(balance_for_redeem, {'from': accounts[1]})
+
+    withdrawal_balance = withdrawal.batchVirtualXcKSMAmount()
+    assert withdrawal_balance == balance_for_redeem
+
     relay.new_era([reward])
+
+    withdrawal_balance = withdrawal.batchVirtualXcKSMAmount()
+    withdrawal_total_balance = withdrawal.totalVirtualXcKSMAmount()
+    assert withdrawal_balance == 0
+    assert withdrawal_total_balance == balance_for_redeem
 
     # travel for 29 eras
     relay.timetravel(29)
@@ -290,6 +300,13 @@ def test_redeem(lido, oracle_master, vKSM, accounts):
     relay.new_era([reward])  # should send 'withdraw'
     relay.new_era([reward])  # should downward transfer
     relay.new_era([reward])  # should downward transfer got completed
+    relay.new_era()  # update era in withdrawal
+
+    withdrawal_vksm = vKSM.balanceOf(withdrawal)
+    assert withdrawal_vksm == balance_for_redeem
+
+    claimable_id = withdrawal.claimableId()
+    assert claimable_id == 1
 
     balance_before_claim = vKSM.balanceOf(accounts[1])
     lido.claimUnbonded({'from': accounts[1]})
@@ -336,15 +353,21 @@ def test_multi_redeem(lido, oracle_master, vKSM, accounts):
 
     assert lido.getUnbonded(accounts[1]) == (redeem_1 + redeem_2 + redeem_3, 0)
 
-    # travel for 29 eras
-    chain.sleep(1000)
-    relay.timetravel(25)
+    # travel for 26 eras
+    relay.timetravel(26) 
+
+    # eras for transfer tokens to withdrawal
+    relay.new_era() # withdraw
+    relay.new_era() # transfer to relay chain
+    relay.new_era() # transfer to withdrawal
+    relay.new_era() # update era in withdrawal
+
     assert lido.getUnbonded(accounts[1]) == (redeem_2 + redeem_3, redeem_1)
 
-    relay.timetravel(1)
+    relay.new_era()
     assert lido.getUnbonded(accounts[1]) == (redeem_3, redeem_1 + redeem_2)
 
-    relay.timetravel(1)
+    relay.new_era()
     assert lido.getUnbonded(accounts[1]) == (0, redeem_1 + redeem_2 + redeem_3)
 
     relay.new_era([reward])
@@ -400,6 +423,11 @@ def test_multi_redeem_order_removal(lido, oracle_master, vKSM, accounts):
     assert lido.getUnbonded(accounts[1]) == (redeem_1 + redeem_2 + redeem_3, 0)
 
     relay.timetravel(5)
+    relay.new_era() # withdraw
+    relay.new_era() # transfer to relay chain
+    relay.new_era() # transfer to withdrawal
+    relay.new_era() # update era in withdrawal
+
     assert lido.getUnbonded(accounts[1]) == (redeem_2 + redeem_3, redeem_1)
 
     relay.new_era([reward])
@@ -412,46 +440,6 @@ def test_multi_redeem_order_removal(lido, oracle_master, vKSM, accounts):
 
     assert vKSM.balanceOf(accounts[1]) == redeem_1 + balance_before_claim
     assert lido.getUnbonded(accounts[1]) == (redeem_2 + redeem_3, 0)
-
-
-def test_multi_redeem_mixed_timeout(lido, oracle_master, vKSM, accounts):
-    distribute_initial_tokens(vKSM, lido, accounts)
-
-    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11")
-    relay_spec_raw = lido.RELAY_SPEC()
-    relay_spec_array = [relay_spec_raw[0], relay_spec_raw[1], relay_spec_raw[2], relay_spec_raw[3], relay_spec_raw[4], relay_spec_raw[5]]
-
-    deposit = 20 * 10**18
-    lido.deposit(deposit, {'from': accounts[1]})
-
-    redeem_1 = 5 * 10**18
-    redeem_2 = 6 * 10**18
-    redeem_3 = 7 * 10**18
-
-    relay_spec_array[2] = 12000  # change unbonding peroid to 1000 secs
-    lido.setRelaySpec(relay_spec_array, {'from': accounts[0]})
-    lido.redeem(redeem_1, {'from': accounts[1]})
-
-    relay_spec_array[2] = 8000
-    lido.setRelaySpec(relay_spec_array, {'from': accounts[0]})
-    lido.redeem(redeem_2, {'from': accounts[1]})
-
-    relay_spec_array[2] = 2000
-    lido.setRelaySpec(relay_spec_array, {'from': accounts[0]})
-    lido.redeem(redeem_3, {'from': accounts[1]})
-    chain.mine()
-
-    assert lido.claimOrders(accounts[1], 0)[1] > lido.claimOrders(accounts[1], 1)[1]
-    assert lido.claimOrders(accounts[1], 1)[1] > lido.claimOrders(accounts[1], 2)[1]
-    assert lido.getUnbonded(accounts[1]) == (redeem_1 + redeem_2 + redeem_3, 0)
-
-    chain.sleep(9000)  # after that we can claim redeem_2, redeem_3
-    chain.mine()
-    assert lido.getUnbonded(accounts[1]) == (redeem_1, redeem_2 + redeem_3)
-    lido.claimUnbonded({'from': accounts[1]})
-    assert lido.getUnbonded(accounts[1]) == (redeem_1, 0)  # redeem_2, redeem_3 are claimed, redeem_1 is remaining
-    assert lido.claimOrders(accounts[1], 0)[0] == redeem_1
 
 
 def test_is_reported_indicator(lido, oracle_master, vKSM, accounts):

@@ -5,109 +5,8 @@ pragma abicoder v2;
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import "./utils/WithdrawalQueue.sol";
 import "../interfaces/ILido.sol";
-
-
-library WithdrawalQueue {
-    struct Batch {
-        uint256 batchTotalShares; // Total shares amount for batch
-        uint256 batchXcKSMShares; // Batch xcKSM shares in xcKSM pool
-    }
-
-    struct Queue {
-        Batch[] items;
-        uint256[] ids;
-
-        uint256 first;
-        uint256 size;
-        uint256 cap;
-        uint256 id;
-    }
-
-    /**
-    * @notice Queue initialization
-    * @param queue queue for initializing
-    * @param cap max amount of elements in the queue
-    */
-    function init(Queue storage queue, uint256 cap) external {
-        for (uint256 i = 0; i < cap; ++i) {
-            queue.items.push(Batch(0, 0));
-        }
-        queue.ids = new uint256[](cap);
-        queue.first = 0;
-        queue.size = 0;
-        queue.cap = cap;
-    }
-
-    /**
-    * @notice Add element to the end of queue
-    * @param queue current queue
-    * @param elem element for adding
-    */
-    function push(Queue storage queue, Batch memory elem) external returns (uint256 _id) {
-        require(queue.size < queue.cap, "WithdrawalQueue: capacity exceeded");
-        queue.items[(queue.first + queue.size) % queue.cap] = elem;
-        queue.id++;
-        queue.ids[(queue.first + queue.size) % queue.cap] = queue.id;
-        queue.size++;
-        return queue.id;
-    }
-
-    /**
-    * @notice Remove element from top of the queue
-    * @param queue current queue
-    */
-    function pop(Queue storage queue) external returns (Batch memory _item, uint256 _id) {
-        require(queue.size > 0, "WithdrawalQueue: queue is empty");
-        _item = queue.items[queue.first];
-        _id = queue.ids[queue.first];
-        queue.first = (queue.first + 1) % queue.cap;
-        queue.size--;
-    }
-
-    /**
-    * @notice Return batch for specific index
-    * @param queue current queue
-    * @param index index of batch
-    */
-    function findBatch(Queue storage queue, uint256 index) external view returns (Batch memory _item) {
-        uint256 startIndex = queue.ids[queue.first];
-        if (index >= startIndex) {
-            if ((index - startIndex) < queue.size) {
-                return queue.items[(queue.first + (index - startIndex)) % queue.cap];
-            }
-        }
-        return Batch(0, 0);
-    }
-
-    /**
-    * @notice Return first element of the queue
-    * @param queue current queue
-    */
-    function top(Queue storage queue) external view returns (Batch memory _item, uint256 _id) {
-        require(queue.size > 0, "WithdrawalQueue: queue is empty");
-        _item = queue.items[queue.first];
-        _id = queue.ids[queue.first];
-    }
-
-    /**
-    * @notice Return last element of the queue
-    * @param queue current queue
-    */
-    function last(Queue storage queue) external view returns (Batch memory _item, uint256 _id) {
-        require(queue.size > 0, "WithdrawalQueue: queue is empty");
-        _item = queue.items[(queue.first + queue.size - 1) % queue.cap];
-        _id = queue.ids[(queue.first + queue.size - 1) % queue.cap];
-    }
-
-    /**
-    * @notice Return last element id + 1
-    * @param queue current queue
-    */
-    function nextId(Queue storage queue) external view returns (uint256 _id) {
-        _id = queue.id + 1;
-    }
-}
 
 contract Withdrawal is Initializable {
     using WithdrawalQueue for WithdrawalQueue.Queue;
@@ -171,19 +70,27 @@ contract Withdrawal is Initializable {
 
     /**
     * @notice Initialize redeemPool contract.
-    * @param _stKSM - stKSM address
     * @param _cap - cap for queue
     * @param _xcKSM - xcKSM precompile address
     */
     function initialize(
-        address _stKSM,
         uint256 _cap,
         address _xcKSM
     ) external initializer {
-        require(_stKSM != address(0), "WITHDRAWAL: INCORRECT_STKSM_ADDRESS");
-        stKSM = ILido(_stKSM);
+        require(_xcKSM != address(0), "WITHDRAWAL: INCORRECT_XCKSM_ADDRESS");
         queue.init(_cap);
         xcKSM = IERC20(_xcKSM);
+    }
+
+    /**
+    * @notice Set stKSM contract address, allowed to only once
+    * @param _stKSM stKSM contract address
+    */
+    function setStKSM(address _stKSM) external {
+        require(address(stKSM) == address(0), "WITHDRAWAL: STKSM_ALREADY_DEFINED");
+        require(_stKSM != address(0), "WITHDRAWAL: INCORRECT_STKSM_ADDRESS");
+
+        stKSM = ILido(_stKSM);
     }
 
     /**
@@ -230,6 +137,13 @@ contract Withdrawal is Initializable {
     }
 
     /**
+    * @notice Returns total virtual xcKSM balance of contract for which losses can be applied
+    */
+    function totalBalanceForLosses() external view returns (uint256) {
+        return totalVirtualXcKSMAmount + batchVirtualXcKSMAmount;
+    }
+
+    /**
     * @notice 1. Mint equal amount of pool shares for user 
     * @notice 2. Adjust current amount of virtual xcKSM on Withdrawal contract
     * @notice 3. Burn shares on LIDO side
@@ -237,9 +151,6 @@ contract Withdrawal is Initializable {
     * @param _amount amount of stKSM which user wants to redeem
     */
     function redeem(address _from, uint256 _amount) external onlyLido {
-        // TODO: shares amount on Lido side must be burned after this function
-        // and fundRaisedBalance must be decreased
-        
         // NOTE: user share in batch = user stKSM balance in specific batch
         batchVirtualXcKSMAmount += _amount;
 
@@ -260,7 +171,7 @@ contract Withdrawal is Initializable {
         Request[] storage requests = userRequests[_holder];
 
         for (uint256 i = 0; i < requests.length; ++i) {
-            if (requests[i].batchId < claimableId) {
+            if (requests[i].batchId <= claimableId) {
                 readyToClaim += requests[i].share * batchSharePrice[requests[i].batchId] / 10**12;
                 readyToClaimCount += 1;
             }
@@ -286,7 +197,6 @@ contract Withdrawal is Initializable {
     * @param _losses user address for claiming
     */
     function ditributeLosses(uint256 _losses) external onlyLido {
-        // TODO: add check on LIDO that losses not exceeds balance
         totalVirtualXcKSMAmount -= _losses;
         emit LossesDistributed(_losses);
     }
