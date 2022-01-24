@@ -309,6 +309,7 @@ contract Ledger {
         // wait for the downward transfer to complete
         uint128 _transferDownwardBalance = transferDownwardBalance;
         if (_transferDownwardBalance > 0) {
+            // TODO: if xcm message breaks, than ledger would be disabled
             uint128 totalDownwardTransferred = uint128(VKSM.balanceOf(address(this)));
 
             if (totalDownwardTransferred >= _transferDownwardBalance ) {

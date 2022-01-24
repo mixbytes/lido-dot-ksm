@@ -9,6 +9,8 @@ import yaml
 from pathlib import Path
 from colorama import Fore, Back, Style, init
 
+from tests.conftest import withdrawal
+
 init(autoreset=True)
 
 
@@ -176,6 +178,10 @@ def deploy_oracle_master(deployer, proxy_admin, oracle_clone, oracle_quorum):
     return deploy_with_proxy(OracleMaster, proxy_admin, deployer, oracle_clone, oracle_quorum)
 
 
+def deploy_withdrawal(deployer, proxy_admin, cap, xcKSM):
+    return deploy_with_proxy(Withdrawal, proxy_admin, deployer, cap, xcKSM)
+
+
 def deploy_ledger_clone(deployer):
     return deploy(Ledger, deployer)
 
@@ -219,6 +225,7 @@ def main():
     max_validators_per_ledger = CONFIG['relay_spec']['max_validators_per_ledger']
     min_nominator_bond = CONFIG['relay_spec']['min_nominator_bond']
     min_active_balance = CONFIG['relay_spec']['min_active_balance']
+    withdrawal_cap = CONFIG['withdrawal_cap']
 
     root_derivative_index = CONFIG['root_derivative_index']
     root_derivative_account = ss58decode(get_derivative_account(CONFIG['sovereign_account'], root_derivative_index))
@@ -249,7 +256,9 @@ def main():
 
     oracle_master = deploy_oracle_master(deployer, proxy_admin, oracle_clone, oracle_quorum)
 
-    lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master)
+    withdrawal = deploy_withdrawal(deployer, proxy_admin, withdrawal_cap, vksm)
+
+    lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal)
 
     print(f"\n{Fore.GREEN}Configuring controller...")
     controller.setLido(lido, get_opts(deployer))

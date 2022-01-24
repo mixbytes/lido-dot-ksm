@@ -225,7 +225,6 @@ contract Lido is stKSM, Initializable {
         ORACLE_MASTER = _oracleMaster;
         IOracleMaster(ORACLE_MASTER).setLido(address(this));
 
-        // TODO: change deploy script
         WITHDRAWAL = _withdrawal;
         IWithdrawal(WITHDRAWAL).setStKSM(address(this));
     }

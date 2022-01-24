@@ -11,6 +11,7 @@ networks:
          - "0x04a72797360815e33Fc6676Bf0b02F7D3E901c78"
          - "0x21aeb270e48bFB111F8d1e64EACe51C3fE43E944"
         quorum: 2
+        withdrawal_cap: 40
         precompiles:
             vksm: "0xFFFFFFFF1FCACBD218EDC0EBA20FC2308C778080"
             xcm_transactor: "0x0000000000000000000000000000000000000806"
