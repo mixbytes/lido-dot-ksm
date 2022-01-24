@@ -34,7 +34,7 @@ contract Lido is stKSM, Initializable {
     // Rewards distributed
     event Rewards(address ledger, uint256 rewards, uint256 balance);
 
-    // Rewards distributed
+    // Losses distributed
     event Losses(address ledger, uint256 losses, uint256 balance);
 
     // Added new ledger
@@ -49,8 +49,18 @@ contract Lido is stKSM, Initializable {
         address addr
     );
 
-    // Ledger removed
+    // Ledger disabled
     event LedgerDisable(
+        address addr
+    );
+
+    // Ledger paused
+    event LedgerPaused(
+        address addr
+    );
+
+    // Ledger resumed
+    event LedgerResumed(
         address addr
     );
 
@@ -126,16 +136,8 @@ contract Lido is stKSM, Initializable {
     // Map to check ledger existence by address
     mapping(address => bool) private ledgerByAddress;
 
-
-    // true if manager start moving funds from disabled ledgres in current epoch
-    //bool private isMovingFromDisabledLedgers;
-
-    // addresses of disabled ledgers from which manager moving assets
-    //address[] private disabledLedgersToRedeem;
-
-    // amount of vKSM which would be redeposit after returning from disabled ledgers
-    //uint256 private stakeToRedeposit;
-
+    // Map to check ledger paused to redeem state
+    mapping(address => bool) private pausedledgers;
 
     /* fee interest in basis points.
     It's packed uint256 consist of three uint16 (total_fee, treasury_fee, developers_fee).
@@ -316,17 +318,6 @@ contract Lido is stKSM, Initializable {
 
         (waitingToUnbonding, readyToClaim) = IWithdrawal(WITHDRAWAL).getRedeemStatus(_holder);
 
-        // NOTE: this used in previous version for redeem
-        // Claim[] storage orders = claimOrders[_holder];
-
-        // for (uint256 i = 0; i < orders.length; ++i) {
-        //     if (orders[i].timeout < block.timestamp) {
-        //         readyToClaim += orders[i].balance;
-        //     }
-        //     else {
-        //         waitingToUnbonding += orders[i].balance;
-        //     }
-        // }
         return (waitingToUnbonding, readyToClaim);
     }
 
@@ -471,17 +462,28 @@ contract Lido is stKSM, Initializable {
     * @param _ledgerAddress - target ledger address
     */
     function disableLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
-        uint256 ledgerIdx = _findEnabledLedger(_ledgerAddress);
-        require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_ENABLED");
+        _disableLedger(_ledgerAddress);
+    }
 
-        address lastLedger = enabledLedgers[enabledLedgers.length - 1];
-        enabledLedgers[ledgerIdx] = lastLedger;
-        enabledLedgers.pop();
+    /**
+    * @notice Disable ledger and pause all redeems for that ledger, allowed to call only by ROLE_LEDGER_MANAGER
+    * @dev That method pause all stake changes for ledger
+    * @param _ledgerAddress - target ledger address
+    */
+    function emergencyPauseLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
+        _disableLedger(_ledgerAddress);
+        pausedledgers[_ledgerAddress] = true;
+        emit LedgerPaused(_ledgerAddress);
+    }
 
-        disabledLedgers.push(_ledgerAddress);
-
-        emit LedgerDisable(_ledgerAddress);
+    /**
+    * @notice Allow redeems from paused ledger, allowed to call only by ROLE_LEDGER_MANAGER
+    * @param _ledgerAddress - target ledger address
+    */
+    function resumeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
+        require(pausedledgers[_ledgerAddress], "LIDO: LEDGER_NOT_PAUSED");
+        delete pausedledgers[_ledgerAddress];
+        emit LedgerResumed(_ledgerAddress);
     }
 
     /**
@@ -504,6 +506,10 @@ contract Lido is stKSM, Initializable {
 
         delete ledgerByAddress[_ledgerAddress];
         delete ledgerByStash[ledger.stashAccount()];
+
+        if (pausedledgers[_ledgerAddress]) {
+            delete pausedledgers[_ledgerAddress];
+        }
 
         IOracleMaster(ORACLE_MASTER).removeLedger(_ledgerAddress);
 
@@ -559,17 +565,6 @@ contract Lido is stKSM, Initializable {
 
         IWithdrawal(WITHDRAWAL).redeem(msg.sender, _amount);
 
-        // if (stakeToRedeposit > 0) {
-        //     uint256 minAmount = stakeToRedeposit > _amount ? _amount : stakeToRedeposit; 
-        //     bufferedRedeems -= minAmount;
-        //     stakeToRedeposit -= minAmount;
-        // }
-
-        // NOTE: this used in previous version for redeem
-        // Claim memory newClaim = Claim(_amount, uint64(block.timestamp) + RELAY_SPEC.unbondingPeriod);
-        // claimOrders[msg.sender].push(newClaim);
-        // pendingClaimsTotal += _amount;
-
         // emit event about burning (compatible with ERC20)
         emit Transfer(msg.sender, address(0), _amount);
 
@@ -582,33 +577,8 @@ contract Lido is stKSM, Initializable {
               and approproate amount of vKSM transferred to calling account.
     */
     function claimUnbonded() external whenNotPaused {
-        IWithdrawal(WITHDRAWAL).claim(msg.sender);
-
-        // NOTE: this used in previous version for redeem
-        // uint256 readyToClaim = 0;
-        // uint256 readyToClaimCount = 0;
-        // Claim[] storage orders = claimOrders[msg.sender];
-
-        // for (uint256 i = 0; i < orders.length; ++i) {
-        //     if (orders[i].timeout < block.timestamp) {
-        //         readyToClaim += orders[i].balance;
-        //         readyToClaimCount += 1;
-        //     }
-        //     else {
-        //         orders[i - readyToClaimCount] = orders[i];
-        //     }
-        // }
-
-        // // remove claimed items
-        // for (uint256 i = 0; i < readyToClaimCount; ++i) { orders.pop(); }
-
-        // if (readyToClaim > 0) {
-        //     // In case if ledgers receive big slashing after redeem
-        //     require(readyToClaim <= VKSM.balanceOf(address(this)), "LIDO: CLAIM_EXCEEDS_BALANCE");
-        //     VKSM.transfer(msg.sender, readyToClaim);
-        //     pendingClaimsTotal -= readyToClaim;
-        //     emit Claimed(msg.sender, readyToClaim);
-        // }
+        uint256 amount = IWithdrawal(WITHDRAWAL).claim(msg.sender);
+        emit Claimed(msg.sender, amount);
     }
 
     /**
@@ -626,12 +596,6 @@ contract Lido is stKSM, Initializable {
         fundRaisedBalance += _totalRewards;
         ledgerStake[msg.sender] += _totalRewards;
         ledgerBorrow[msg.sender] += _totalRewards;
-
-        // In case if disabled ledger receive rewards after manager call moveDisabledLedgersStake
-        // Than `stakeToRedeposit` must be increased
-        // if ((_findLedgerForRedeem(msg.sender) != type(uint256).max) && isMovingFromDisabledLedgers){
-        //     stakeToRedeposit += _totalRewards;
-        // }
 
         uint256 _rewards = _totalRewards * _feeDevTreasure / uint256(10000 - _fee.operators);
         uint256 denom = _getTotalPooledKSM()  - _rewards;
@@ -667,10 +631,6 @@ contract Lido is stKSM, Initializable {
         ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= _totalLosses ? _totalLosses : ledgerStake[msg.sender];
         ledgerBorrow[msg.sender] -= _totalLosses;
 
-        // if (_findLedgerForRedeem(msg.sender) != type(uint256).max) {
-        //     stakeToRedeposit -= stakeToRedeposit > _totalLosses ? _totalLosses : stakeToRedeposit;
-        // }
-
         emit Losses(msg.sender, _totalLosses, _ledgerBalance);
     }
 
@@ -693,20 +653,6 @@ contract Lido is stKSM, Initializable {
             ledgerBorrow[msg.sender] -= _amount;
             VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount);
         }
-
-        // NOTE: this used in previous version for redeem
-        // VKSM.transferFrom(msg.sender, address(this), _amount);
-
-        // uint256 ledgerIndex = _findLedgerForRedeem(msg.sender);
-        // if (ledgerIndex != type(uint256).max) {
-        //     uint256 redeposit = stakeToRedeposit > _amount ? _amount : stakeToRedeposit;
-        //     stakeToRedeposit -= redeposit;
-        //     bufferedDeposits += redeposit;
-
-        //     address lastLedger = disabledLedgersToRedeem[disabledLedgersToRedeem.length - 1];
-        //     disabledLedgersToRedeem[ledgerIndex] = lastLedger;
-        //     disabledLedgersToRedeem.pop();
-        // }
     }
 
     /**
@@ -733,38 +679,12 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
-    * @notice Transfer vKSM from disabled ledgers to LIDO in case if users don't call redeem
-    * @param _ledgers - array of disabled ledgers
-    */
-    // function moveDisabledLedgersStake(address[] calldata _ledgers) external auth(ROLE_STAKE_MANAGER) returns (uint256) {
-    //     require(disabledLedgers.length > 0, "LIDO: NO_DISABLED_LEDGERS");
-
-    //     uint256 maxRedeem;
-    //     for (uint256 i = 0; i < _ledgers.length; ++i) {
-    //         uint256 ledgerIdx = _findDisabledLedger(_ledgers[i]);
-    //         require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_DISABLED");
-    //         require(ledgerStake[_ledgers[i]] == ILedger(_ledgers[i]).cachedTotalBalance());
-
-    //         maxRedeem += ledgerStake[_ledgers[i]];
-    //         disabledLedgersToRedeem.push(_ledgers[i]);
-    //     }
-
-    //     uint256 minVal = maxRedeem > bufferedRedeems ? bufferedRedeems : maxRedeem;
-    //     bufferedRedeems -= minVal;
-    //     maxRedeem -= minVal;
-
-    //     stakeToRedeposit += maxRedeem;
-    //     isMovingFromDisabledLedgers = true;
-    //     return maxRedeem;
-    // }
-
-    /**
     * @notice Rebalance stake accross ledgers by soft manner.
     */
     function _softRebalanceStakes() internal {
-        if (bufferedDeposits > 0 || bufferedRedeems > 0 /*|| isMovingFromDisabledLedgers*/) {
+        if (bufferedDeposits > 0 || bufferedRedeems > 0) {
             // first try to distribute redeems accross disabled ledgers
-            if ((disabledLedgers.length > 0) && (bufferedRedeems > 0 /*|| isMovingFromDisabledLedgers*/)) {
+            if (disabledLedgers.length > 0 && bufferedRedeems > 0) {
                 bufferedRedeems = _processDisabledLedgers(bufferedRedeems);
             }
 
@@ -792,24 +712,21 @@ contract Lido is stKSM, Initializable {
         uint256 actualRedeems = 0;
 
         for (uint256 i = 0; i < disabledLength; ++i) {
-            stakesSum += ledgerStake[disabledLedgers[i]];
+            if (!pausedledgers[disabledLedgers[i]]) {
+                stakesSum += ledgerStake[disabledLedgers[i]];
+            }
         }
 
         if (stakesSum == 0) return redeems;
 
-        // if (isMovingFromDisabledLedgers) {
-        //     for (uint256 i = 0; i < disabledLedgersToRedeem.length; ++i) {
-        //         ledgerStake[disabledLedgersToRedeem[i]] = 0;
-        //     }
-        //     isMovingFromDisabledLedgers = false;
-        // }
-
         for (uint256 i = 0; i < disabledLength; ++i) {
-            uint256 currentStake = ledgerStake[disabledLedgers[i]];
-            uint256 decrement = redeems * currentStake / stakesSum;
-            decrement = decrement > currentStake ? currentStake : decrement;
-            ledgerStake[disabledLedgers[i]] = currentStake - decrement;
-            actualRedeems += decrement;
+            if (!pausedledgers[disabledLedgers[i]]) {
+                uint256 currentStake = ledgerStake[disabledLedgers[i]];
+                uint256 decrement = redeems * currentStake / stakesSum;
+                decrement = decrement > currentStake ? currentStake : decrement;
+                ledgerStake[disabledLedgers[i]] = currentStake - decrement;
+                actualRedeems += decrement;
+            }
         }
 
         return redeems - actualRedeems;
@@ -903,6 +820,25 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
+    * @notice Disable ledger
+    * @dev That method put ledger to "draining" mode, after ledger drained it can be removed
+    * @param _ledgerAddress - target ledger address
+    */
+    function _disableLedger(address _ledgerAddress) internal {
+        require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
+        uint256 ledgerIdx = _findEnabledLedger(_ledgerAddress);
+        require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_ENABLED");
+
+        address lastLedger = enabledLedgers[enabledLedgers.length - 1];
+        enabledLedgers[ledgerIdx] = lastLedger;
+        enabledLedgers.pop();
+
+        disabledLedgers.push(_ledgerAddress);
+
+        emit LedgerDisable(_ledgerAddress);
+    }
+
+    /**
     * @notice Process user deposit, mints stKSM and increase the pool buffer
     * @return amount of stKSM shares generated
     */
@@ -967,17 +903,4 @@ contract Lido is stKSM, Initializable {
         }
         return type(uint256).max;
     }
-
-    /**
-    * @notice Returns disabled ledger index for which moveFunds was called by given address
-    * @return disabled ledger index or uint256_max if not found
-    */
-    // function _findLedgerForRedeem(address _ledgerAddress) internal view returns(uint256) {
-    //     for (uint256 i = 0; i < disabledLedgersToRedeem.length; ++i) {
-    //         if (disabledLedgersToRedeem[i] == _ledgerAddress) {
-    //             return i;
-    //         }
-    //     }
-    //     return type(uint256).max;
-    // }
 }
