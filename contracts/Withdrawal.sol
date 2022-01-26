@@ -99,7 +99,7 @@ contract Withdrawal is Initializable {
     function newEra() external onlyLido {
         uint256 newXcKSMAmount = xcKSM.balanceOf(address(this)) - pendingForClaiming;
 
-        if (newXcKSMAmount > 0) {
+        if ((newXcKSMAmount > 0) && (queue.size > 0)) {
             (WithdrawalQueue.Batch memory topBatch, uint256 topId) = queue.top();
             // batchSharePrice = pool_xcKSM_balance / pool_shares
             // when user try to claim: user_KSM = user_pool_share * batchSharePrice

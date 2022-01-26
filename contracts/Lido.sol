@@ -462,6 +462,12 @@ contract Lido is stKSM, Initializable {
     * @param _ledgerAddress - target ledger address
     */
     function disableLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
+        //require(
+        //    // NOTE: this means that we aren't waiting any transfers from or to ledger
+        //    ledgerStake[_ledgerAddress] == ILedger(_ledgerAddress).cachedTotalBalance() ||
+        //    // NOTE: this means that we are waiting transfer from lido to ledger
+        //    ledgerStake[_ledgerAddress] > ILedger(_ledgerAddress).cachedTotalBalance());
+        // TODO: add check that no redeems from this _ledger
         _disableLedger(_ledgerAddress);
     }
 
@@ -688,6 +694,14 @@ contract Lido is stKSM, Initializable {
                 bufferedRedeems = _processDisabledLedgers(bufferedRedeems);
             }
 
+            // NOTE: if we have deposits and redeems in one era we need to send all possible xcKSMs to Withdrawal
+            if (bufferedDeposits > 0 && bufferedRedeems > 0) {
+                uint256 maxImmediateTransfer = bufferedDeposits > bufferedRedeems ? bufferedRedeems : bufferedDeposits;
+                bufferedDeposits -= maxImmediateTransfer;
+                bufferedRedeems -= maxImmediateTransfer;
+                VKSM.transfer(WITHDRAWAL, maxImmediateTransfer);
+            }
+
             // distribute remaining stakes and redeems accross enabled
             if (enabledLedgers.length > 0) {
                 int256 stake = bufferedDeposits.toInt256() - bufferedRedeems.toInt256();
@@ -743,6 +757,8 @@ contract Lido is stKSM, Initializable {
         int256[] memory diffs = new int256[](ledgersLength);
         address[] memory ledgersCache = new address[](ledgersLength);
         int256[] memory ledgerStakesCache = new int256[](ledgersLength);
+        // NOTE: cache can't be used, because it can be changed or not in algorithm
+        uint256[] memory ledgerStakePrevious = new uint256[](ledgersLength);
 
         int256 activeDiffsSum = 0;
         int256 totalChange = 0;
@@ -754,6 +770,7 @@ contract Lido is stKSM, Initializable {
             for (uint256 i = 0; i < ledgersLength; ++i) {
                 ledgersCache[i] = enabledLedgers[i];
                 ledgerStakesCache[i] = int256(ledgerStake[ledgersCache[i]]);
+                ledgerStakePrevious[i] = ledgerStake[ledgersCache[i]];
 
                 diff = int256(targetStake) - int256(ledgerStakesCache[i]);
                 if (_stake * diff > 0) {
@@ -801,6 +818,26 @@ contract Lido is stKSM, Initializable {
                     }
                 }
             }
+        }
+
+        // NOTE: this check used to catch cases when one user redeem some funds and another deposit in next era
+        // so ledgers stake would increase and they return less xcKSMs and remaining funds would be locked on Lido
+        uint256 freeToTransferFunds = 0;
+        for (uint256 i = 0; i < ledgersLength; ++i) {
+            if (
+                // NOTE: this means that we wait transfer from ledger
+                ledgerBorrow[ledgersCache[i]] > ledgerStakePrevious[i] &&
+                // NOTE: and new deposits increase ledger stake
+                ledgerStake[ledgersCache[i]] > ledgerStakePrevious[i]
+                ) {
+                    freeToTransferFunds += 
+                        ledgerStake[ledgersCache[i]] > ledgerBorrow[ledgersCache[i]] ? 
+                        ledgerBorrow[ledgersCache[i]] - ledgerStakePrevious[i] :
+                        ledgerStake[ledgersCache[i]] - ledgerStakePrevious[i];
+            }
+        }
+        if (freeToTransferFunds > 0) {
+            VKSM.transfer(WITHDRAWAL, freeToTransferFunds);
         }
     }
 
