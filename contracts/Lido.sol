@@ -73,9 +73,6 @@ contract Lido is stKSM, Initializable {
     // sum of all deposits and rewards
     uint256 public fundRaisedBalance;
 
-    // one claim for account
-    mapping(address => Claim[]) public claimOrders;
-
     // pending claims total
     uint256 public pendingClaimsTotal;
 
@@ -176,9 +173,6 @@ contract Lido is stKSM, Initializable {
 
     // Developers address change role
     bytes32 internal constant ROLE_DEVELOPERS = keccak256("ROLE_SET_DEVELOPERS");
-
-    // max amount of claims in parallel
-    uint16 internal constant MAX_CLAIMS = 10;
 
     // Allow function calls only from member with specific role
     modifier auth(bytes32 role) {
@@ -462,12 +456,6 @@ contract Lido is stKSM, Initializable {
     * @param _ledgerAddress - target ledger address
     */
     function disableLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
-        //require(
-        //    // NOTE: this means that we aren't waiting any transfers from or to ledger
-        //    ledgerStake[_ledgerAddress] == ILedger(_ledgerAddress).cachedTotalBalance() ||
-        //    // NOTE: this means that we are waiting transfer from lido to ledger
-        //    ledgerStake[_ledgerAddress] > ILedger(_ledgerAddress).cachedTotalBalance());
-        // TODO: add check that no redeems from this _ledger
         _disableLedger(_ledgerAddress);
     }
 
@@ -563,7 +551,6 @@ contract Lido is stKSM, Initializable {
         uint256 _shares = getSharesByPooledKSM(_amount);
         require(_shares > 0, "LIDO: AMOUNT_TOO_LOW");
         require(_shares <= _sharesOf(msg.sender), "LIDO: REDEEM_AMOUNT_EXCEEDS_BALANCE");
-        require(claimOrders[msg.sender].length < MAX_CLAIMS, "LIDO: MAX_CLAIMS_EXCEEDS");
 
         _burnShares(msg.sender, _shares);
         fundRaisedBalance -= _amount;

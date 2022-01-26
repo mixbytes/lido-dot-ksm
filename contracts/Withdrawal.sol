@@ -18,10 +18,10 @@ contract Withdrawal is Initializable {
     event ElementAdded(uint256 elementId);
 
     // New redeem request added
-    event RedeemRequestAdded(address user, uint256 shares, uint256 batchId);
+    event RedeemRequestAdded(address indexed user, uint256 shares, uint256 batchId);
 
     // xcKSM claimed by user
-    event Claimed(address user, uint256 claimedAmount);
+    event Claimed(address indexed user, uint256 claimedAmount);
 
     // Losses ditributed to contract
     event LossesDistributed(uint256 losses);
@@ -62,6 +62,9 @@ contract Withdrawal is Initializable {
     // Balance for claiming
     uint256 public pendingForClaiming;
 
+    // max amount of requests in parallel
+    uint16 internal constant MAX_REQUESTS = 20;
+
 
     modifier onlyLido() {
         require(msg.sender == address(stKSM), "WITHDRAWAL: CALLER_NOT_LIDO");
@@ -77,6 +80,7 @@ contract Withdrawal is Initializable {
         uint256 _cap,
         address _xcKSM
     ) external initializer {
+        require(_cap > 0, "WITHDRAWAL: INCORRECT_CAP");
         require(_xcKSM != address(0), "WITHDRAWAL: INCORRECT_XCKSM_ADDRESS");
         queue.init(_cap);
         xcKSM = IERC20(_xcKSM);
@@ -152,6 +156,7 @@ contract Withdrawal is Initializable {
     */
     function redeem(address _from, uint256 _amount) external onlyLido {
         // NOTE: user share in batch = user stKSM balance in specific batch
+        require(userRequests[_from].length < MAX_REQUESTS, "WITHDRAWAL: REQUEST_CAP_EXCEEDED");
         batchVirtualXcKSMAmount += _amount;
 
         Request memory req = Request(_amount, queue.nextId());

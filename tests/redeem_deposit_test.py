@@ -207,7 +207,7 @@ def test_deposit_after_redeem_in_new_era_less(lido, oracle_master, vKSM, Ledger,
 
     assert Ledger.at(lido.findLedger(relay.ledgers[0].stash_account)).ledgerStake() == deposit
 
-    redeem = 10 * 10**12
+    redeem = 5 * 10**12
     lido.redeem(redeem, {'from': accounts[0]})
 
     relay.new_era()
@@ -219,13 +219,9 @@ def test_deposit_after_redeem_in_new_era_less(lido, oracle_master, vKSM, Ledger,
     lido.deposit(deposit_2, {'from': accounts[1]})
 
     relay.new_era() # transfer excess to withdrawal
-
-    assert Ledger.at(lido.findLedger(relay.ledgers[0].stash_account)).ledgerStake() == deposit + (deposit_2 - redeem)
-
     relay.new_era() # remove element from queue
 
-    # TODO: why this check not work
-    # assert Ledger.at(lido.findLedger(relay.ledgers[0].stash_account)).ledgerStake() == deposit + (deposit_2 - redeem)
+    assert Ledger.at(lido.findLedger(relay.ledgers[0].stash_account)).ledgerStake() == deposit + (deposit_2 - redeem)
 
     (waitingToUnbonding, readyToClaim) = lido.getUnbonded(accounts[0])
 

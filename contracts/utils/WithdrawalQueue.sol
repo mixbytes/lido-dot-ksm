@@ -41,9 +41,10 @@ library WithdrawalQueue {
     */
     function push(Queue storage queue, Batch memory elem) internal returns (uint256 _id) {
         require(queue.size < queue.cap, "WithdrawalQueue: capacity exceeded");
-        queue.items[(queue.first + queue.size) % queue.cap] = elem;
+        uint256 lastIndex = (queue.first + queue.size) % queue.cap;
+        queue.items[lastIndex] = elem;
         queue.id++;
-        queue.ids[(queue.first + queue.size) % queue.cap] = queue.id;
+        queue.ids[lastIndex] = queue.id;
         queue.size++;
         return queue.id;
     }
@@ -91,8 +92,9 @@ library WithdrawalQueue {
     */
     function last(Queue storage queue) internal view returns (Batch memory _item, uint256 _id) {
         require(queue.size > 0, "WithdrawalQueue: queue is empty");
-        _item = queue.items[(queue.first + queue.size - 1) % queue.cap];
-        _id = queue.ids[(queue.first + queue.size - 1) % queue.cap];
+        uint256 lastIndex = (queue.first + queue.size - 1) % queue.cap;
+        _item = queue.items[lastIndex];
+        _id = queue.ids[lastIndex];
     }
 
     /**

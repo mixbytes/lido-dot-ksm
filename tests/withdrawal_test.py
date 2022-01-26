@@ -54,17 +54,22 @@ def test_check_queue(lido, oracle_master, vKSM, withdrawal, accounts):
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger("0x10", "0x11")
 
-    deposit = 100 * 10**12
+    deposit = 20 * 10**12
     lido.deposit(deposit, {'from': accounts[0]})
+    lido.deposit(deposit, {'from': accounts[1]})
+    lido.deposit(deposit, {'from': accounts[2]})
+    lido.deposit(deposit, {'from': accounts[3]})
+    lido.deposit(deposit, {'from': accounts[4]})
 
     relay.new_era()
     relay.new_era()
 
-    assert relay.ledgers[0].active_balance == deposit
+    assert relay.ledgers[0].active_balance == deposit * 5
 
-    for i in range(100):
-        lido.redeem(10**12, {'from': accounts[0]})
-        relay.new_era()
+    for j in range(5):
+        for i in range(20):
+            lido.redeem(10**12, {'from': accounts[j]})
+            relay.new_era()
 
     # One more claim for check function 
     balance_before_claim = vKSM.balanceOf(accounts[0])
@@ -72,7 +77,7 @@ def test_check_queue(lido, oracle_master, vKSM, withdrawal, accounts):
     balance_after_claim = vKSM.balanceOf(accounts[0])
 
     for i in range(28):
-        relay.new_era() # wait unbonding for last redeem
+        relay.new_era() # wait unbonding for last redeem for last user
     
     relay.new_era()  # should send 'withdraw'
     relay.new_era()  # should downward transfer
@@ -81,12 +86,12 @@ def test_check_queue(lido, oracle_master, vKSM, withdrawal, accounts):
 
     withdrawal_vksm = vKSM.balanceOf(withdrawal)
     diff = balance_after_claim - balance_before_claim
-    assert withdrawal_vksm == (deposit - diff)
+    assert withdrawal_vksm == (deposit * 5 - diff)
 
-    balance_before_claim = vKSM.balanceOf(accounts[0])
-    lido.claimUnbonded({'from': accounts[0]})
-
-    assert vKSM.balanceOf(accounts[0]) == (deposit - diff + balance_before_claim)
+    for i in range(1, 5):
+        balance_before_claim = vKSM.balanceOf(accounts[i])
+        lido.claimUnbonded({'from': accounts[i]})
+        assert vKSM.balanceOf(accounts[i]) == (deposit + balance_before_claim)
 
 
 def test_losses_distribution(lido, oracle_master, vKSM, withdrawal, accounts):
@@ -141,13 +146,13 @@ def test_losses_distribution(lido, oracle_master, vKSM, withdrawal, accounts):
 
 
 @pytest.mark.skip_coverage
-def test_realy_block(lido, oracle_master, vKSM, withdrawal, Ledger, accounts):
+def test_relay_block(lido, oracle_master, vKSM, withdrawal, Ledger, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger("0x10", "0x11")
 
-    deposit = 100 * 10**12
+    deposit = 20 * 10**12
     lido.deposit(deposit, {'from': accounts[0]})
 
     relay.new_era()
@@ -155,7 +160,7 @@ def test_realy_block(lido, oracle_master, vKSM, withdrawal, Ledger, accounts):
 
     assert relay.ledgers[0].active_balance == deposit
 
-    for i in range(25):
+    for i in range(15):
         lido.redeem(10**12, {'from': accounts[0]})
         relay.new_era()
 
@@ -164,7 +169,7 @@ def test_realy_block(lido, oracle_master, vKSM, withdrawal, Ledger, accounts):
 
     # Block xcm messages for 30 eras
     relay.block_xcm_messages = True
-    for i in range(15):
+    for i in range(5):
         lido.redeem(10**12, {'from': accounts[0]})
         relay.new_era()
         withdrawal_vksm = vKSM.balanceOf(withdrawal)
@@ -175,20 +180,16 @@ def test_realy_block(lido, oracle_master, vKSM, withdrawal, Ledger, accounts):
 
     ledger = Ledger.at(lido.enabledLedgers(0))
     assert ledger.transferDownwardBalance() == 0
-    assert lido.ledgerStake(ledger.address) == 60 * 10**12
+    assert lido.ledgerStake(ledger.address) == 0
 
     relay.new_era()
 
-    for i in range(60):
-        lido.redeem(10**12, {'from': accounts[0]})
-        relay.new_era()
-
     (waitingToUnbonding, readyToClaim) = lido.getUnbonded(accounts[0])
 
-    assert readyToClaim == 61 * 10**12
-    assert waitingToUnbonding == 39 * 10**12
+    assert readyToClaim == 0
+    assert waitingToUnbonding == 20 * 10**12
 
-    for i in range(39):
+    for i in range(38): # wait 33 era + 5 for eras with blocked messages
         relay.new_era() # wait unbonding for last redeem
     
     relay.new_era()  # should send 'withdraw'

@@ -50,6 +50,8 @@ class RelayLedger:
         while len(self.unlocking_chunks) > 0 and rebonded < amount:
             rebonded += self.unlocking_chunks[0][0]
             self.unlocking_chunks.pop(0)
+        
+        self.active_balance += rebonded
 
     def withdraw(self):
         while len(self.unlocking_chunks) > 0 and self.unlocking_chunks[0][1] < self.relay.era:
