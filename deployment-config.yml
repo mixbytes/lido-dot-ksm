@@ -42,7 +42,7 @@ networks:
          - 600_000_000      #BOND_BASE
          - 1_100_000_000    #BOND_EXTRA_BASE
          - 1_250_000_000    #UNBOND_BASE
-         - 500_000_000      #WITHDRAW_UNBONDED_BASE
+         - 1_420_000_000    #WITHDRAW_UNBONDED_BASE
          - 60_000           #WITHDRAW_UNBONDED_PER_UNIT
          - 1_200_000_000    #REBOND_BASE
          - 40_000           #REBOND_PER_UNIT
