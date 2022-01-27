@@ -94,6 +94,9 @@ contract Lido is stKSM, Initializable {
     // Enabled ledgers
     address[] public enabledLedgers;
 
+    // Cap for deposits for v1
+    uint256 public depositCap;
+
     // vKSM precompile
     IERC20 public VKSM;
 
@@ -189,6 +192,7 @@ contract Lido is stKSM, Initializable {
     * @param _treasury - treasury address
     * @param _oracleMaster - oracle master address
     * @param _withdrawal - withdrawal address
+    * @param _depositCap - cap for deposits
     */
     function initialize(
         address _authManager,
@@ -197,8 +201,10 @@ contract Lido is stKSM, Initializable {
         address _developers,
         address _treasury,
         address _oracleMaster,
-        address _withdrawal
+        address _withdrawal,
+        uint256 _depositCap
     ) external initializer {
+        require(_depositCap > 0, "LIDO: ZERO_CAP");
         require(_vKSM != address(0), "LIDO: INCORRECT_VKSM_ADDRESS");
         require(_oracleMaster != address(0), "LIDO: INCORRECT_ORACLE_MASTER_ADDRESS");
         require(_withdrawal != address(0), "LIDO: INCORRECT_WITHDRAWAL_ADDRESS");
@@ -206,6 +212,8 @@ contract Lido is stKSM, Initializable {
         VKSM = IERC20(_vKSM);
         CONTROLLER = _controller;
         AUTH_MANAGER = _authManager;
+
+        depositCap = _depositCap;
 
         MAX_LEDGERS_AMOUNT = 200;
         Types.Fee memory _fee;
@@ -238,6 +246,14 @@ contract Lido is stKSM, Initializable {
     function setTreasury(address _treasury) external auth(ROLE_TREASURY) {
         require(_treasury != address(0), "LIDO: INCORRECT_TREASURY_ADDRESS");
         treasury = _treasury;
+    }
+
+    /**
+    * @notice Set deposit cap to new value
+    */
+    function setDepositCap(uint256 _depositCap) external auth(ROLE_PAUSE_MANAGER) {
+        require(_depositCap > 0, "LIDO: INCORRECT_NEW_CAP");
+        depositCap = _depositCap;
     }
 
     /**
@@ -532,6 +548,8 @@ contract Lido is stKSM, Initializable {
     * @param _amount - amount of vKSM tokens to be deposited
     */
     function deposit(uint256 _amount) external whenNotPaused returns (uint256) {
+        require(fundRaisedBalance + _amount < depositCap, "LIDO: DEPOSITS_EXCEED_CAP");
+
         VKSM.transferFrom(msg.sender, address(this), _amount);
 
         uint256 shares = _submit(_amount);

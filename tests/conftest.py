@@ -99,7 +99,7 @@ def developers(accounts):
 @pytest.fixture(scope="module")
 def lido(Lido, vKSM, controller, auth_manager, oracle_master, withdrawal, proxy_admin, chain, Ledger, LedgerBeacon, LedgerFactory, accounts, developers, treasury):
     lc = Ledger.deploy({'from': accounts[0]})
-    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury, oracle_master, withdrawal)
+    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury, oracle_master, withdrawal, 50000 * 10**18)
     ledger_beacon = LedgerBeacon.deploy(lc, _lido, {'from': accounts[0]})
     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': accounts[0]})
     _lido.setLedgerBeacon(ledger_beacon)
@@ -120,7 +120,7 @@ def mocklido(Lido, LedgerMock, LedgerBeacon, LedgerFactory, Oracle, OracleMaster
     wdr.initialize(35, vKSM, {'from': admin})
 
     _lido = Lido.deploy({'from': admin})
-    _lido.initialize(auth_manager, vKSM, controller, developers, treasury, om, wdr, {'from': admin})
+    _lido.initialize(auth_manager, vKSM, controller, developers, treasury, om, wdr, 50000 * 10**18, {'from': admin})
     ledger_beacon = LedgerBeacon.deploy(lc, _lido, {'from': admin})
     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': admin})
     _lido.setLedgerBeacon(ledger_beacon, {'from': admin})

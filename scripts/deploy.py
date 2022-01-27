@@ -226,6 +226,7 @@ def main():
     min_nominator_bond = CONFIG['relay_spec']['min_nominator_bond']
     min_active_balance = CONFIG['relay_spec']['min_active_balance']
     withdrawal_cap = CONFIG['withdrawal_cap']
+    deposit_cap = CONFIG['deposit_cap']
 
     root_derivative_index = CONFIG['root_derivative_index']
     root_derivative_account = ss58decode(get_derivative_account(CONFIG['sovereign_account'], root_derivative_index))
@@ -258,7 +259,7 @@ def main():
 
     withdrawal = deploy_withdrawal(deployer, proxy_admin, withdrawal_cap, vksm)
 
-    lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal)
+    lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal, deposit_cap)
 
     print(f"\n{Fore.GREEN}Configuring controller...")
     controller.setLido(lido, get_opts(deployer))
