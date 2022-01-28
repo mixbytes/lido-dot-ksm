@@ -4,6 +4,8 @@ pragma solidity ^0.8.0;
 import "./Types.sol";
 
 interface ILido {
+    function MAX_ALLOWABLE_DIFFERENCE() external view returns(uint128);
+
     function developers() external view returns(address);
 
     function deposit(uint256 amount) external returns (uint256);

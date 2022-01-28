@@ -130,6 +130,9 @@ contract Lido is stKSM, Initializable {
     // withdrawal contract
     address public WITHDRAWAL;
 
+    // Max allowable difference for oracle reports
+    uint128 public MAX_ALLOWABLE_DIFFERENCE;
+
     // Ledger address by stash account id
     mapping(bytes32 => address) private ledgerByStash;
 
@@ -193,6 +196,7 @@ contract Lido is stKSM, Initializable {
     * @param _oracleMaster - oracle master address
     * @param _withdrawal - withdrawal address
     * @param _depositCap - cap for deposits
+    * @param _maxAllowableDifference - max allowable difference for oracle reports
     */
     function initialize(
         address _authManager,
@@ -202,7 +206,8 @@ contract Lido is stKSM, Initializable {
         address _treasury,
         address _oracleMaster,
         address _withdrawal,
-        uint256 _depositCap
+        uint256 _depositCap,
+        uint128 _maxAllowableDifference
     ) external initializer {
         require(_depositCap > 0, "LIDO: ZERO_CAP");
         require(_vKSM != address(0), "LIDO: INCORRECT_VKSM_ADDRESS");
@@ -231,6 +236,8 @@ contract Lido is stKSM, Initializable {
 
         WITHDRAWAL = _withdrawal;
         IWithdrawal(WITHDRAWAL).setStKSM(address(this));
+
+        MAX_ALLOWABLE_DIFFERENCE = _maxAllowableDifference;
     }
 
     /**
@@ -262,6 +269,11 @@ contract Lido is stKSM, Initializable {
     function setLedgerBeacon(address _ledgerBeacon) external auth(ROLE_BEACON_MANAGER) {
         require(_ledgerBeacon != address(0), "LIDO: INCORRECT_BEACON_ADDRESS");
         LEDGER_BEACON = _ledgerBeacon;
+    }
+
+    function setMaxAllowableDifference(uint128 _maxAllowableDifference) external auth(ROLE_BEACON_MANAGER) {
+        require(_maxAllowableDifference > 0, "LIDO: INCORRECT_MAX_ALLOWABLE_DIFFERENCE");
+        MAX_ALLOWABLE_DIFFERENCE = _maxAllowableDifference;
     }
 
     /**

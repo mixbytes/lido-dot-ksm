@@ -96,6 +96,7 @@ def test_check_queue(lido, oracle_master, vKSM, withdrawal, accounts):
 
 def test_losses_distribution(lido, oracle_master, vKSM, withdrawal, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
+    lido.setMaxAllowableDifference(5100, {'from': accounts[0]})
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger("0x10", "0x11")

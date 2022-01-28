@@ -14,56 +14,6 @@ import "../interfaces/ILido.sol";
 
 
 contract Controller is Initializable {
-    // ledger controller account
-    uint16 public rootDerivativeIndex;
-
-    // vKSM precompile
-    IERC20 internal VKSM;
-
-    // relay call builder precompile
-    IRelayEncoder internal RELAY_ENCODER;
-
-    // xcm transactor precompile
-    IXcmTransactor internal XCM_TRANSACTOR;
-
-    // xTokens precompile
-    IxTokens internal X_TOKENS;
-
-    // LIDO address
-    address public LIDO;
-
-    // Second layer derivative-proxy account to index
-    mapping(address => uint16) public senderToIndex;
-
-    // Index to second layer derivative-proxy account
-    mapping(uint16 => bytes32) public indexToAccount;
-
-    // Enumerator for weights
-    enum WEIGHT {
-        AS_DERIVATIVE,              // 410_000_000
-        BOND_BASE,                  // 600_000_000
-        BOND_EXTRA_BASE,            // 1_100_000_000
-        UNBOND_BASE,                // 1_250_000_000
-        WITHDRAW_UNBONDED_BASE,     // 500_000_000
-        WITHDRAW_UNBONDED_PER_UNIT, // 60_000
-        REBOND_BASE,                // 1_200_000_000
-        REBOND_PER_UNIT,            // 40_000
-        CHILL_BASE,                 // 900_000_000
-        NOMINATE_BASE,              // 1_000_000_000
-        NOMINATE_PER_UNIT,          // 31_000_000
-        TRANSFER_TO_PARA_BASE,      // 700_000_000
-        TRANSFER_TO_RELAY_BASE      // 4_000_000_000
-    }
-
-    // Constant for max weight
-    uint64 public MAX_WEIGHT;// = 1_835_300_000;
-
-    // Array with current weights
-    uint64[] public weights;
-
-    // Controller manager role
-    bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
-
     // Event emitted when weight updated
     event WeightUpdated (
         uint8 index,
@@ -132,6 +82,62 @@ contract Controller is Initializable {
         uint256 amount
     );
 
+    // ledger controller account
+    uint16 public rootDerivativeIndex;
+
+    // vKSM precompile
+    IERC20 internal VKSM;
+
+    // relay call builder precompile
+    IRelayEncoder internal RELAY_ENCODER;
+
+    // xcm transactor precompile
+    IXcmTransactor internal XCM_TRANSACTOR;
+
+    // xTokens precompile
+    IxTokens internal X_TOKENS;
+
+    // LIDO address
+    address public LIDO;
+
+    // first hex for encodeTransfer
+    bytes public hex1;
+
+    // second hex for encodeTransfer
+    bytes public hex2;
+
+    // Second layer derivative-proxy account to index
+    mapping(address => uint16) public senderToIndex;
+
+    // Index to second layer derivative-proxy account
+    mapping(uint16 => bytes32) public indexToAccount;
+
+    // Enumerator for weights
+    enum WEIGHT {
+        AS_DERIVATIVE,              // 410_000_000 // TODO: 300_000_000 (update all weights)
+        BOND_BASE,                  // 600_000_000
+        BOND_EXTRA_BASE,            // 1_100_000_000
+        UNBOND_BASE,                // 1_250_000_000
+        WITHDRAW_UNBONDED_BASE,     // 500_000_000
+        WITHDRAW_UNBONDED_PER_UNIT, // 60_000
+        REBOND_BASE,                // 1_200_000_000
+        REBOND_PER_UNIT,            // 40_000
+        CHILL_BASE,                 // 900_000_000
+        NOMINATE_BASE,              // 1_000_000_000
+        NOMINATE_PER_UNIT,          // 31_000_000
+        TRANSFER_TO_PARA_BASE,      // 700_000_000
+        TRANSFER_TO_RELAY_BASE      // 4_000_000_000
+    }
+
+    // Constant for max weight
+    uint64 public MAX_WEIGHT;// = 1_835_300_000;
+
+    // Array with current weights
+    uint64[] public weights;
+
+    // Controller manager role
+    bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
+
     // Allows function calls only for registered ledgers
     modifier onlyRegistred() {
         require(senderToIndex[msg.sender] != 0, "CONTROLLER: UNREGISTERED_SENDER");
@@ -157,13 +163,17 @@ contract Controller is Initializable {
     * @param _relayEncoder - relayEncoder(relaychain calls builder) contract address
     * @param _xcmTransactor - xcmTransactor(relaychain calls relayer) contract address
     * @param _xTokens - minimal allowed nominator balance
+    * @param _hex1 - first hex for encodeTransfer
+    * @param _hex2 - second hex for encodeTransfer
     */
     function initialize(
         uint16 _rootDerivativeIndex,
         address _vKSM,
         address _relayEncoder,
         address _xcmTransactor,
-        address _xTokens
+        address _xTokens,
+        bytes calldata _hex1,
+        bytes calldata _hex2
     ) external initializer {
         require(address(VKSM) == address(0), "CONTROLLER: ALREADY_INITIALIZED");
 
@@ -173,6 +183,9 @@ contract Controller is Initializable {
         RELAY_ENCODER = IRelayEncoder(_relayEncoder);
         XCM_TRANSACTOR = IXcmTransactor(_xcmTransactor);
         X_TOKENS = IxTokens(_xTokens);
+
+        hex1 = _hex1;
+        hex2 = _hex2;
     }
 
     /**
@@ -189,6 +202,16 @@ contract Controller is Initializable {
     */
     function setMaxWeight(uint64 _maxWeight) external auth(ROLE_CONTROLLER_MANAGER) {
         MAX_WEIGHT = _maxWeight;
+    }
+
+    /**
+    * @notice Set new hexes parametes for encodeTransfer
+    * @param _hex1 - first hex for encodeTransfer
+    * @param _hex2 - second hex for encodeTransfer
+    */
+    function updateHexParameters(bytes calldata _hex1, bytes calldata _hex2) external auth(ROLE_CONTROLLER_MANAGER) {
+        hex1 = _hex1;
+        hex2 = _hex2;
     }
 
     /**
@@ -412,9 +435,9 @@ contract Controller is Initializable {
     */
     function encodeReverseTransfer(address to, uint256 amount) internal returns(bytes memory) {
         return bytes.concat(
-            hex"630201000100a10f0100010300",
+            hex1,
             abi.encodePacked(to),
-            hex"010400000000",
+            hex2,
             scaleCompactUint(amount),
             hex"00000000"
         );

@@ -228,6 +228,11 @@ def main():
     withdrawal_cap = CONFIG['withdrawal_cap']
     deposit_cap = CONFIG['deposit_cap']
 
+    hex1 = CONFIG['hex1']
+    hex2 = CONFIG['hex2']
+
+    max_difference = CONFIG['oracle_limit']
+
     root_derivative_index = CONFIG['root_derivative_index']
     root_derivative_account = ss58decode(get_derivative_account(CONFIG['sovereign_account'], root_derivative_index))
     print(f'{Fore.GREEN}Root derivative account: {root_derivative_account}')
@@ -242,7 +247,7 @@ def main():
 
     proxy_admin = deploy_proxy_admin(deployer)
 
-    controller = deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token)
+    controller = deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2)
 
     auth_manager = deploy_auth_manager(deployer, proxy_admin, auth_super_admin)
 
@@ -259,7 +264,7 @@ def main():
 
     withdrawal = deploy_withdrawal(deployer, proxy_admin, withdrawal_cap, vksm)
 
-    lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal, deposit_cap)
+    lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal, deposit_cap, max_difference)
 
     print(f"\n{Fore.GREEN}Configuring controller...")
     controller.setLido(lido, get_opts(deployer))

@@ -13,6 +13,9 @@ networks:
         quorum: 2
         withdrawal_cap: 40
         deposit_cap: 10_000_000_000_000_000
+        hex1: "0x630201000100a10f0100010300"
+        hex2: "0x010400000000"
+        oracle_limit: 3000 # 30 %
         precompiles:
             vksm: "0xFFFFFFFF1FCACBD218EDC0EBA20FC2308C778080"
             xcm_transactor: "0x0000000000000000000000000000000000000806"

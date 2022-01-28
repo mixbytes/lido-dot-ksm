@@ -129,7 +129,6 @@ contract Ledger {
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
 
         MINIMUM_BALANCE = _minimumBalance;
-//        vKSM.approve(_controller, type(uint256).max);
     }
 
     /**
@@ -197,6 +196,16 @@ contract Ledger {
             return;
         }
         uint128 _cachedTotalBalance = cachedTotalBalance;
+        
+        if (cachedTotalBalance > 0) {
+            uint128 relativeDifference = _report.stashBalance > cachedTotalBalance ? 
+                _report.stashBalance - cachedTotalBalance :
+                cachedTotalBalance - _report.stashBalance;
+            // NOTE: 1 / 10000 - one base point
+            relativeDifference = relativeDifference * 10000 / cachedTotalBalance;
+            require(relativeDifference < LIDO.MAX_ALLOWABLE_DIFFERENCE(), "LEDGER: DIFFERENCE_EXCEEDS_BALANCE");
+        }
+
         if (_cachedTotalBalance < _report.stashBalance) { // if cached balance > real => we have reward
             uint128 reward = _report.stashBalance - _cachedTotalBalance;
             LIDO.distributeRewards(reward, _report.stashBalance);
