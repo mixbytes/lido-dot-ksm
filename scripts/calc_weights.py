@@ -21,7 +21,7 @@ def rw(rd, wr):
     return read * rd + write * wr
 
 if (NETWORK == "kusama"):
-    as_derevative = 150_000_000 * 2
+    as_derevative = 150_000_000 * 2 # TODO: change ((as_derevative + rw(1,1)) * 2)
     bond_base = 47_083_000 + rw(5, 4)
     bond_extra_base = 79_677_000 + rw(8, 7)
     unbond_base = 87_481_000 + rw(12, 8)
@@ -36,7 +36,7 @@ if (NETWORK == "kusama"):
     transfer_to_relay_base = 4_000_000_000
 
 if (NETWORK == "moonbase"):
-    as_derevative = 150_000_000 * 2
+    as_derevative = 131_000_000 * 2
     bond_base = 47_262_000 + rw(5, 4)
     bond_extra_base = 79_887_000 + rw(8, 7)
     unbond_base = 85_963_000 + rw(12, 8)
@@ -47,7 +47,7 @@ if (NETWORK == "moonbase"):
     chill_base = 51_777_000 + rw(8, 6)
     rebond_base = 76_896_000 + rw(9, 8)
     rebond_per_unit = 51_000
-    transfer_to_para_base = 1_100_000_000 # TODO: change
+    transfer_to_para_base = 875_000_000
     transfer_to_relay_base = 4_000_000_000
 
 print('         - ' + '{0:_}'.format(as_derevative) + ' #AS_DERIVATIVE')
