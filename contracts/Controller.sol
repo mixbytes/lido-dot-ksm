@@ -114,7 +114,7 @@ contract Controller is Initializable {
 
     // Enumerator for weights
     enum WEIGHT {
-        AS_DERIVATIVE,              // 410_000_000 // TODO: 300_000_000 (update all weights)
+        AS_DERIVATIVE,              // 410_000_000
         BOND_BASE,                  // 600_000_000
         BOND_EXTRA_BASE,            // 1_100_000_000
         UNBOND_BASE,                // 1_250_000_000
@@ -214,7 +214,7 @@ contract Controller is Initializable {
     function setReverseTransferFee(uint256 _reverseTransferFee) external auth(ROLE_CONTROLLER_MANAGER) {
         REVERSE_TRANSFER_FEE = _reverseTransferFee;
     }
-    
+
     /**
     * @notice Set new hexes parametes for encodeTransfer
     * @param _hex1 - first hex for encodeTransfer

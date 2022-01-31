@@ -9,8 +9,6 @@ import yaml
 from pathlib import Path
 from colorama import Fore, Back, Style, init
 
-from tests.conftest import withdrawal
-
 init(autoreset=True)
 
 
@@ -62,7 +60,7 @@ DEPLOYMENTS = load_deployments(NETWORK)
 
 # global configs
 CONFS = 1
-GAS_PRICE = "1 gwei"
+GAS_PRICE = "10 gwei"
 GAS_LIMIT = 10*10**6
 
 
@@ -190,12 +188,12 @@ def deploy_wstksm(deployer, lido, vksm):
     return deploy(WstKSM, deployer, lido, vksm)
 
 
-def deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token):
-    return deploy_with_proxy(Controller, proxy_admin, deployer, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token)
+def deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2):
+    return deploy_with_proxy(Controller, proxy_admin, deployer, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2)
 
 
-def deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master):
-    return deploy_with_proxy(Lido, proxy_admin, deployer, auth_manager, vksm, controller, developers, treasury, oracle_master)
+def deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal, deposit_cap, max_difference):
+    return deploy_with_proxy(Lido, proxy_admin, deployer, auth_manager, vksm, controller, developers, treasury, oracle_master, withdrawal, deposit_cap, max_difference)
 
 def deploy_ledger_beacon(deployer, _ledger_clone, _lido):
     return deploy(LedgerBeacon, deployer, _ledger_clone, _lido)

@@ -5,8 +5,8 @@ networks:
         treasury: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
         developers: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
         sovereign_account: "5Ec4AhPZk8STuex8Wsi9TwDtJQxKqzPJRCH7348Xtcs9vZLJ"
-        root_derivative_index: 10
-        stash_indexes: [40, 41, 42]
+        root_derivative_index: 30
+        stash_indexes: [1, 2, 3]
         oracles:
          - "0x04a72797360815e33Fc6676Bf0b02F7D3E901c78"
          - "0x21aeb270e48bFB111F8d1e64EACe51C3fE43E944"
@@ -39,7 +39,7 @@ networks:
             ROLE_CONTROLLER_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
             ROLE_SET_TREASURY: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
             ROLE_SET_DEVELOPERS: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
-        controller_initial_balance: 15 * 10**12
+        controller_initial_balance: 15_000_000_000_000
         xcm_max_weight: 1_835_300_000
         xcm_weights:
          - 262_000_000   #AS_DERIVATIVE
