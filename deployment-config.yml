@@ -26,6 +26,7 @@ networks:
             max_validators_per_ledger: 16
             min_nominator_bond: 1_000_000_000_000 # 100_000_000_000 for Kusama
             min_active_balance: 1_000
+            reverse_transfer_fee: 4_000_000
         roles:
             ROLE_BEACON_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"
             ROLE_SPEC_MANAGER: "0x499Ab66749B8eBc370CC73458D33940ae13f5D99"

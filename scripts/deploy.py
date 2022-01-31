@@ -225,6 +225,7 @@ def main():
     max_validators_per_ledger = CONFIG['relay_spec']['max_validators_per_ledger']
     min_nominator_bond = CONFIG['relay_spec']['min_nominator_bond']
     min_active_balance = CONFIG['relay_spec']['min_active_balance']
+    reverse_transfer_fee = CONFIG['relay_spec']['reverse_transfer_fee']
     withdrawal_cap = CONFIG['withdrawal_cap']
     deposit_cap = CONFIG['deposit_cap']
 
@@ -270,6 +271,7 @@ def main():
     controller.setLido(lido, get_opts(deployer))
     controller.setMaxWeight(xcm_max_weight, get_opts(roles['ROLE_CONTROLLER_MANAGER']))
     controller.setWeights([w | (1<<65) for w in xcm_weights], get_opts(roles['ROLE_CONTROLLER_MANAGER']))
+    controller.setReverseTransferFee(reverse_transfer_fee, get_opts(roles['ROLE_CONTROLLER_MANAGER']))
 
     ledger_clone = deploy_ledger_clone(deployer)
 
