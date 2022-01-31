@@ -135,6 +135,9 @@ contract Controller is Initializable {
     // Array with current weights
     uint64[] public weights;
 
+    // Parachain side fee on reverse transfer
+    uint256 public REVERSE_TRANSFER_FEE;// = 4_000_000
+
     // Controller manager role
     bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
 
@@ -204,6 +207,13 @@ contract Controller is Initializable {
         MAX_WEIGHT = _maxWeight;
     }
 
+    /**
+    * @notice Set new REVERSE_TRANSFER_FEE
+    * @param _reverseTransferFee - new fee
+    */
+    function setReverseTransferFee(uint256 _reverseTransferFee) external auth(ROLE_CONTROLLER_MANAGER) {
+        REVERSE_TRANSFER_FEE = _reverseTransferFee;
+    }
     /**
     * @notice Set new hexes parametes for encodeTransfer
     * @param _hex1 - first hex for encodeTransfer
@@ -366,11 +376,23 @@ contract Controller is Initializable {
     */
     function transferToParachain(uint256 amount) external onlyRegistred {
         // to - msg.sender, from - getSenderIndex()
+        uint256 parachain_fee = REVERSE_TRANSFER_FEE;
+
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.TRANSFER_TO_PARA_BASE),
             encodeReverseTransfer(msg.sender, amount)
         );
+
+        // compensate parachain side fee on reverse transfer
+        if (amount <= parachain_fee) {
+            // if amount less than fee just transfer amount
+            VKSM.transfer(msg.sender, amount);
+        }
+        else {
+            // else just compensate fee
+            VKSM.transfer(msg.sender, parachain_fee);
+        }
 
         emit TransferToParachain(getSenderAccount(), msg.sender, amount);
     }
