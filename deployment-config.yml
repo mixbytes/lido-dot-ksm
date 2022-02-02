@@ -42,17 +42,16 @@ networks:
         controller_initial_balance: 15_000_000_000_000
         xcm_max_weight: 1_835_300_000
         xcm_weights:
-         - 262_000_000   #AS_DERIVATIVE
-         - 572_262_000   #BOND_BASE
-         - 979_887_000   #BOND_EXTRA_BASE
-         - 1_185_963_000 #UNBOND_BASE
-         - 1_497_077_000 #WITHDRAW_UNBONDED_KILL
+         - 259_084_000   #AS_DERIVATIVE
+         - 587_057_000   #BOND_BASE
+         - 1_002_780_000 #BOND_EXTRA_BASE
+         - 1_211_135_000 #UNBOND_BASE
+         - 1_514_350_000 #WITHDRAW_UNBONDED_KILL
          - 0             #WITHDRAW_UNBONDED_PER_UNIT
-         - 1_101_896_000 #REBOND_BASE
-         - 51_000        #REBOND_PER_UNIT
-         - 851_777_000   #CHILL_BASE
-         - 959_971_000   #NOMINATE_BASE
-         - 29_119_000    #NOMINATE_PER_UNIT
+         - 1_123_525_000 #REBOND_BASE
+         - 69_000        #REBOND_PER_UNIT
+         - 862_127_000   #CHILL_BASE
+         - 973_227_000   #NOMINATE_BASE
+         - 29_820_000    #NOMINATE_PER_UNIT
          - 875_000_000   #TRANSFER_TO_PARA_BASE
          - 4_000_000_000 #TRANSFER_TO_RELAY_BASE
-

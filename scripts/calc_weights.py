@@ -36,17 +36,17 @@ if (NETWORK == "kusama"):
     transfer_to_relay_base = 4_000_000_000
 
 if (NETWORK == "moonbase"):
-    as_derevative = 131_000_000 * 2
-    bond_base = 47_262_000 + rw(5, 4)
-    bond_extra_base = 79_887_000 + rw(8, 7)
-    unbond_base = 85_963_000 + rw(12, 8)
-    withdraw_unbonded_kill = 72_077_000 + rw(13, 11)
+    as_derevative = (4_542_000 + rw(1, 1)) * 2
+    bond_base = 62_057_000 + rw(5, 4)
+    bond_extra_base = 102_780_000 + rw(8, 7)
+    unbond_base = 111_135_000 + rw(12, 8)
+    withdraw_unbonded_kill = 89_350_000 + rw(13, 11)
     withdraw_unbonded_per_unit = 0
-    nominate_base = 59_971_000 + rw(12, 6)
-    nominate_per_unit = 4_119_000 + rw(1, 0)
-    chill_base = 51_777_000 + rw(8, 6)
-    rebond_base = 76_896_000 + rw(9, 8)
-    rebond_per_unit = 51_000
+    nominate_base = 73_227_000 + rw(12, 6)
+    nominate_per_unit = 4_820_000 + rw(1, 0)
+    chill_base = 62_127_000 + rw(8, 6)
+    rebond_base = 98_525_000 + rw(9, 8)
+    rebond_per_unit = 69_000
     transfer_to_para_base = 875_000_000
     transfer_to_relay_base = 4_000_000_000
 
