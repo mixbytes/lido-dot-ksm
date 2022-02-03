@@ -124,8 +124,14 @@ class RelayChain:
     def disable_bond(self):
         self.bond_enabled = False
 
+    def enable_bond(self):
+        self.bond_enabled = True
+
     def disable_transfer(self):
         self.transfer_enabled = False
+
+    def enable_transfer(self):
+        self.transfer_enabled = True
 
     def _ledger_idx_by_stash_account(self, stash_account):
         for i in range(len(self.ledgers)):

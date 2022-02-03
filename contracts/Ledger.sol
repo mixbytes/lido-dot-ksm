@@ -248,13 +248,15 @@ contract Ledger {
                 relayFreeBalance -= 1;
             }
 
+            pendingBonds = 0;
+            
             if (relayFreeBalance > 0 &&
                 (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle)) {
                 CONTROLLER.bondExtra(relayFreeBalance);
-                pendingBonds += relayFreeBalance;
+                pendingBonds = relayFreeBalance;
             } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
                 CONTROLLER.bond(controllerAccount, relayFreeBalance);
-                pendingBonds += relayFreeBalance;
+                pendingBonds = relayFreeBalance;
             }
         }
         else if (_report.stashBalance > _ledgerStake) { // parachain deficit
@@ -336,6 +338,8 @@ contract Ledger {
         // wait for the upward transfer to complete
         uint128 _transferUpwardBalance = transferUpwardBalance;
         if (_transferUpwardBalance > 0) {
+            // NOTE: pending Bonds allows to control balance which was bonded in previous era, but not in lockedBalance yet
+            // (see single_ledger_test:test_equal_deposit_bond)
             uint128 ledgerFreeBalance = (totalBalance - lockedBalance);
             int128 freeBalanceDiff = int128(_report.getFreeBalance()) - int128(ledgerFreeBalance);
             int128 expectedBalanceDiff = int128(transferUpwardBalance) - int128(pendingBonds);
@@ -344,7 +348,7 @@ contract Ledger {
                 cachedTotalBalance += _transferUpwardBalance;
 
                 transferUpwardBalance = 0;
-                pendingBonds = 0;
+                // pendingBonds = 0;
                 emit UpwardComplete(_transferUpwardBalance);
                 _transferUpwardBalance = 0;
             }

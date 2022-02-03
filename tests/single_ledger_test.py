@@ -53,7 +53,7 @@ def test_nominate_ledger(lido, oracle_master, vKSM, accounts):
     lido.nominate(relay.ledgers[0].stash_account, ['0x123'])
 
 
-def test_deposit_bond_disable(lido, oracle_master, vKSM, accounts):
+def test_deposit_bond_disable(lido, Ledger, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
@@ -65,6 +65,9 @@ def test_deposit_bond_disable(lido, oracle_master, vKSM, accounts):
 
     relay.new_era()
 
+    ledger = Ledger.at(relay.ledgers[0].ledger_address)
+    assert ledger.pendingBonds() == 0
+
     assert relay.ledgers[0].free_balance == deposit
     assert relay.ledgers[0].active_balance == 0
 
@@ -72,18 +75,88 @@ def test_deposit_bond_disable(lido, oracle_master, vKSM, accounts):
     lido.deposit(deposit2, {'from': accounts[0]})
 
     relay.new_era()
+    assert ledger.pendingBonds() == 20 * 10**18
 
     assert relay.ledgers[0].active_balance == 0
     assert relay.ledgers[0].free_balance == deposit + deposit2
     assert lido.getTotalPooledKSM() == deposit + deposit2
 
+    relay.new_era()
+    assert ledger.pendingBonds() == 50 * 10**18
+
+    relay.new_era()
+    assert ledger.pendingBonds() == 50 * 10**18
+
     deposit3 = 5 * 10**18
     lido.deposit(deposit3, {'from': accounts[0]})
 
     relay.new_era()
+    assert ledger.pendingBonds() == 50 * 10**18
+
     assert relay.ledgers[0].active_balance == 0
     assert relay.ledgers[0].free_balance == deposit + deposit2 + deposit3
     assert lido.getTotalPooledKSM() == deposit + deposit2 + deposit3
+
+
+def test_deposit_bond_disable_enable(lido, Ledger, oracle_master, vKSM, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+    relay.disable_bond()
+
+    deposit = 20 * 10**18
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    relay.new_era()
+
+    ledger = Ledger.at(relay.ledgers[0].ledger_address)
+    assert ledger.pendingBonds() == 0
+
+    assert relay.ledgers[0].free_balance == deposit
+    assert relay.ledgers[0].active_balance == 0
+
+    deposit2 = 30 * 10**18
+    lido.deposit(deposit2, {'from': accounts[0]})
+
+    relay.new_era()
+    assert ledger.pendingBonds() == 20 * 10**18
+
+    assert relay.ledgers[0].active_balance == 0
+    assert relay.ledgers[0].free_balance == deposit + deposit2
+    assert lido.getTotalPooledKSM() == deposit + deposit2
+
+    relay.new_era()
+    assert ledger.pendingBonds() == 50 * 10**18
+
+    relay.new_era()
+    assert ledger.pendingBonds() == 50 * 10**18
+
+    relay.enable_bond()
+
+    relay.new_era()
+    assert relay.ledgers[0].active_balance == deposit + deposit2
+    assert relay.ledgers[0].free_balance == 0
+    assert ledger.pendingBonds() == 50 * 10**18
+
+    relay.disable_transfer()
+    relay.new_era()
+    assert ledger.pendingBonds() == 0
+
+    deposit3 = 5 * 10**18
+    lido.deposit(deposit3, {'from': accounts[0]})
+
+    relay.new_era()
+    assert ledger.pendingBonds() == 0
+
+    assert relay.ledgers[0].active_balance == deposit + deposit2
+    assert relay.ledgers[0].free_balance == 0
+    assert lido.getTotalPooledKSM() == deposit + deposit2 + deposit3
+
+    relay.new_era()
+    assert ledger.pendingBonds() == 0
+    assert lido.getTotalPooledKSM() == deposit + deposit2 + deposit3
+
 
 def test_equal_deposit_bond(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
