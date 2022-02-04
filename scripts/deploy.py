@@ -224,6 +224,7 @@ def main():
     min_nominator_bond = CONFIG['relay_spec']['min_nominator_bond']
     min_active_balance = CONFIG['relay_spec']['min_active_balance']
     reverse_transfer_fee = CONFIG['relay_spec']['reverse_transfer_fee']
+    max_unlocking_chunks = CONFIG['relay_spec']['max_unlocking_chunks']
     withdrawal_cap = CONFIG['withdrawal_cap']
     deposit_cap = CONFIG['deposit_cap']
 
@@ -280,7 +281,7 @@ def main():
     print(f'\n{Fore.GREEN}Lido configuration...')
     lido.setLedgerBeacon(ledger_beacon, get_opts(roles['ROLE_BEACON_MANAGER']))
     lido.setLedgerFactory(ledger_factory, get_opts(roles['ROLE_BEACON_MANAGER']))
-    lido.setRelaySpec((1, era_sec, era_sec * (28+3), max_validators_per_ledger, min_nominator_bond, min_active_balance), get_opts(roles['ROLE_SPEC_MANAGER']))
+    lido.setRelaySpec((1, era_sec, era_sec * (28+3), max_validators_per_ledger, min_nominator_bond, min_active_balance, max_unlocking_chunks), get_opts(roles['ROLE_SPEC_MANAGER']))
     oracle_master.setAnchorEra(0, 1, era_sec, get_opts(roles['ROLE_SPEC_MANAGER']))
 
     print(f'\n{Fore.GREEN}Adding oracle members...')

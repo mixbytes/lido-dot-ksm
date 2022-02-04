@@ -55,5 +55,6 @@ interface Types {
         uint16 maxValidatorsPerLedger;
         uint128 minNominatorBalance;
         uint128 ledgerMinimumActiveBalance;
+        uint256 maxUnlockingChunks;
     }
 }

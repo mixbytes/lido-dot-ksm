@@ -8,6 +8,7 @@ interface ILedgerFactory {
         address _vKSM,
         address _controller,
         uint128 _minNominatorBalance,
-        uint128 _minimumBalance
+        uint128 _minimumBalance,
+        uint256 _maxUnlockingChunks
     ) external returns (address);
 }

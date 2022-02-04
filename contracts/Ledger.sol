@@ -73,6 +73,9 @@ contract Ledger {
     // Ledger manager role
     bytes32 internal constant ROLE_LEDGER_MANAGER = keccak256("ROLE_LEDGER_MANAGER");
 
+    // Maximum allowable unlocking chunks amount
+    uint256 public MAX_UNLOCKING_CHUNKS;
+
     // Allows function calls only from LIDO
     modifier onlyLido() {
         require(msg.sender == address(LIDO), "LEDGER: NOT_LIDO");
@@ -101,6 +104,7 @@ contract Ledger {
     * @param _minNominatorBalance - minimal allowed nominator balance
     * @param _lido - LIDO address
     * @param _minimumBalance - minimal allowed active balance for ledger
+    * @param _maxUnlockingChunks - maximum amount of unlocking chunks
     */
     function initialize(
         bytes32 _stashAccount,
@@ -109,7 +113,8 @@ contract Ledger {
         address _controller,
         uint128 _minNominatorBalance,
         address _lido,
-        uint128 _minimumBalance
+        uint128 _minimumBalance,
+        uint256 _maxUnlockingChunks
     ) external {
         require(address(VKSM) == address(0), "LEDGER: ALREADY_INITIALIZED");
 
@@ -129,6 +134,8 @@ contract Ledger {
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
 
         MINIMUM_BALANCE = _minimumBalance;
+        
+        MAX_UNLOCKING_CHUNKS = _maxUnlockingChunks;
     }
 
     /**
@@ -136,10 +143,12 @@ contract Ledger {
     * @dev That method designed to be called by lido contract when relay spec is changed
     * @param _minNominatorBalance - minimal allowed nominator balance
     * @param _minimumBalance - minimal allowed ledger active balance
+    * @param _maxUnlockingChunks - maximum amount of unlocking chunks
     */
-    function setRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance) external onlyLido {
+    function setRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance, uint256 _maxUnlockingChunks) external onlyLido {
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
         MINIMUM_BALANCE = _minimumBalance;
+        MAX_UNLOCKING_CHUNKS = _maxUnlockingChunks;
     }
 
     /**
@@ -239,7 +248,8 @@ contract Ledger {
 
             // rebond all always
             if (unlockingBalance > 0) {
-                CONTROLLER.rebond(unlockingBalance, _report.unlocking.length);
+                // NOTE: we always should pass maximum length and pallet return unused weight
+                CONTROLLER.rebond(unlockingBalance, MAX_UNLOCKING_CHUNKS);
             }
 
             uint128 relayFreeBalance = _report.getFreeBalance();

@@ -245,6 +245,12 @@ contract Withdrawal is Initializable {
                 }
             }
         }
+        else {
+            // NOTE: This means that we have only one batch that no in the pool (batch share price == 10**12)
+            if (batchVirtualXcKSMAmount > 0) {
+                batchKSMPrice = 10**12;
+            }
+        }
         return batchKSMPrice;
     }
 

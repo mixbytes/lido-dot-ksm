@@ -11,7 +11,8 @@ interface ILedger {
         address controller,
         uint128 minNominatorBalance,
         address lido,
-        uint128 _minimumBalance
+        uint128 _minimumBalance,
+        uint256 _maxUnlockingChunks
     ) external;
 
     function pushData(uint64 eraId, Types.OracleData calldata staking) external;
@@ -26,7 +27,7 @@ interface ILedger {
 
     function totalBalance() external view returns (uint128);
 
-    function setRelaySpecs(uint128 minNominatorBalance, uint128 minimumBalance) external;
+    function setRelaySpecs(uint128 minNominatorBalance, uint128 minimumBalance, uint256 _maxUnlockingChunks) external;
 
     function cachedTotalBalance() external view returns (uint128);
 }

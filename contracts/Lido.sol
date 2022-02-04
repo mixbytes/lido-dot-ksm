@@ -303,10 +303,11 @@ contract Lido is stKSM, Initializable {
         require(_relaySpec.secondsPerEra > 0, "LIDO: BAD_SECONDS_PER_ERA");
         require(_relaySpec.unbondingPeriod > 0, "LIDO: BAD_UNBONDING_PERIOD");
         require(_relaySpec.maxValidatorsPerLedger > 0, "LIDO: BAD_MAX_VALIDATORS_PER_LEDGER");
+        require(_relaySpec.maxUnlockingChunks > 0, "LIDO: BAD_MAX_UNLOCKING_CHUNKS");
 
         RELAY_SPEC = _relaySpec;
 
-        _updateLedgerRelaySpecs(_relaySpec.minNominatorBalance, _relaySpec.ledgerMinimumActiveBalance);
+        _updateLedgerRelaySpecs(_relaySpec.minNominatorBalance, _relaySpec.ledgerMinimumActiveBalance, _relaySpec.maxUnlockingChunks);
     }
 
     /**
@@ -463,7 +464,8 @@ contract Lido is stKSM, Initializable {
             address(VKSM),
             CONTROLLER,
             RELAY_SPEC.minNominatorBalance,
-            RELAY_SPEC.ledgerMinimumActiveBalance
+            RELAY_SPEC.ledgerMinimumActiveBalance,
+            RELAY_SPEC.maxUnlockingChunks
         );
 
         enabledLedgers.push(ledger);
@@ -862,14 +864,15 @@ contract Lido is stKSM, Initializable {
     * @notice Set new minimum balance for ledger
     * @param _minNominatorBalance - new minimum nominator balance
     * @param _minimumBalance - new minimum active balance for ledger
+    * @param _maxUnlockingChunks - new maximum unlocking chunks
     */
-    function _updateLedgerRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance) internal {
+    function _updateLedgerRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance, uint256 _maxUnlockingChunks) internal {
         for (uint i = 0; i < enabledLedgers.length; i++) {
-            ILedger(enabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
+            ILedger(enabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance, _maxUnlockingChunks);
         }
 
         for (uint i = 0; i < disabledLedgers.length; i++) {
-            ILedger(disabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance);
+            ILedger(disabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance, _maxUnlockingChunks);
         }
     }
 
