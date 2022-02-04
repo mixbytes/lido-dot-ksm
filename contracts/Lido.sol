@@ -64,17 +64,8 @@ contract Lido is stKSM, Initializable {
         address addr
     );
 
-    // Redeemed vKSM claimed
-    struct Claim {
-        uint256 balance;
-        uint64 timeout;
-    }
-
     // sum of all deposits and rewards
     uint256 public fundRaisedBalance;
-
-    // pending claims total
-    uint256 public pendingClaimsTotal;
 
     // haven't executed buffrered deposits
     uint256 public bufferedDeposits;
@@ -213,6 +204,8 @@ contract Lido is stKSM, Initializable {
         require(_vKSM != address(0), "LIDO: INCORRECT_VKSM_ADDRESS");
         require(_oracleMaster != address(0), "LIDO: INCORRECT_ORACLE_MASTER_ADDRESS");
         require(_withdrawal != address(0), "LIDO: INCORRECT_WITHDRAWAL_ADDRESS");
+        require(_authManager != address(0), "LIDO: INCORRECT_AUTHMANAGER_ADDRESS");
+        require(_controller != address(0), "LIDO: INCORRECT_CONTROLLER_ADDRESS");
 
         VKSM = IERC20(_vKSM);
         CONTROLLER = _controller;
@@ -298,10 +291,6 @@ contract Lido is stKSM, Initializable {
     * @param _relaySpec - new relaychain spec
     */
     function setRelaySpec(Types.RelaySpec calldata _relaySpec) external auth(ROLE_SPEC_MANAGER) {
-        require(ORACLE_MASTER != address(0), "LIDO: ORACLE_MASTER_UNDEFINED");
-        require(_relaySpec.genesisTimestamp > 0, "LIDO: BAD_GENESIS_TIMESTAMP");
-        require(_relaySpec.secondsPerEra > 0, "LIDO: BAD_SECONDS_PER_ERA");
-        require(_relaySpec.unbondingPeriod > 0, "LIDO: BAD_UNBONDING_PERIOD");
         require(_relaySpec.maxValidatorsPerLedger > 0, "LIDO: BAD_MAX_VALIDATORS_PER_LEDGER");
         require(_relaySpec.maxUnlockingChunks > 0, "LIDO: BAD_MAX_UNLOCKING_CHUNKS");
 
@@ -537,7 +526,7 @@ contract Lido is stKSM, Initializable {
 
         IOracleMaster(ORACLE_MASTER).removeLedger(_ledgerAddress);
 
-        VKSM.approve(address(ledger), 0);
+        IController(CONTROLLER).deleteSubAccount(_ledgerAddress);
 
         emit LedgerRemove(_ledgerAddress);
     }

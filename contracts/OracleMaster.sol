@@ -149,7 +149,7 @@ contract OracleMaster is Pausable {
     }
 
     /**
-    * @notice Return relay chain stash account addresses
+    * @notice Return relay chain stash account addresses. This function used in oracle service
     * @return Array of bytes32 relaychain stash accounts
     */
     function getStashAccounts() external view returns (bytes32[] memory) {
@@ -205,12 +205,11 @@ contract OracleMaster is Pausable {
     * @param _member proposed member address
     */
     function addOracleMember(address _member) external auth(ROLE_ORACLE_MEMBERS_MANAGER) {
-        require(address(0) != _member, "OM: BAD_ARGUMENT");
-        require(MEMBER_NOT_FOUND == _getMemberId(_member), "OM: MEMBER_EXISTS");
-        require(members.length < 254, "OM: MEMBERS_TOO_MANY");
+        require(_member != address(0), "OM: BAD_ARGUMENT");
+        require(_getMemberId(_member) == MEMBER_NOT_FOUND, "OM: MEMBER_EXISTS");
+        require(members.length < MAX_MEMBERS - 1, "OM: MEMBERS_TOO_MANY");
 
         members.push(_member);
-        require(members.length < MAX_MEMBERS, "OM: TOO_MANY_MEMBERS");
         emit MemberAdded(_member);
     }
 

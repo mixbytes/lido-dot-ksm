@@ -5,6 +5,8 @@ pragma solidity ^0.8.0;
 interface IController {
     function newSubAccount(uint16 index, bytes32 accountId, address paraAddress) external;
 
+    function deleteSubAccount(address paraAddress) external;
+
     function nominate(bytes32[] calldata _validators) external;
 
     function bond(bytes32 controller, uint256 amount) external;

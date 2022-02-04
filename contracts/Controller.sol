@@ -268,6 +268,17 @@ contract Controller is Initializable {
     }
 
     /**
+    * @notice Unregister ledger contract
+    * @param paraAddress - parachain address of ledger
+    */
+    function deleteSubAccount(address paraAddress) external onlyLido {
+        require(senderToIndex[paraAddress] > 0, "CONTROLLER: UNREGISTERED_LEDGER");
+
+        delete indexToAccount[senderToIndex[paraAddress]];
+        delete senderToIndex[paraAddress];
+    }
+
+    /**
     * @notice Nominate validators from ledger on relay chain
     * @param validators - validators addresses to nominate
     */
