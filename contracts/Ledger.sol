@@ -116,6 +116,7 @@ contract Ledger {
         uint128 _minimumBalance,
         uint256 _maxUnlockingChunks
     ) external {
+        require(_vKSM != address(0), "LEDGER: INCORRECT_VKSM");
         require(address(VKSM) == address(0), "LEDGER: ALREADY_INITIALIZED");
 
         // The owner of the funds
@@ -304,13 +305,10 @@ contract Ledger {
 
             // need to unbond if we still have deficit
             if (nonWithdrawableBalance < deficit) {
-                // todo drain stake if remaining balance is less than MIN_NOMINATOR_BALANCE
                 // NOTE: if ledger.active - forUnbond < min_balance => all active balance would be unbonded
                 // https://github.com/paritytech/substrate/blob/master/frame/staking/src/pallet/mod.rs#L858
                 uint128 forUnbond = deficit - nonWithdrawableBalance;
                 CONTROLLER.unbond(forUnbond);
-                // notice.
-                // deficit -= forUnbond;
             }
 
             // bond all remain free balance
