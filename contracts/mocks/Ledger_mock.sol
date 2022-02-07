@@ -14,7 +14,8 @@ contract LedgerMock {
         address _controller,
         uint128 _minNominatorBalance,
         address _lido,
-        uint128 _minimumBalance
+        uint128 _minimumBalance,
+        uint256 _maxUnlockingChunks
     ) external {
         LIDO = ILido(_lido);
     }

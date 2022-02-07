@@ -32,6 +32,7 @@ contract LedgerFactory {
     * @param _controller - xcmTransactor(relaychain calls relayer) contract address
     * @param _minNominatorBalance - minimal allowed nominator balance
     * @param _minimumBalance - minimal allowed active balance for ledger
+    * @param _maxUnlockingChunks - maximum amount of unlocking chunks
     */
     function createLedger(
         bytes32 _stashAccount,
@@ -39,7 +40,8 @@ contract LedgerFactory {
         address _vKSM,
         address _controller,
         uint128 _minNominatorBalance,
-        uint128 _minimumBalance
+        uint128 _minimumBalance,
+        uint256 _maxUnlockingChunks
     ) external returns (address) {
         require(msg.sender == LIDO, "LF: ONLY_LIDO");
 
@@ -54,7 +56,8 @@ contract LedgerFactory {
                     _controller,
                     _minNominatorBalance,
                     LIDO,
-                    _minimumBalance
+                    _minimumBalance,
+                    _maxUnlockingChunks
                 )
             )
         );

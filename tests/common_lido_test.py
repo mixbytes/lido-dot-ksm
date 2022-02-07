@@ -73,3 +73,9 @@ def test_fee_change_distribution(vKSM, LedgerMock, mocklido, mockledger, treasur
 
     with reverts("LIDO: FEE_DONT_ADD_UP"):
         mocklido.setFee(2001, 2000, 6000)
+
+
+def test_change_cap(lido, accounts):
+    cap = 100 * 10**12
+    lido.setDepositCap(100 * 10**12, {'from': accounts[0]})
+    assert lido.depositCap() == cap

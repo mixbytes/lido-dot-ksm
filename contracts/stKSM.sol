@@ -23,16 +23,6 @@ abstract contract stKSM is IERC20, Pausable {
 
     /**
      * @dev Storage position used for holding the total amount of shares in existence.
-     *
-     * The Lido protocol is built on top of Aragon and uses the Unstructured Storage pattern
-     * for value types:
-     *
-     * https://blog.openzeppelin.com/upgradeability-using-unstructured-storage
-     * https://blog.8bitzen.com/posts/20-02-2020-understanding-how-solidity-upgradeable-unstructured-proxies-work
-     *
-     * For reference types, conventional storage variables are used since it's non-trivial
-     * and error-prone to implement reference-type unstructured storage using Solidity v0.4;
-     * see https://github.com/lidofinance/lido-dao/issues/181#issuecomment-736098834
      */
     uint256 internal totalShares;
 

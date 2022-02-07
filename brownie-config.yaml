@@ -1,7 +1,7 @@
 networks:
     default: development
     moonriver:
-        gas_limit: max
+        gas_limit: 15_000_000
         gas_price: 1_000_000_000
 
 dependencies:

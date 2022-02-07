@@ -58,16 +58,6 @@ contract Oracle {
     }
 
     /**
-    * @notice Returns report by given index
-    * @param _index oracle member index
-    * @return staking report data
-    */
-    function getStakeReport(uint256 _index) internal view returns (Types.OracleData storage staking) {
-        assert(_index < currentReports.length);
-        return currentReports[_index];
-    }
-
-    /**
     * @notice Accept oracle report data, allowed to call only by oracle master contract
     * @param _index oracle member index
     * @param _quorum the minimum number of voted oracle members to accept a variant
@@ -120,7 +110,7 @@ contract Oracle {
     function softenQuorum(uint8 _quorum, uint64 _eraId) external onlyOracleMaster {
         (bool isQuorum, uint256 reportIndex) = _getQuorumReport(_quorum);
         if (isQuorum) {
-            Types.OracleData memory report = getStakeReport(reportIndex);
+            Types.OracleData memory report = _getStakeReport(reportIndex);
             _push(
                 _eraId, report
             );
@@ -132,6 +122,16 @@ contract Oracle {
     */
     function clearReporting() external onlyOracleMaster {
         _clearReporting();
+    }
+
+    /**
+    * @notice Returns report by given index
+    * @param _index oracle member index
+    * @return staking report data
+    */
+    function _getStakeReport(uint256 _index) internal view returns (Types.OracleData storage staking) {
+        assert(_index < currentReports.length);
+        return currentReports[_index];
     }
 
     /**

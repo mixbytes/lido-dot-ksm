@@ -14,56 +14,6 @@ import "../interfaces/ILido.sol";
 
 
 contract Controller is Initializable {
-    // ledger controller account
-    uint16 public rootDerivativeIndex;
-
-    // vKSM precompile
-    IERC20 internal VKSM;
-
-    // relay call builder precompile
-    IRelayEncoder internal RELAY_ENCODER;
-
-    // xcm transactor precompile
-    IXcmTransactor internal XCM_TRANSACTOR;
-
-    // xTokens precompile
-    IxTokens internal X_TOKENS;
-
-    // LIDO address
-    address public LIDO;
-
-    // Second layer derivative-proxy account to index
-    mapping(address => uint16) public senderToIndex;
-
-    // Index to second layer derivative-proxy account
-    mapping(uint16 => bytes32) public indexToAccount;
-
-    // Enumerator for weights
-    enum WEIGHT {
-        AS_DERIVATIVE,              // 410_000_000
-        BOND_BASE,                  // 600_000_000
-        BOND_EXTRA_BASE,            // 1_100_000_000
-        UNBOND_BASE,                // 1_250_000_000
-        WITHDRAW_UNBONDED_BASE,     // 500_000_000
-        WITHDRAW_UNBONDED_PER_UNIT, // 60_000
-        REBOND_BASE,                // 1_200_000_000
-        REBOND_PER_UNIT,            // 40_000
-        CHILL_BASE,                 // 900_000_000
-        NOMINATE_BASE,              // 1_000_000_000
-        NOMINATE_PER_UNIT,          // 31_000_000
-        TRANSFER_TO_PARA_BASE,      // 700_000_000
-        TRANSFER_TO_RELAY_BASE      // 4_000_000_000
-    }
-
-    // Constant for max weight
-    uint64 public MAX_WEIGHT;// = 1_835_300_000;
-
-    // Array with current weights
-    uint64[] public weights;
-
-    // Controller manager role
-    bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
-
     // Event emitted when weight updated
     event WeightUpdated (
         uint8 index,
@@ -132,6 +82,68 @@ contract Controller is Initializable {
         uint256 amount
     );
 
+    // ledger controller account
+    uint16 public rootDerivativeIndex;
+
+    // vKSM precompile
+    IERC20 internal VKSM;
+
+    // relay call builder precompile
+    IRelayEncoder internal RELAY_ENCODER;
+
+    // xcm transactor precompile
+    IXcmTransactor internal XCM_TRANSACTOR;
+
+    // xTokens precompile
+    IxTokens internal X_TOKENS;
+
+    // LIDO address
+    address public LIDO;
+
+    // first hex for encodeTransfer (defines parachain ID, 2023 for Kusama)
+    bytes public hex1;
+
+    // second hex for encodeTransfer (defines asset for transfer, fungible)
+    bytes public hex2;
+
+    // hex for determination pallet (0x1801 for Kusama)
+    bytes public asDerevativeHex;
+
+    // Second layer derivative-proxy account to index
+    mapping(address => uint16) public senderToIndex;
+
+    // Index to second layer derivative-proxy account
+    mapping(uint16 => bytes32) public indexToAccount;
+
+    // Enumerator for weights
+    enum WEIGHT {
+        AS_DERIVATIVE,              // 410_000_000
+        BOND_BASE,                  // 600_000_000
+        BOND_EXTRA_BASE,            // 1_100_000_000
+        UNBOND_BASE,                // 1_250_000_000
+        WITHDRAW_UNBONDED_BASE,     // 500_000_000
+        WITHDRAW_UNBONDED_PER_UNIT, // 60_000
+        REBOND_BASE,                // 1_200_000_000
+        REBOND_PER_UNIT,            // 40_000
+        CHILL_BASE,                 // 900_000_000
+        NOMINATE_BASE,              // 1_000_000_000
+        NOMINATE_PER_UNIT,          // 31_000_000
+        TRANSFER_TO_PARA_BASE,      // 700_000_000
+        TRANSFER_TO_RELAY_BASE      // 4_000_000_000
+    }
+
+    // Constant for max weight
+    uint64 public MAX_WEIGHT;// = 1_835_300_000;
+
+    // Array with current weights
+    uint64[] public weights;
+
+    // Parachain side fee on reverse transfer
+    uint256 public REVERSE_TRANSFER_FEE;// = 4_000_000
+
+    // Controller manager role
+    bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
+
     // Allows function calls only for registered ledgers
     modifier onlyRegistred() {
         require(senderToIndex[msg.sender] != 0, "CONTROLLER: UNREGISTERED_SENDER");
@@ -157,13 +169,19 @@ contract Controller is Initializable {
     * @param _relayEncoder - relayEncoder(relaychain calls builder) contract address
     * @param _xcmTransactor - xcmTransactor(relaychain calls relayer) contract address
     * @param _xTokens - minimal allowed nominator balance
+    * @param _hex1 - first hex for encodeTransfer
+    * @param _hex2 - second hex for encodeTransfer
+    * @param _asDerevativeHex - hex for as derevative call
     */
     function initialize(
         uint16 _rootDerivativeIndex,
         address _vKSM,
         address _relayEncoder,
         address _xcmTransactor,
-        address _xTokens
+        address _xTokens,
+        bytes calldata _hex1,
+        bytes calldata _hex2,
+        bytes calldata _asDerevativeHex
     ) external initializer {
         require(address(VKSM) == address(0), "CONTROLLER: ALREADY_INITIALIZED");
 
@@ -173,6 +191,10 @@ contract Controller is Initializable {
         RELAY_ENCODER = IRelayEncoder(_relayEncoder);
         XCM_TRANSACTOR = IXcmTransactor(_xcmTransactor);
         X_TOKENS = IxTokens(_xTokens);
+
+        hex1 = _hex1;
+        hex2 = _hex2;
+        asDerevativeHex = _asDerevativeHex;
     }
 
     /**
@@ -189,6 +211,26 @@ contract Controller is Initializable {
     */
     function setMaxWeight(uint64 _maxWeight) external auth(ROLE_CONTROLLER_MANAGER) {
         MAX_WEIGHT = _maxWeight;
+    }
+
+    /**
+    * @notice Set new REVERSE_TRANSFER_FEE
+    * @param _reverseTransferFee - new fee
+    */
+    function setReverseTransferFee(uint256 _reverseTransferFee) external auth(ROLE_CONTROLLER_MANAGER) {
+        REVERSE_TRANSFER_FEE = _reverseTransferFee;
+    }
+
+    /**
+    * @notice Set new hexes parametes for encodeTransfer
+    * @param _hex1 - first hex for encodeTransfer
+    * @param _hex2 - second hex for encodeTransfer
+    * @param _asDerevativeHex - hex for as derevative call
+    */
+    function updateHexParameters(bytes calldata _hex1, bytes calldata _hex2, bytes calldata _asDerevativeHex) external auth(ROLE_CONTROLLER_MANAGER) {
+        hex1 = _hex1;
+        hex2 = _hex2;
+        asDerevativeHex = _asDerevativeHex;
     }
 
     /**
@@ -231,6 +273,17 @@ contract Controller is Initializable {
 
         senderToIndex[paraAddress] = index + 1;
         indexToAccount[index + 1] = accountId;
+    }
+
+    /**
+    * @notice Unregister ledger contract
+    * @param paraAddress - parachain address of ledger
+    */
+    function deleteSubAccount(address paraAddress) external onlyLido {
+        require(senderToIndex[paraAddress] > 0, "CONTROLLER: UNREGISTERED_LEDGER");
+
+        delete indexToAccount[senderToIndex[paraAddress]];
+        delete senderToIndex[paraAddress];
     }
 
     /**
@@ -343,11 +396,23 @@ contract Controller is Initializable {
     */
     function transferToParachain(uint256 amount) external onlyRegistred {
         // to - msg.sender, from - getSenderIndex()
+        uint256 parachain_fee = REVERSE_TRANSFER_FEE;
+
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.TRANSFER_TO_PARA_BASE),
             encodeReverseTransfer(msg.sender, amount)
         );
+
+        // compensate parachain side fee on reverse transfer
+        if (amount <= parachain_fee) {
+            // if amount less than fee just transfer amount
+            VKSM.transfer(msg.sender, amount);
+        }
+        else {
+            // else just compensate fee
+            VKSM.transfer(msg.sender, parachain_fee);
+        }
 
         emit TransferToParachain(getSenderAccount(), msg.sender, amount);
     }
@@ -401,7 +466,7 @@ contract Controller is Initializable {
             rootDerivativeIndex, // The index to be used
             address(VKSM), // Address of the currencyId of the asset to be used for fees
             total_weight, // The weight we want to buy in the destination chain
-            bytes.concat(hex"1001", le_index, call) // The inner call to be executed in the destination chain
+            bytes.concat(asDerevativeHex, le_index, call) // The inner call to be executed in the destination chain
         );
     }
 
@@ -412,9 +477,9 @@ contract Controller is Initializable {
     */
     function encodeReverseTransfer(address to, uint256 amount) internal returns(bytes memory) {
         return bytes.concat(
-            hex"630201000100a10f0100010300",
+            hex1,
             abi.encodePacked(to),
-            hex"010400000000",
+            hex2,
             scaleCompactUint(amount),
             hex"00000000"
         );

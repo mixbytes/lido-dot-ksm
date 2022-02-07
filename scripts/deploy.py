@@ -60,7 +60,7 @@ DEPLOYMENTS = load_deployments(NETWORK)
 
 # global configs
 CONFS = 1
-GAS_PRICE = "1 gwei"
+GAS_PRICE = "10 gwei"
 GAS_LIMIT = 10*10**6
 
 
@@ -176,6 +176,10 @@ def deploy_oracle_master(deployer, proxy_admin, oracle_clone, oracle_quorum):
     return deploy_with_proxy(OracleMaster, proxy_admin, deployer, oracle_clone, oracle_quorum)
 
 
+def deploy_withdrawal(deployer, proxy_admin, cap, xcKSM):
+    return deploy_with_proxy(Withdrawal, proxy_admin, deployer, cap, xcKSM)
+
+
 def deploy_ledger_clone(deployer):
     return deploy(Ledger, deployer)
 
@@ -184,12 +188,12 @@ def deploy_wstksm(deployer, lido, vksm):
     return deploy(WstKSM, deployer, lido, vksm)
 
 
-def deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token):
-    return deploy_with_proxy(Controller, proxy_admin, deployer, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token)
+def deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2, as_derevative_hex):
+    return deploy_with_proxy(Controller, proxy_admin, deployer, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2, as_derevative_hex)
 
 
-def deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master):
-    return deploy_with_proxy(Lido, proxy_admin, deployer, auth_manager, vksm, controller, developers, treasury, oracle_master)
+def deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal, deposit_cap, max_difference):
+    return deploy_with_proxy(Lido, proxy_admin, deployer, auth_manager, vksm, controller, developers, treasury, oracle_master, withdrawal, deposit_cap, max_difference)
 
 def deploy_ledger_beacon(deployer, _ledger_clone, _lido):
     return deploy(LedgerBeacon, deployer, _ledger_clone, _lido)
@@ -219,6 +223,16 @@ def main():
     max_validators_per_ledger = CONFIG['relay_spec']['max_validators_per_ledger']
     min_nominator_bond = CONFIG['relay_spec']['min_nominator_bond']
     min_active_balance = CONFIG['relay_spec']['min_active_balance']
+    reverse_transfer_fee = CONFIG['relay_spec']['reverse_transfer_fee']
+    max_unlocking_chunks = CONFIG['relay_spec']['max_unlocking_chunks']
+    withdrawal_cap = CONFIG['withdrawal_cap']
+    deposit_cap = CONFIG['deposit_cap']
+
+    hex1 = CONFIG['hex1']
+    hex2 = CONFIG['hex2']
+    as_derevative_hex = CONFIG['as_derevative_hex']
+
+    max_difference = CONFIG['oracle_limit']
 
     root_derivative_index = CONFIG['root_derivative_index']
     root_derivative_account = ss58decode(get_derivative_account(CONFIG['sovereign_account'], root_derivative_index))
@@ -234,7 +248,7 @@ def main():
 
     proxy_admin = deploy_proxy_admin(deployer)
 
-    controller = deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token)
+    controller = deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2, as_derevative_hex)
 
     auth_manager = deploy_auth_manager(deployer, proxy_admin, auth_super_admin)
 
@@ -249,12 +263,15 @@ def main():
 
     oracle_master = deploy_oracle_master(deployer, proxy_admin, oracle_clone, oracle_quorum)
 
-    lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master)
+    withdrawal = deploy_withdrawal(deployer, proxy_admin, withdrawal_cap, vksm)
+
+    lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal, deposit_cap, max_difference)
 
     print(f"\n{Fore.GREEN}Configuring controller...")
     controller.setLido(lido, get_opts(deployer))
     controller.setMaxWeight(xcm_max_weight, get_opts(roles['ROLE_CONTROLLER_MANAGER']))
     controller.setWeights([w | (1<<65) for w in xcm_weights], get_opts(roles['ROLE_CONTROLLER_MANAGER']))
+    controller.setReverseTransferFee(reverse_transfer_fee, get_opts(roles['ROLE_CONTROLLER_MANAGER']))
 
     ledger_clone = deploy_ledger_clone(deployer)
 
@@ -265,7 +282,7 @@ def main():
     print(f'\n{Fore.GREEN}Lido configuration...')
     lido.setLedgerBeacon(ledger_beacon, get_opts(roles['ROLE_BEACON_MANAGER']))
     lido.setLedgerFactory(ledger_factory, get_opts(roles['ROLE_BEACON_MANAGER']))
-    lido.setRelaySpec((1, era_sec, era_sec * (28+3), max_validators_per_ledger, min_nominator_bond, min_active_balance), get_opts(roles['ROLE_SPEC_MANAGER']))
+    lido.setRelaySpec((max_validators_per_ledger, min_nominator_bond, min_active_balance, max_unlocking_chunks), get_opts(roles['ROLE_SPEC_MANAGER']))
     oracle_master.setAnchorEra(0, 1, era_sec, get_opts(roles['ROLE_SPEC_MANAGER']))
 
     print(f'\n{Fore.GREEN}Adding oracle members...')

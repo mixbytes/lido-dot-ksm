@@ -86,6 +86,8 @@ def test_direct_transfer(lido, Ledger, oracle_master, vKSM, accounts):
 def test_deposit_reward(lido, Ledger, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
+    lido.setMaxAllowableDifference(5100, {'from': accounts[0]})
+
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger("0x10", "0x11")
     relay.new_ledger("0x20", "0x21")

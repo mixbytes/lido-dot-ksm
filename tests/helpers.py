@@ -50,6 +50,8 @@ class RelayLedger:
         while len(self.unlocking_chunks) > 0 and rebonded < amount:
             rebonded += self.unlocking_chunks[0][0]
             self.unlocking_chunks.pop(0)
+        
+        self.active_balance += rebonded
 
     def withdraw(self):
         while len(self.unlocking_chunks) > 0 and self.unlocking_chunks[0][1] < self.relay.era:
@@ -97,6 +99,7 @@ class RelayChain:
     chain = None
     bond_enabled = True
     transfer_enabled = True
+    block_xcm_messages = False
 
     def __init__(self, lido, vKSM, oracle_master, accounts, chain):
         self.lido = lido
@@ -121,8 +124,14 @@ class RelayChain:
     def disable_bond(self):
         self.bond_enabled = False
 
+    def enable_bond(self):
+        self.bond_enabled = True
+
     def disable_transfer(self):
         self.transfer_enabled = False
+
+    def enable_transfer(self):
+        self.transfer_enabled = True
 
     def _ledger_idx_by_stash_account(self, stash_account):
         for i in range(len(self.ledgers)):
@@ -180,24 +189,52 @@ class RelayChain:
             pass
 
     def _after_report(self, tx):
-        for i in range(len(tx.events)):
-            name = tx.events[i].name
-            event = tx.events[i]
-            if name == 'TransferToRelaychain':
-                if self.transfer_enabled:
-                    self._process_upward_transfer(event)
-            elif name == 'TransferToParachain':
-                self._process_downward_transfer(event)
-            else:
-                self._process_call(name, event)
+        if not(self.block_xcm_messages):
+            for i in range(len(tx.events)):
+                name = tx.events[i].name
+                event = tx.events[i]
+                if name == 'TransferToRelaychain':
+                    if self.transfer_enabled:
+                        self._process_upward_transfer(event)
+                elif name == 'TransferToParachain':
+                    self._process_downward_transfer(event)
+                else:
+                    self._process_call(name, event)
 
     def new_era(self, rewards=[]):
         self.era += 1
         self.chain.sleep(6 * 60 * 60)
         for i in range(len(self.ledgers)):
             if i < len(rewards) and self.ledgers[i].status != 'Chill':
-                self.ledgers[i].active_balance += rewards[i]
                 self.total_rewards += rewards[i]
+                if (rewards[i] >= 0):
+                    self.ledgers[i].active_balance += rewards[i]
+                else:
+                    if ((self.ledgers[i].active_balance + rewards[i]) >= 0):
+                        self.ledgers[i].active_balance += rewards[i]
+                        rewards[i] = 0
+                    else:
+                        rewards[i] += self.ledgers[i].active_balance
+                        self.ledgers[i].active_balance = 0
+                        remove_idx = 0
+                        upd_idx = -1
+                        upd_val = 0
+                        for chunk in self.ledgers[i].unlocking_chunks:
+                            if ((chunk[0] + rewards[i]) >= 0):
+                                upd_val = chunk[0] + rewards[i]
+                                rewards[i] = 0
+                                upd_idx = i
+                            else:
+                                rewards[i] += chunk[0]
+                                remove_idx += 1
+
+                        if (upd_idx >= 0):
+                            self.ledgers[i].unlocking_chunks[upd_idx] = (upd_val, self.ledgers[i].unlocking_chunks[upd_idx][1])
+
+                        self.ledgers[i].unlocking_chunks = self.ledgers[i].unlocking_chunks[remove_idx:]
+
+                    assert rewards[i] == 0
+                
             tx = self.oracle_master.reportRelay(self.era, self.ledgers[i].get_report_data())
             tx.info()
             self._after_report(tx)

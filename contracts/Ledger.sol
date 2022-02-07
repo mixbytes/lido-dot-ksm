@@ -73,6 +73,9 @@ contract Ledger {
     // Ledger manager role
     bytes32 internal constant ROLE_LEDGER_MANAGER = keccak256("ROLE_LEDGER_MANAGER");
 
+    // Maximum allowable unlocking chunks amount
+    uint256 public MAX_UNLOCKING_CHUNKS;
+
     // Allows function calls only from LIDO
     modifier onlyLido() {
         require(msg.sender == address(LIDO), "LEDGER: NOT_LIDO");
@@ -101,6 +104,7 @@ contract Ledger {
     * @param _minNominatorBalance - minimal allowed nominator balance
     * @param _lido - LIDO address
     * @param _minimumBalance - minimal allowed active balance for ledger
+    * @param _maxUnlockingChunks - maximum amount of unlocking chunks
     */
     function initialize(
         bytes32 _stashAccount,
@@ -109,8 +113,10 @@ contract Ledger {
         address _controller,
         uint128 _minNominatorBalance,
         address _lido,
-        uint128 _minimumBalance
+        uint128 _minimumBalance,
+        uint256 _maxUnlockingChunks
     ) external {
+        require(_vKSM != address(0), "LEDGER: INCORRECT_VKSM");
         require(address(VKSM) == address(0), "LEDGER: ALREADY_INITIALIZED");
 
         // The owner of the funds
@@ -129,7 +135,8 @@ contract Ledger {
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
 
         MINIMUM_BALANCE = _minimumBalance;
-//        vKSM.approve(_controller, type(uint256).max);
+        
+        MAX_UNLOCKING_CHUNKS = _maxUnlockingChunks;
     }
 
     /**
@@ -137,10 +144,12 @@ contract Ledger {
     * @dev That method designed to be called by lido contract when relay spec is changed
     * @param _minNominatorBalance - minimal allowed nominator balance
     * @param _minimumBalance - minimal allowed ledger active balance
+    * @param _maxUnlockingChunks - maximum amount of unlocking chunks
     */
-    function setRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance) external onlyLido {
+    function setRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance, uint256 _maxUnlockingChunks) external onlyLido {
         MIN_NOMINATOR_BALANCE = _minNominatorBalance;
         MINIMUM_BALANCE = _minimumBalance;
+        MAX_UNLOCKING_CHUNKS = _maxUnlockingChunks;
     }
 
     /**
@@ -197,6 +206,16 @@ contract Ledger {
             return;
         }
         uint128 _cachedTotalBalance = cachedTotalBalance;
+        
+        if (cachedTotalBalance > 0) {
+            uint128 relativeDifference = _report.stashBalance > cachedTotalBalance ? 
+                _report.stashBalance - cachedTotalBalance :
+                cachedTotalBalance - _report.stashBalance;
+            // NOTE: 1 / 10000 - one base point
+            relativeDifference = relativeDifference * 10000 / cachedTotalBalance;
+            require(relativeDifference < LIDO.MAX_ALLOWABLE_DIFFERENCE(), "LEDGER: DIFFERENCE_EXCEEDS_BALANCE");
+        }
+
         if (_cachedTotalBalance < _report.stashBalance) { // if cached balance > real => we have reward
             uint128 reward = _report.stashBalance - _cachedTotalBalance;
             LIDO.distributeRewards(reward, _report.stashBalance);
@@ -230,7 +249,8 @@ contract Ledger {
 
             // rebond all always
             if (unlockingBalance > 0) {
-                CONTROLLER.rebond(unlockingBalance, _report.unlocking.length);
+                // NOTE: we always should pass maximum length and pallet return unused weight
+                CONTROLLER.rebond(unlockingBalance, MAX_UNLOCKING_CHUNKS);
             }
 
             uint128 relayFreeBalance = _report.getFreeBalance();
@@ -239,13 +259,15 @@ contract Ledger {
                 relayFreeBalance -= 1;
             }
 
+            pendingBonds = 0;
+            
             if (relayFreeBalance > 0 &&
                 (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle)) {
                 CONTROLLER.bondExtra(relayFreeBalance);
-                pendingBonds += relayFreeBalance;
+                pendingBonds = relayFreeBalance;
             } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
                 CONTROLLER.bond(controllerAccount, relayFreeBalance);
-                pendingBonds += relayFreeBalance;
+                pendingBonds = relayFreeBalance;
             }
         }
         else if (_report.stashBalance > _ledgerStake) { // parachain deficit
@@ -283,13 +305,10 @@ contract Ledger {
 
             // need to unbond if we still have deficit
             if (nonWithdrawableBalance < deficit) {
-                // todo drain stake if remaining balance is less than MIN_NOMINATOR_BALANCE
                 // NOTE: if ledger.active - forUnbond < min_balance => all active balance would be unbonded
                 // https://github.com/paritytech/substrate/blob/master/frame/staking/src/pallet/mod.rs#L858
                 uint128 forUnbond = deficit - nonWithdrawableBalance;
                 CONTROLLER.unbond(forUnbond);
-                // notice.
-                // deficit -= forUnbond;
             }
 
             // bond all remain free balance
@@ -327,6 +346,8 @@ contract Ledger {
         // wait for the upward transfer to complete
         uint128 _transferUpwardBalance = transferUpwardBalance;
         if (_transferUpwardBalance > 0) {
+            // NOTE: pending Bonds allows to control balance which was bonded in previous era, but not in lockedBalance yet
+            // (see single_ledger_test:test_equal_deposit_bond)
             uint128 ledgerFreeBalance = (totalBalance - lockedBalance);
             int128 freeBalanceDiff = int128(_report.getFreeBalance()) - int128(ledgerFreeBalance);
             int128 expectedBalanceDiff = int128(transferUpwardBalance) - int128(pendingBonds);
@@ -335,7 +356,7 @@ contract Ledger {
                 cachedTotalBalance += _transferUpwardBalance;
 
                 transferUpwardBalance = 0;
-                pendingBonds = 0;
+                // pendingBonds = 0;
                 emit UpwardComplete(_transferUpwardBalance);
                 _transferUpwardBalance = 0;
             }
