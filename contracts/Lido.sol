@@ -565,7 +565,7 @@ contract Lido is stKSM, Initializable {
     /**
     * @notice Create request to redeem vKSM in exchange of stKSM. stKSM will be instantly burned and
               created claim order, (see `getUnbonded` method).
-              User can have up to 10 redeem requests in parallel.
+              User can have up to 20 redeem requests in parallel.
     * @param _amount - amount of stKSM tokens to be redeemed
     */
     function redeem(uint256 _amount) external whenNotPaused {

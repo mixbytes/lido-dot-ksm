@@ -1,7 +1,7 @@
 read = 1_000_000 * 25
 write = 1_000_000 * 100
 
-NETWORK="moonbase"
+NETWORK="kusama"
 
 as_derevative = 0
 bond_base = 0
@@ -21,19 +21,19 @@ def rw(rd, wr):
     return read * rd + write * wr
 
 if (NETWORK == "kusama"):
-    as_derevative = 150_000_000 * 2 # TODO: change ((as_derevative + rw(1,1)) * 2)
-    bond_base = 47_083_000 + rw(5, 4)
-    bond_extra_base = 79_677_000 + rw(8, 7)
-    unbond_base = 87_481_000 + rw(12, 8)
-    withdraw_unbonded_kill = 72_430_000 + rw(13, 11)
-    withdraw_unbonded_per_unit = 2_000
-    nominate_base = 60_257_000 + rw(12, 6)
-    nominate_per_unit = 4_191_000 + rw(1, 0)
-    chill_base = 52_552_000 + rw(8, 6)
-    rebond_base = 78_279_000 + rw(9, 8)
-    rebond_per_unit = 55_000
-    transfer_to_para_base = 1_100_000_000 # TODO: change
-    transfer_to_relay_base = 4_000_000_000
+    as_derevative = (4_636_000 + rw(1, 1)) * 2
+    bond_base = 60_400_000 + rw(5, 4)
+    bond_extra_base = 98_893_000 + rw(8, 7)
+    unbond_base = 106_618_000 + rw(12, 8)
+    withdraw_unbonded_kill = 87_523_000 + rw(13, 11)
+    withdraw_unbonded_per_unit = 0
+    nominate_base = 71_169_000 + rw(12, 6)
+    nominate_per_unit = 4_786_000 + rw(1, 0)
+    chill_base = 60_865_000 + rw(8, 6)
+    rebond_base = 96_930_000 + rw(9, 8)
+    rebond_per_unit = 60_000
+    transfer_to_para_base = 1_000_000_000
+    transfer_to_relay_base = 500_000_000
 
 if (NETWORK == "moonbase"):
     as_derevative = (4_542_000 + rw(1, 1)) * 2
@@ -48,7 +48,7 @@ if (NETWORK == "moonbase"):
     rebond_base = 98_525_000 + rw(9, 8)
     rebond_per_unit = 69_000
     transfer_to_para_base = 875_000_000
-    transfer_to_relay_base = 4_000_000_000
+    transfer_to_relay_base = 300_000_000
 
 print('         - ' + '{0:_}'.format(as_derevative) + ' #AS_DERIVATIVE')
 print('         - ' + '{0:_}'.format(bond_base) + ' #BOND_BASE')

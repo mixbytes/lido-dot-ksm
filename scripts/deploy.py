@@ -188,8 +188,8 @@ def deploy_wstksm(deployer, lido, vksm):
     return deploy(WstKSM, deployer, lido, vksm)
 
 
-def deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2):
-    return deploy_with_proxy(Controller, proxy_admin, deployer, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2)
+def deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2, as_derevative_hex):
+    return deploy_with_proxy(Controller, proxy_admin, deployer, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2, as_derevative_hex)
 
 
 def deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal, deposit_cap, max_difference):
@@ -230,6 +230,7 @@ def main():
 
     hex1 = CONFIG['hex1']
     hex2 = CONFIG['hex2']
+    as_derevative_hex = CONFIG['as_derevative_hex']
 
     max_difference = CONFIG['oracle_limit']
 
@@ -247,7 +248,7 @@ def main():
 
     proxy_admin = deploy_proxy_admin(deployer)
 
-    controller = deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2)
+    controller = deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2, as_derevative_hex)
 
     auth_manager = deploy_auth_manager(deployer, proxy_admin, auth_super_admin)
 

@@ -100,11 +100,14 @@ contract Controller is Initializable {
     // LIDO address
     address public LIDO;
 
-    // first hex for encodeTransfer
+    // first hex for encodeTransfer (defines parachain ID, 2023 for Kusama)
     bytes public hex1;
 
-    // second hex for encodeTransfer
+    // second hex for encodeTransfer (defines asset for transfer, fungible)
     bytes public hex2;
+
+    // hex for determination pallet (0x1801 for Kusama)
+    bytes public asDerevativeHex;
 
     // Second layer derivative-proxy account to index
     mapping(address => uint16) public senderToIndex;
@@ -168,6 +171,7 @@ contract Controller is Initializable {
     * @param _xTokens - minimal allowed nominator balance
     * @param _hex1 - first hex for encodeTransfer
     * @param _hex2 - second hex for encodeTransfer
+    * @param _asDerevativeHex - hex for as derevative call
     */
     function initialize(
         uint16 _rootDerivativeIndex,
@@ -176,7 +180,8 @@ contract Controller is Initializable {
         address _xcmTransactor,
         address _xTokens,
         bytes calldata _hex1,
-        bytes calldata _hex2
+        bytes calldata _hex2,
+        bytes calldata _asDerevativeHex
     ) external initializer {
         require(address(VKSM) == address(0), "CONTROLLER: ALREADY_INITIALIZED");
 
@@ -189,6 +194,7 @@ contract Controller is Initializable {
 
         hex1 = _hex1;
         hex2 = _hex2;
+        asDerevativeHex = _asDerevativeHex;
     }
 
     /**
@@ -219,10 +225,12 @@ contract Controller is Initializable {
     * @notice Set new hexes parametes for encodeTransfer
     * @param _hex1 - first hex for encodeTransfer
     * @param _hex2 - second hex for encodeTransfer
+    * @param _asDerevativeHex - hex for as derevative call
     */
-    function updateHexParameters(bytes calldata _hex1, bytes calldata _hex2) external auth(ROLE_CONTROLLER_MANAGER) {
+    function updateHexParameters(bytes calldata _hex1, bytes calldata _hex2, bytes calldata _asDerevativeHex) external auth(ROLE_CONTROLLER_MANAGER) {
         hex1 = _hex1;
         hex2 = _hex2;
+        asDerevativeHex = _asDerevativeHex;
     }
 
     /**
@@ -458,7 +466,7 @@ contract Controller is Initializable {
             rootDerivativeIndex, // The index to be used
             address(VKSM), // Address of the currencyId of the asset to be used for fees
             total_weight, // The weight we want to buy in the destination chain
-            bytes.concat(hex"1001", le_index, call) // The inner call to be executed in the destination chain
+            bytes.concat(asDerevativeHex, le_index, call) // The inner call to be executed in the destination chain
         );
     }
 
