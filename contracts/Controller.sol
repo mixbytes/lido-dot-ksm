@@ -438,7 +438,7 @@ contract Controller is Initializable {
         destination.parents = 1;
         destination.interior = new bytes[](1);
         destination.interior[0] = bytes.concat(bytes1(hex"01"), getSenderAccount(), bytes1(hex"00")); // X2, NetworkId: Any
-        X_TOKENS.transfer_with_fee(address(VKSM), amount, 18900000000, destination, getWeight(WEIGHT.TRANSFER_TO_RELAY_BASE));
+        X_TOKENS.transfer_with_fee(address(VKSM), amount, TRANSFER_FEE, destination, getWeight(WEIGHT.TRANSFER_TO_RELAY_BASE));
 
         emit TransferToRelaychain(msg.sender, getSenderAccount(), amount);
     }

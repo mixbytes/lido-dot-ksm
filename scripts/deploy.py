@@ -8,11 +8,12 @@ import json
 import yaml
 from pathlib import Path
 from colorama import Fore, Back, Style, init
+import os
 
 init(autoreset=True)
 
 
-NETWORK="moonbase"
+NETWORK=os.getenv("NETWORK", "moonbase")
 
 
 def get_derivative_account(root_account, index):
@@ -224,6 +225,7 @@ def main():
     min_nominator_bond = CONFIG['relay_spec']['min_nominator_bond']
     min_active_balance = CONFIG['relay_spec']['min_active_balance']
     reverse_transfer_fee = CONFIG['relay_spec']['reverse_transfer_fee']
+    transfer_fee = CONFIG['relay_spec']['transfer_fee']
     max_unlocking_chunks = CONFIG['relay_spec']['max_unlocking_chunks']
     withdrawal_cap = CONFIG['withdrawal_cap']
     deposit_cap = CONFIG['deposit_cap']
@@ -272,6 +274,7 @@ def main():
     controller.setMaxWeight(xcm_max_weight, get_opts(roles['ROLE_CONTROLLER_MANAGER']))
     controller.setWeights([w | (1<<65) for w in xcm_weights], get_opts(roles['ROLE_CONTROLLER_MANAGER']))
     controller.setReverseTransferFee(reverse_transfer_fee, get_opts(roles['ROLE_CONTROLLER_MANAGER']))
+    controller.setTransferFee(transfer_fee, get_opts(roles['ROLE_CONTROLLER_MANAGER']))
 
     ledger_clone = deploy_ledger_clone(deployer)
 
