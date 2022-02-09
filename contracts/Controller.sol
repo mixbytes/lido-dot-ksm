@@ -141,6 +141,9 @@ contract Controller is Initializable {
     // Parachain side fee on reverse transfer
     uint256 public REVERSE_TRANSFER_FEE;// = 4_000_000
 
+    // Relay side fee on transfer
+    uint256 public TRANSFER_FEE;// = 18_900_000_000
+
     // Controller manager role
     bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
 
@@ -221,6 +224,13 @@ contract Controller is Initializable {
         REVERSE_TRANSFER_FEE = _reverseTransferFee;
     }
 
+    /**
+    * @notice Set new TRANSFER_FEE
+    * @param _transferFee - new fee
+    */
+    function setTransferFee(uint256 _transferFee) external auth(ROLE_CONTROLLER_MANAGER) {
+        TRANSFER_FEE = _transferFee;
+    }
     /**
     * @notice Set new hexes parametes for encodeTransfer
     * @param _hex1 - first hex for encodeTransfer
@@ -428,7 +438,7 @@ contract Controller is Initializable {
         destination.parents = 1;
         destination.interior = new bytes[](1);
         destination.interior[0] = bytes.concat(bytes1(hex"01"), getSenderAccount(), bytes1(hex"00")); // X2, NetworkId: Any
-        X_TOKENS.transfer(address(VKSM), amount + 18900000000, destination, getWeight(WEIGHT.TRANSFER_TO_RELAY_BASE));
+        X_TOKENS.transfer_with_fee(address(VKSM), amount, 18900000000, destination, getWeight(WEIGHT.TRANSFER_TO_RELAY_BASE));
 
         emit TransferToRelaychain(msg.sender, getSenderAccount(), amount);
     }

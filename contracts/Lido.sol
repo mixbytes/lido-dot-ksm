@@ -140,9 +140,9 @@ contract Lido is stKSM, Initializable {
     Types.Fee private FEE;
 
     // default interest value in base points.
-    uint16 internal constant DEFAULT_DEVELOPERS_FEE = 140;
-    uint16 internal constant DEFAULT_OPERATORS_FEE = 300;
-    uint16 internal constant DEFAULT_TREASURY_FEE = 560;
+    uint16 internal constant DEFAULT_DEVELOPERS_FEE = 200;
+    uint16 internal constant DEFAULT_OPERATORS_FEE = 0;
+    uint16 internal constant DEFAULT_TREASURY_FEE = 800;
 
     // Missing member index
     uint256 internal constant MEMBER_NOT_FOUND = type(uint256).max;

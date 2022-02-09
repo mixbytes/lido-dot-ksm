@@ -27,6 +27,17 @@ interface IxTokens {
     /** Transfer a token through XCM based on its currencyId
      *
      * @dev The token transfer burns/transfers the corresponding amount before sending
+     * @param currency_address The ERC20 address of the currency we want to transfer
+     * @param amount The amount of tokens we want to transfer
+     * @param fee The amount of fees
+     * @param destination The Multilocation to which we want to send the tokens
+     * @param weight The weight we want to buy in the destination chain
+     */
+    function transfer_with_fee(address currency_address, uint256 amount, uint256 fee, Multilocation memory destination, uint64 weight) external;
+
+    /** Transfer a token through XCM based on its currencyId
+     *
+     * @dev The token transfer burns/transfers the corresponding amount before sending
      * @param asset The asset we want to transfer, defined by its multilocation. Currently only Concrete Fungible assets
      * @param amount The amount of tokens we want to transfer
      * @param destination The Multilocation to which we want to send the tokens
