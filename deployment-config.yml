@@ -12,7 +12,7 @@ networks:
         quorum: 1
         withdrawal_cap: 40 # max element in withdrawal queue
         deposit_cap: 10_000_000_000_000_000 # 10.000 xcKSM
-        hex1: "0x6302010001009d1f0100010300"
+        hex1: "0x6308010001009d1f0100010300"
         hex2: "0x010400000000"
         as_derevative_hex: "0x1801"
         oracle_limit: 3000 # 30 %
@@ -72,7 +72,7 @@ networks:
         quorum: 2
         withdrawal_cap: 40 # max element in withdrawal queue
         deposit_cap: 10_000_000_000_000_000 # 10.000 xcKSM
-        hex1: "0x630201000100a10f0100010300"
+        hex1: "0x630801000100a10f0100010300"
         hex2: "0x010400000000"
         as_derevative_hex: "0x1001"
         oracle_limit: 3000 # 30 %
@@ -114,5 +114,5 @@ networks:
          - 862_127_000   #CHILL_BASE
          - 973_227_000   #NOMINATE_BASE
          - 29_820_000    #NOMINATE_PER_UNIT
-         - 875_000_000   #TRANSFER_TO_PARA_BASE
+         - 1_000_000_000 #TRANSFER_TO_PARA_BASE
          - 4_000_000_000 #TRANSFER_TO_RELAY_BASE

@@ -411,7 +411,8 @@ contract Controller is Initializable {
         callThroughDerivative(
             getSenderIndex(),
             getWeight(WEIGHT.TRANSFER_TO_PARA_BASE),
-            encodeReverseTransfer(msg.sender, amount)
+            //encodeReverseTransfer(msg.sender, amount)
+            encodeLimitReserveTransfer(msg.sender, amount, getWeight(WEIGHT.TRANSFER_TO_PARA_BASE))
         );
 
         // compensate parachain side fee on reverse transfer
@@ -492,6 +493,23 @@ contract Controller is Initializable {
             hex2,
             scaleCompactUint(amount),
             hex"00000000"
+        );
+    }
+
+    /**
+    * @notice Encoding bytes to call limit reserve transfer on relay chain
+    * @param to - address of KSM receiver
+    * @param amount - amount of KSM to send
+    * @param weight - weight for xcm call
+    */
+    function encodeLimitReserveTransfer(address to, uint256 amount, uint64 weight) internal returns(bytes memory) {
+        return bytes.concat(
+            hex1,
+            abi.encodePacked(to),
+            hex2,
+            scaleCompactUint(amount),
+            hex"0000000001",
+            scaleCompactUint(uint256(weight))
         );
     }
 
