@@ -5,9 +5,9 @@ UNIT = 1_000_000_000
 
 def test_default_fees(lido):
     assert lido.getFee() == 1000
-    assert lido.getOperatorsFee() == 300
-    assert lido.getDevelopersFee() == 140
-    assert lido.getTreasuryFee() == 560
+    assert lido.getOperatorsFee() == 0
+    assert lido.getDevelopersFee() == 200
+    assert lido.getTreasuryFee() == 800
 
 
 def test_fee_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, developers, admin):
@@ -34,11 +34,11 @@ def test_fee_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, deve
     print(t.info())
 
     balance = mocklido.balanceOf(admin)
-    assert balance == 10_927_835_052  # +927 MUNIT (90% gives ~92.78%)
+    assert balance == 10_900_000_000  # +900 MUNIT (90%)
     balance = mocklido.balanceOf(treasury)
-    assert balance == 57_731_958  # ~57.7 MUNIT (fee 5.6% gives ~5.77% of rewards)
+    assert balance == 80_000_000  # 80 MUNIT (fee 8%)
     balance = mocklido.balanceOf(developers)
-    assert balance == 14_432_989   # ~14.3 MUNIT (fee 1.4% gives ~ 1.43%)
+    assert balance == 19_999_999   # ~20 MUNIT (fee 2%)
     balance = mocklido.balanceOf(mocklido)
     assert balance == 0  # remains unchanged
 
