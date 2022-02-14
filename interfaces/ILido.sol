@@ -6,10 +6,8 @@ import "./Types.sol";
 interface ILido {
     function MAX_ALLOWABLE_DIFFERENCE() external view returns(uint128);
 
-    function developers() external view returns(address);
-
     function deposit(uint256 amount) external returns (uint256);
-    
+
     function distributeRewards(uint256 totalRewards, uint256 ledgerBalance) external;
 
     function distributeLosses(uint256 totalLosses, uint256 ledgerBalance) external;
@@ -20,9 +18,7 @@ interface ILido {
 
     function ledgerStake(address ledger) external view returns (uint256);
 
-    function ledgerShares(address ledger) external view returns (uint256);
-
-    function avaliableForStake() external view returns (uint256);
+    function transferFromLedger(uint256 amount, uint256 excess) external;
 
     function transferFromLedger(uint256 amount) external;
 

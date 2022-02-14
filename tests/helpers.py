@@ -47,9 +47,15 @@ class RelayLedger:
 
     def rebond(self, amount):
         rebonded = 0
-        while len(self.unlocking_chunks) > 0 and rebonded < amount:
-            rebonded += self.unlocking_chunks[0][0]
-            self.unlocking_chunks.pop(0)
+        while len(self.unlocking_chunks) > 0:
+            if rebonded + self.unlocking_chunks[0][0] <= amount:
+                rebonded += self.unlocking_chunks[0][0]
+                self.unlocking_chunks.pop(0)
+            else:
+                diff = amount - rebonded
+                rebonded += diff
+                self.unlocking_chunks[0] = (self.unlocking_chunks[0][0] - diff, self.unlocking_chunks[0][1])
+                break
         
         self.active_balance += rebonded
 

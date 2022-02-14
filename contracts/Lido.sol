@@ -80,46 +80,46 @@ contract Lido is stKSM, Initializable {
     mapping(address => uint256) public ledgerBorrow;
 
     // Disabled ledgers
-    address[] public disabledLedgers;
+    address[] private disabledLedgers;
 
     // Enabled ledgers
-    address[] public enabledLedgers;
+    address[] private enabledLedgers;
 
     // Cap for deposits for v1
     uint256 public depositCap;
 
     // vKSM precompile
-    IERC20 public VKSM;
+    IERC20 private VKSM;
 
     // controller
-    address public CONTROLLER;
+    address private CONTROLLER;
 
     // auth manager contract address
     address public AUTH_MANAGER;
 
     // Maximum number of ledgers
-    uint256 public MAX_LEDGERS_AMOUNT;
+    uint256 private MAX_LEDGERS_AMOUNT;
 
     // oracle master contract
     address public ORACLE_MASTER;
 
     // relay spec
-    Types.RelaySpec public RELAY_SPEC;
+    Types.RelaySpec private RELAY_SPEC;
 
     // developers fund
-    address public developers;
+    address private developers;
 
     // treasury fund
-    address public treasury;
+    address private treasury;
 
     // ledger beacon
     address public LEDGER_BEACON;
 
     // ledger factory
-    address public LEDGER_FACTORY;
+    address private LEDGER_FACTORY;
 
     // withdrawal contract
-    address public WITHDRAWAL;
+    address private WITHDRAWAL;
 
     // Max allowable difference for oracle reports
     uint128 public MAX_ALLOWABLE_DIFFERENCE;
@@ -231,13 +231,6 @@ contract Lido is stKSM, Initializable {
         IWithdrawal(WITHDRAWAL).setStKSM(address(this));
 
         MAX_ALLOWABLE_DIFFERENCE = _maxAllowableDifference;
-    }
-
-    /**
-    * @notice Stub fallback for native token, always reverting
-    */
-    fallback() external {
-        revert("FORBIDDEN");
     }
 
     /**
@@ -387,24 +380,10 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
-    * @notice Returns operators fee basis points
+    * @notice Returns all fees basis points
     */
-    function getOperatorsFee() external view returns (uint16){
-        return FEE.operators;
-    }
-
-    /**
-    * @notice Returns treasury fee basis points
-    */
-    function getTreasuryFee() external view returns (uint16){
-       return FEE.treasury;
-    }
-
-    /**
-    * @notice Returns developers fee basis points
-    */
-    function getDevelopersFee() external view returns (uint16){
-        return FEE.developers;
+    function getAllFees() external view returns (Types.Fee memory){
+        return FEE;
     }
 
     /**
@@ -646,6 +625,24 @@ contract Lido is stKSM, Initializable {
         ledgerBorrow[msg.sender] -= _totalLosses;
 
         emit Losses(msg.sender, _totalLosses, _ledgerBalance);
+    }
+
+    /**
+    * @notice Transfer vKSM from ledger to LIDO. Can be called only from ledger
+    * @param _amount - amount of vKSM that should be transfered
+    * @param _excess - excess of vKSM that was transfered
+    */
+    function transferFromLedger(uint256 _amount, uint256 _excess) external {
+        require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
+
+        if (_excess > 0) { // some donations
+            fundRaisedBalance += _excess; //just distribute it as rewards
+            bufferedDeposits += _excess;
+            VKSM.transferFrom(msg.sender, address(this), _excess);
+        }
+
+        ledgerBorrow[msg.sender] -= _amount;
+        VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount);
     }
 
     /**

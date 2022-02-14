@@ -137,6 +137,8 @@ contract Ledger {
         MINIMUM_BALANCE = _minimumBalance;
         
         MAX_UNLOCKING_CHUNKS = _maxUnlockingChunks;
+
+        _refreshAllowances();
     }
 
     /**
@@ -156,8 +158,7 @@ contract Ledger {
     * @notice Refresh allowances for ledger
     */
     function refreshAllowances() external auth(ROLE_LEDGER_MANAGER) {
-        VKSM.approve(address(LIDO), type(uint256).max);
-        VKSM.approve(address(CONTROLLER), type(uint256).max);
+        _refreshAllowances();
     }
 
     /**
@@ -332,7 +333,7 @@ contract Ledger {
 
             if (totalDownwardTransferred >= _transferDownwardBalance ) {
                 // send all funds to lido
-                LIDO.transferFromLedger(totalDownwardTransferred);
+                LIDO.transferFromLedger(_transferDownwardBalance, totalDownwardTransferred - _transferDownwardBalance);
 
                 // Clear transfer flag
                 cachedTotalBalance -= _transferDownwardBalance;
@@ -370,5 +371,13 @@ contract Ledger {
         }
 
         return false;
+    }
+
+    /**
+    * @notice Refresh allowances for ledger
+    */
+    function _refreshAllowances() internal {
+        VKSM.approve(address(LIDO), type(uint256).max);
+        VKSM.approve(address(CONTROLLER), type(uint256).max);
     }
 }

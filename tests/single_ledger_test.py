@@ -29,6 +29,98 @@ def test_relay_direct_transfer(lido, oracle_master, vKSM, accounts):
     assert lido.getTotalPooledKSM() == reward
 
 
+def test_losse_underflow(lido, oracle_master, vKSM, withdrawal, accounts):
+    # create ledger
+    distribute_initial_tokens(vKSM, lido, accounts)
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+
+    # deposit, wait to active balance
+    deposit = 20 * 10**18
+    lido.deposit(deposit, {'from': accounts[0]})
+    relay.new_era()
+    assert relay.ledgers[0].free_balance == deposit
+    assert relay.ledgers[0].active_balance == 0
+    relay.new_era()
+    assert relay.ledgers[0].free_balance == 0
+    assert relay.ledgers[0].active_balance == deposit
+
+    # transfer directly to ledger
+    direct_transfer = 10**18
+    vKSM.transfer(relay.ledgers[0].ledger_address, direct_transfer, {'from': accounts[0]})
+    relay.new_era()
+
+    # withdraw one part
+    first_redeem = 10 * 10**18
+    lido.redeem(first_redeem, {'from': accounts[0]})
+    relay.new_era()
+
+    # wait unbonding period
+    for i in range(32):
+        relay.new_era()
+
+    lido.setMaxAllowableDifference(100000000, {'from': accounts[0]})
+
+    # make sure that some tokens locked on Withdrawal
+    assert vKSM.balanceOf(withdrawal) == first_redeem
+    lido.claimUnbonded({'from': accounts[0]})
+    assert vKSM.balanceOf(withdrawal) == 0 # NOTE: excess is still on withdrawal
+
+    # distribute losses
+    relay.new_era([-first_redeem])
+
+
+def test_direct_ledger_transfer(lido, oracle_master, vKSM, withdrawal, accounts):
+    # create ledger
+    distribute_initial_tokens(vKSM, lido, accounts)
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+
+    # deposit, wait to active balance
+    deposit = 20 * 10**18
+    lido.deposit(deposit, {'from': accounts[0]})
+    relay.new_era()
+    assert relay.ledgers[0].free_balance == deposit
+    assert relay.ledgers[0].active_balance == 0
+    relay.new_era()
+    assert relay.ledgers[0].free_balance == 0
+    assert relay.ledgers[0].active_balance == deposit
+
+    # transfer directly to ledger
+    direct_transfer = 10**18
+    vKSM.transfer(relay.ledgers[0].ledger_address, direct_transfer, {'from': accounts[0]})
+    relay.new_era()
+
+    # withdraw one part
+    first_redeem = 10 * 10**18
+    lido.redeem(first_redeem, {'from': accounts[0]})
+    relay.new_era()
+
+    # wait unbonding period
+    for i in range(32):
+        relay.new_era()
+
+    # make sure that some tokens locked on Withdrawal
+    assert vKSM.balanceOf(withdrawal) == first_redeem
+    lido.claimUnbonded({'from': accounts[0]})
+    assert vKSM.balanceOf(withdrawal) == 0 # NOTE: excess goes as rewards to lido
+
+    # redeem all
+    second_redeem = 11 * 10**18 # excess goes as rewards, so we can redeem more
+    lido.redeem(second_redeem, {'from': accounts[0]})
+    relay.new_era()
+
+    # wait unbonding period
+    for i in range(32):
+        relay.new_era()
+
+    # check how it work with excess
+    assert vKSM.balanceOf(withdrawal) == second_redeem
+    lido.claimUnbonded({'from': accounts[0]})
+    assert vKSM.balanceOf(withdrawal) == 0
+    assert lido.fundRaisedBalance() == 0
+
+
 def test_nominate_ledger(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 

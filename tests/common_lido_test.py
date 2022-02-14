@@ -4,10 +4,7 @@ MUNIT = 1_000_000
 UNIT = 1_000_000_000
 
 def test_default_fees(lido):
-    assert lido.getFee() == 1000
-    assert lido.getOperatorsFee() == 0
-    assert lido.getDevelopersFee() == 200
-    assert lido.getTreasuryFee() == 800
+    assert lido.getAllFees() == (1000, 0, 200, 800)
 
 
 def test_fee_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, developers, admin):
