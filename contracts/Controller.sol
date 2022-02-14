@@ -502,14 +502,14 @@ contract Controller is Initializable {
     * @param amount - amount of KSM to send
     * @param weight - weight for xcm call
     */
-    function encodeLimitReserveTransfer(address to, uint256 amount, uint256 weight) internal returns(bytes memory) {
+    function encodeLimitReserveTransfer(address to, uint256 amount, uint64 weight) internal returns(bytes memory) {
         return bytes.concat(
             hex1,
             abi.encodePacked(to),
             hex2,
             scaleCompactUint(amount),
             hex"0000000001",
-            scaleCompactUint(weight)
+            scaleCompactUint(uint256(weight))
         );
     }
 
