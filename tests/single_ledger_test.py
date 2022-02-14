@@ -103,10 +103,17 @@ def test_direct_ledger_transfer(lido, oracle_master, vKSM, withdrawal, accounts)
     # make sure that some tokens locked on Withdrawal
     assert vKSM.balanceOf(withdrawal) == first_redeem
     lido.claimUnbonded({'from': accounts[0]})
+<<<<<<< HEAD
     assert vKSM.balanceOf(withdrawal) == 0 # NOTE: excess goes as rewards to lido
 
     # redeem all
     second_redeem = 11 * 10**18 # excess goes as rewards, so we can redeem more
+=======
+    assert vKSM.balanceOf(withdrawal) == 0 # NOTE: excess goes to developers
+
+    # redeem all
+    second_redeem = 10 * 10**18
+>>>>>>> 2d3addb (Fix underflow when ledger borrow lost peg due to excesses)
     lido.redeem(second_redeem, {'from': accounts[0]})
     relay.new_era()
 
