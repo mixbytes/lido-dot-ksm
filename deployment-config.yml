@@ -56,7 +56,7 @@ networks:
          - 971_169_000   #NOMINATE_BASE
          - 29_786_000    #NOMINATE_PER_UNIT
          - 1_000_000_000 #TRANSFER_TO_PARA_BASE
-         - 500_000_000   #TRANSFER_TO_RELAY_BASE
+         - 4_000_000_000   #TRANSFER_TO_RELAY_BASE
 
     moonbase:
         deployer: "0xcEF5AE54c26F6C9A9a92436966B4aa4e29671c05"
