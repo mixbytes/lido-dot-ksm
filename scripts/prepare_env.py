@@ -3,6 +3,23 @@ import yaml
 from pathlib import Path
 from brownie import *
 from substrateinterface import Keypair
+from hashlib import blake2b
+import base58
+
+
+def get_derivative_account(root_account, index):
+    seed_bytes = b'modlpy/utilisuba'
+
+    root_account_bytes = bytes.fromhex(Keypair(root_account).public_key[2:])
+    index_bytes = int(index).to_bytes(2, 'little')
+
+    entropy = blake2b(seed_bytes + root_account_bytes + index_bytes, digest_size=32).digest()
+    input_bytes = bytes([42]) + entropy
+    checksum = blake2b(b'SS58PRE' + input_bytes).digest()
+    return base58.b58encode(input_bytes + checksum[:2]).decode()
+
+
+
 
 class Contracts:
     user = None
@@ -44,6 +61,15 @@ def load_deployment_config(network):
 
 CONFIG = load_deployment_config(NETWORK)
 DEPLOYMENTS = load_deployments(NETWORK)
+
+
+def gen_ledger_account(index):
+    sovereign = CONFIG['sovereign_account']
+    root_index = CONFIG['root_derivative_index']
+
+    controller = get_derivative_account(sovereign, root_index)
+    return get_derivative_account(controller, index)
+
 
 #contracts = run('./scripts/prepare_env.py') from brownie console --network=moonbase
 def main():
