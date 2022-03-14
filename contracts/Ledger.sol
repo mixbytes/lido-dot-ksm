@@ -201,7 +201,6 @@ contract Ledger {
         activeBalance = _report.activeBalance;
 
         (uint128 unlockingBalance, uint128 withdrawableBalance) = _report.getTotalUnlocking(_eraId);
-        uint128 nonWithdrawableBalance = unlockingBalance - withdrawableBalance;
 
         if (!_processRelayTransfers(_report)) {
             return;
