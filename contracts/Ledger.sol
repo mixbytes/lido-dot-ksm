@@ -309,17 +309,8 @@ contract Ledger {
             uint128 totalDownwardTransferred = uint128(VKSM.balanceOf(address(this)));
 
             if (totalDownwardTransferred >= _transferDownwardBalance ) {
-                // NOTE: all excesses go to developers)
-                if (totalDownwardTransferred > _transferDownwardBalance ) {
-                    VKSM.transfer(LIDO.developers(), totalDownwardTransferred - _transferDownwardBalance);
-                }
-
                 // send all funds to lido
-<<<<<<< HEAD
                 LIDO.transferFromLedger(_transferDownwardBalance, totalDownwardTransferred - _transferDownwardBalance);
-=======
-                LIDO.transferFromLedger(_transferDownwardBalance);
->>>>>>> 2d3addb (Fix underflow when ledger borrow lost peg due to excesses)
 
                 // Clear transfer flag
                 cachedTotalBalance -= _transferDownwardBalance;

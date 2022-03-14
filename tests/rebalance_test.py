@@ -80,12 +80,8 @@ def test_direct_transfer(lido, Ledger, oracle_master, vKSM, accounts):
     for i in range(32):
         relay.new_era()
 
-<<<<<<< HEAD
     assert lido.getTotalPooledKSM() == direct_transfer
     assert lido.ledgerBorrow(ledger_1.ledger_address) == direct_transfer
-=======
-    assert lido.getTotalPooledKSM() == 0 # all excess goes to developers
->>>>>>> 2d3addb (Fix underflow when ledger borrow lost peg due to excesses)
 
 
 def test_deposit_reward(lido, Ledger, oracle_master, vKSM, accounts):
