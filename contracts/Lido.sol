@@ -652,21 +652,18 @@ contract Lido is stKSM, Initializable {
     function transferFromLedger(uint256 _amount) external {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
-        // if (_amount > ledgerBorrow[msg.sender]) { // some donations
-        //     uint256 excess = _amount - ledgerBorrow[msg.sender];
-        //     fundRaisedBalance += excess; //just distribute it as rewards
-        //     bufferedDeposits += excess;
-        //     ledgerBorrow[msg.sender] = 0;
-        //     VKSM.transferFrom(msg.sender, address(this), excess);
-        //     VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount - excess);
-        // }
-        // else {
-        //     ledgerBorrow[msg.sender] -= _amount;
-        //     VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount);
-        // }
-
-        ledgerBorrow[msg.sender] -= _amount;
-        VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount);
+        if (_amount > ledgerBorrow[msg.sender]) { // some donations
+            uint256 excess = _amount - ledgerBorrow[msg.sender];
+            fundRaisedBalance += excess; //just distribute it as rewards
+            bufferedDeposits += excess;
+            ledgerBorrow[msg.sender] = 0;
+            VKSM.transferFrom(msg.sender, address(this), excess);
+            VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount - excess);
+        }
+        else {
+            ledgerBorrow[msg.sender] -= _amount;
+            VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount);
+        }
     }
 
     /**

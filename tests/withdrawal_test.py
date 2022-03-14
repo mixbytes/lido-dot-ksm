@@ -179,7 +179,7 @@ def test_relay_block(lido, oracle_master, vKSM, withdrawal, Ledger, accounts):
     # Unblock xcm messages
     relay.block_xcm_messages = False
 
-    ledger = Ledger.at(lido.enabledLedgers(0))
+    ledger = Ledger.at(relay.ledgers[0].ledger_address)
     assert ledger.transferDownwardBalance() == 0
     assert lido.ledgerStake(ledger.address) == 0
 
