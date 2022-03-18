@@ -114,6 +114,9 @@ contract Withdrawal is Initializable {
 
                 totalXcKSMPoolShares -= topBatch.batchXcKSMShares;
                 totalVirtualXcKSMAmount -= xcKSMForBatch;
+                if (totalXcKSMPoolShares == 0) {
+                    totalVirtualXcKSMAmount = 0;
+                }
 
                 claimableId = topId;
                 pendingForClaiming += xcKSMForBatch;
