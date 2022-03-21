@@ -252,7 +252,7 @@ contract Ledger {
             }
 
             if ((relayFreeBalance == transferUpwardBalance) && (transferUpwardBalance > 0)) {
-                // In case if bond amount = transferUpwardBalance we can't distinguish 2 messages were success or 2 masseges were failed
+                // In case if bond amount = transferUpwardBalance we can't distinguish 2 messages were success or 2 messages were failed
                 relayFreeBalance -= 1;
             }
 
@@ -261,7 +261,7 @@ contract Ledger {
                 if (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle) {
                     CONTROLLER.bondExtra(diffToBond);
                     pendingBonds = diffToBond;
-                } else if (_report.stakeStatus == Types.LedgerStatus.None && relayFreeBalance >= MIN_NOMINATOR_BALANCE) {
+                } else if (_report.stakeStatus == Types.LedgerStatus.None && diffToBond >= MIN_NOMINATOR_BALANCE) {
                     CONTROLLER.bond(controllerAccount, diffToBond);
                     pendingBonds = diffToBond;
                 }
