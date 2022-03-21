@@ -147,6 +147,9 @@ contract Controller is Initializable {
     // Controller manager role
     bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
 
+    // Beacon manager role
+    bytes32 internal constant ROLE_BEACON_MANAGER = keccak256("ROLE_BEACON_MANAGER");
+
     // Allows function calls only for registered ledgers
     modifier onlyRegistred() {
         require(senderToIndex[msg.sender] != 0, "CONTROLLER: UNREGISTERED_SENDER");
@@ -231,6 +234,16 @@ contract Controller is Initializable {
     function setTransferFee(uint256 _transferFee) external auth(ROLE_CONTROLLER_MANAGER) {
         TRANSFER_FEE = _transferFee;
     }
+
+    /**
+    * @notice Set new relay encoder
+    * @param _relayEncoder - new relay encoder
+    */
+    function setRelayEncoder(address _relayEncoder) external auth(ROLE_BEACON_MANAGER) {
+        require(_relayEncoder != address(0), "CONTROLLER: ENCODER_ZERO_ADDRESS");
+        RELAY_ENCODER = IRelayEncoder(_relayEncoder);
+    }
+
     /**
     * @notice Set new hexes parametes for encodeTransfer
     * @param _hex1 - first hex for encodeTransfer
