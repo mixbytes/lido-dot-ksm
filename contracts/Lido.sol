@@ -511,16 +511,21 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
-    * @notice Nominate on behalf of gived stash account, allowed to call only by ROLE_STAKE_MANAGER
+    * @notice Nominate on behalf of gived array of stash accounts, allowed to call only by ROLE_STAKE_MANAGER
     * @dev Method spawns xcm call to relaychain
-    * @param _stashAccount - target stash account id
+    * @param _stashAccounts - target stash accounts id
     * @param _validators - validators set to be nominated
     */
-    function nominate(bytes32 _stashAccount, bytes32[] calldata _validators) external auth(ROLE_STAKE_MANAGER) {
-        require(ledgerByStash[_stashAccount] != address(0),  "LIDO: UNKNOWN_STASH_ACCOUNT");
-        require(_validators.length <= RELAY_SPEC.maxValidatorsPerLedger, "LIDO: VALIDATORS_AMOUNT_TOO_BIG");
+    function nominateBatch(bytes32[] calldata _stashAccounts, bytes32[][] calldata _validators) external auth(ROLE_STAKE_MANAGER) {
+        require(_stashAccounts.length == _validators.length, "LIDO: INCORRECT_INPUT");
 
-        ILedger(ledgerByStash[_stashAccount]).nominate(_validators);
+        for (uint256 i = 0; i < _stashAccounts.length; ++i) {
+            require(ledgerByStash[_stashAccounts[i]] != address(0),  "LIDO: UNKNOWN_STASH_ACCOUNT");
+
+            require(_validators[i].length <= RELAY_SPEC.maxValidatorsPerLedger, "LIDO: VALIDATORS_AMOUNT_TOO_BIG");
+
+            ILedger(ledgerByStash[_stashAccounts[i]]).nominate(_validators[i]);
+        }
     }
 
     /**
