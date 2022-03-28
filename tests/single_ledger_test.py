@@ -121,28 +121,30 @@ def test_direct_ledger_transfer(lido, oracle_master, vKSM, withdrawal, accounts)
     assert lido.fundRaisedBalance() == 0
 
 
-def test_nominate_ledger(lido, oracle_master, vKSM, accounts):
+def test_nominate_batch_ledger(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
     relay.new_ledger("0x10", "0x11")
+    relay.new_ledger("0x20", "0x21")
+    relay.new_ledger("0x30", "0x31")
 
-    deposit = 20 * 10**18
+    deposit = 30 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
 
     relay.new_era()
 
-    assert relay.ledgers[0].free_balance == deposit
+    assert relay.ledgers[0].free_balance == deposit // 3
     assert relay.ledgers[0].active_balance == 0
 
     relay.new_era()
 
     assert relay.ledgers[0].free_balance == 0
-    assert relay.ledgers[0].active_balance == deposit
+    assert relay.ledgers[0].active_balance == deposit // 3
 
     relay.new_era()
 
-    lido.nominate(relay.ledgers[0].stash_account, ['0x123'])
+    lido.nominateBatch([relay.ledgers[0].stash_account, relay.ledgers[1].stash_account, relay.ledgers[2].stash_account], [['0x123', '0x333', '0x131'], ['0x213'], ['0x321']])
 
 
 def test_deposit_bond_disable(lido, Ledger, oracle_master, vKSM, accounts):
