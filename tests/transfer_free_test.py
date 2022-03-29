@@ -5,6 +5,10 @@ import pytest
 
 def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, withdrawal, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
+
+    lido_balance = 100 * 10**12
+    vKSM.transfer(lido, lido_balance, {'from': accounts[0]})
+
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
 
     stashes = [0x10, 0x20, 0x30, 0x40]
@@ -20,6 +24,7 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, withdrawal, acc
     lido.deposit(deposit, {'from': accounts[0]})
 
     relay.new_era()
+    assert vKSM.balanceOf(lido) == lido_balance
     relay.new_era()
 
     assert relay.ledgers[0].free_balance == 0
@@ -35,6 +40,7 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, withdrawal, acc
     redeem = 4000 * 10**12
     lido.redeem(redeem, {'from': accounts[0]})
     relay.new_era()
+    assert vKSM.balanceOf(lido) == lido_balance
 
     assert relay.ledgers[0].free_balance == 0
     assert relay.ledgers[0].active_balance == (deposit - redeem) // 4
@@ -43,6 +49,7 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, withdrawal, acc
     deposit_2 = 10000 * 10**12
     lido.deposit(deposit_2, {'from': accounts[0]})
     relay.new_era()
+    assert vKSM.balanceOf(lido) == lido_balance
 
     assert relay.ledgers[4].free_balance == (deposit + deposit_2 - redeem) // 5
 
@@ -54,6 +61,7 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, withdrawal, acc
     redeem_2 = 5000 * 10**12
     lido.redeem(redeem_2, {'from': accounts[0]})
     relay.new_era()
+    assert vKSM.balanceOf(lido) == lido_balance
 
     ledger = Ledger.at(relay.ledgers[0].ledger_address)
     assert ledger.transferDownwardBalance() == ledger_free
@@ -61,4 +69,9 @@ def test_deposit_distribution(lido, oracle_master, vKSM, Ledger, withdrawal, acc
     # deposit
     deposit_3 = 5000 * 10**12
     lido.deposit(deposit_3, {'from': accounts[0]})
+
+    for i in range(5):
+        print(str(Ledger.at(relay.ledgers[i].ledger_address).transferDownwardBalance()))
+    
     relay.new_era()
+    assert vKSM.balanceOf(lido) == lido_balance

@@ -154,3 +154,124 @@ def test_redeem_right_after_deposit_greater(lido, oracle_master, vKSM, accounts)
     lido.claimUnbonded({'from': accounts[0]})
 
     assert vKSM.balanceOf(accounts[0]) == (redeem + balance_before_claim)
+
+
+def test_deposit_after_redeem_in_new_era(lido, oracle_master, vKSM, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+    relay.new_ledger("0x20", "0x21")
+
+    deposit = 20 * 10**12
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    relay.new_era()
+    relay.new_era()
+
+    redeem = 10 * 10**12
+    lido.redeem(redeem, {'from': accounts[0]})
+
+    relay.new_era()
+
+    assert relay.ledgers[0].active_balance == (deposit - redeem) / 2
+    assert relay.ledgers[1].active_balance == (deposit - redeem) / 2
+
+    lido.deposit(redeem, {'from': accounts[1]})
+
+    relay.new_era() # transfer excess to withdrawal
+    relay.new_era() # remove element from queue
+
+    (waitingToUnbonding, readyToClaim) = lido.getUnbonded(accounts[0])
+
+    assert waitingToUnbonding == 0
+    assert readyToClaim == redeem
+
+    balance_before_claim = vKSM.balanceOf(accounts[0])
+    lido.claimUnbonded({'from': accounts[0]})
+
+    assert vKSM.balanceOf(accounts[0]) == (redeem + balance_before_claim)
+
+
+def test_deposit_after_redeem_in_new_era_less(lido, oracle_master, vKSM, Ledger, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+
+    deposit = 20 * 10**12
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    relay.new_era()
+    relay.new_era()
+
+    assert Ledger.at(lido.findLedger(relay.ledgers[0].stash_account)).ledgerStake() == deposit
+
+    redeem = 5 * 10**12
+    lido.redeem(redeem, {'from': accounts[0]})
+
+    relay.new_era()
+
+    assert Ledger.at(lido.findLedger(relay.ledgers[0].stash_account)).ledgerStake() == deposit - redeem
+
+    deposit_2 = 15 * 10**12
+
+    lido.deposit(deposit_2, {'from': accounts[1]})
+
+    relay.new_era() # transfer excess to withdrawal
+    relay.new_era() # remove element from queue
+
+    assert Ledger.at(lido.findLedger(relay.ledgers[0].stash_account)).ledgerStake() == deposit + (deposit_2 - redeem)
+
+    (waitingToUnbonding, readyToClaim) = lido.getUnbonded(accounts[0])
+
+    assert waitingToUnbonding == 0
+    assert readyToClaim == redeem
+
+    balance_before_claim = vKSM.balanceOf(accounts[0])
+    lido.claimUnbonded({'from': accounts[0]})
+
+    assert vKSM.balanceOf(accounts[0]) == (redeem + balance_before_claim)
+
+
+def test_deposit_after_redeem_in_new_era_greater(lido, oracle_master, vKSM, Ledger, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+
+    deposit = 20 * 10**12
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    relay.new_era()
+    relay.new_era()
+
+    assert Ledger.at(lido.findLedger(relay.ledgers[0].stash_account)).ledgerStake() == deposit
+
+    redeem = 10 * 10**12
+    lido.redeem(redeem, {'from': accounts[0]})
+
+    relay.new_era()
+
+    assert Ledger.at(lido.findLedger(relay.ledgers[0].stash_account)).ledgerStake() == deposit - redeem
+
+    deposit_2 = 5 * 10**12
+
+    lido.deposit(deposit_2, {'from': accounts[1]})
+
+    relay.new_era()
+
+    assert Ledger.at(lido.findLedger(relay.ledgers[0].stash_account)).ledgerStake() == deposit + (deposit_2 - redeem)
+
+    (waitingToUnbonding, readyToClaim) = lido.getUnbonded(accounts[0])
+
+    assert waitingToUnbonding == redeem
+    assert readyToClaim == 0
+
+    for i in range(32):
+        relay.new_era()
+
+    balance_before_claim = vKSM.balanceOf(accounts[0])
+    lido.claimUnbonded({'from': accounts[0]})
+
+    assert vKSM.balanceOf(accounts[0]) == (redeem + balance_before_claim)
