@@ -52,8 +52,7 @@ DEPLOYMENTS = load_deployments(NETWORK)
 
 
 def main():
-    #lido = Lido.at(DEPLOYMENTS['Lido'])
-    lido = Lido.at('0xFfc7780C34B450d917d557E728f033033CB4fA8C')
+    lido = Lido.at(DEPLOYMENTS['Lido'])
 
     root_derivative_index = CONFIG['root_derivative_index']
     root_derivative_account = ss58decode(get_derivative_account(CONFIG['sovereign_account'], root_derivative_index))
