@@ -234,6 +234,7 @@ contract Ledger {
         // Always transfer deficit to relay chain
         if (_report.stashBalance < _ledgerStake) {
             uint128 deficit = _ledgerStake - _report.stashBalance;
+            require(VKSM.balanceOf(address(LIDO)) >= deficit, "LEDGER: TRANSFER_EXCEEDS_BALANCE");
             LIDO.transferToLedger(deficit);
             CONTROLLER.transferToRelaychain(deficit);
             transferUpwardBalance += deficit;
@@ -251,12 +252,12 @@ contract Ledger {
                 diff -= diffToRebond;
             }
 
-            if ((relayFreeBalance == transferUpwardBalance) && (transferUpwardBalance > 0)) {
+            if (transferUpwardBalance > 0 && relayFreeBalance == transferUpwardBalance) {
                 // In case if bond amount = transferUpwardBalance we can't distinguish 2 messages were success or 2 messages were failed
                 relayFreeBalance -= 1;
             }
 
-            if ((diff > 0) && (relayFreeBalance > 0)) {    
+            if (diff > 0 && relayFreeBalance > 0) {
                 uint128 diffToBond = diff > relayFreeBalance ? relayFreeBalance : diff;
                 if (_report.stakeStatus == Types.LedgerStatus.Nominator || _report.stakeStatus == Types.LedgerStatus.Idle) {
                     CONTROLLER.bondExtra(diffToBond);
@@ -282,7 +283,7 @@ contract Ledger {
             // NOTE: if ledger stake == active balance we only withdraw unlocked balance
             if (withdrawableBalance > 0) {
                 uint32 slashSpans = 0;
-                if ((_report.unlocking.length == 0) && (_report.activeBalance <= MINIMUM_BALANCE)) {
+                if (_report.unlocking.length == 0 && _report.activeBalance <= MINIMUM_BALANCE) {
                     slashSpans = _report.slashingSpans;
                 }
                 CONTROLLER.withdrawUnbonded(slashSpans);
