@@ -153,6 +153,28 @@ contract Withdrawal is Initializable {
     }
 
     /**
+    * @notice function returns xcKSM amount that should be available for claiming after batch remove
+    * @param _batchShift batch shift from first element
+    */
+    function getxcKSMBalanceForBatch(uint256 _batchShift) external view returns (uint256) {
+        (WithdrawalQueue.Batch memory specificBatch, ) = queue.element(_batchShift);
+        // batchSharePrice = pool_xcKSM_balance / pool_shares
+        // when user try to claim: user_KSM = user_pool_share * batchSharePrice
+        uint256 sharePriceForBatch = getBatchSharePrice(specificBatch);
+        uint256 xcKSMForBatch = specificBatch.batchTotalShares * sharePriceForBatch / 10**12;
+        return xcKSMForBatch;
+    }
+
+    /**
+    * @notice function returns specific batch from queue
+    * @param _batchShift batch shift from first element
+    */
+    function getQueueBatch(uint256 _batchShift) external view returns (WithdrawalQueue.Batch memory) {
+        (WithdrawalQueue.Batch memory specificBatch, ) = queue.element(_batchShift);
+        return specificBatch;
+    }
+
+    /**
     * @notice 1. Mint equal amount of pool shares for user 
     * @notice 2. Adjust current amount of virtual xcKSM on Withdrawal contract
     * @notice 3. Burn shares on LIDO side
