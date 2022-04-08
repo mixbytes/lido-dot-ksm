@@ -87,6 +87,19 @@ library WithdrawalQueue {
     }
 
     /**
+    * @notice Return specific element of the queue
+    * @param queue current queue
+    * @param shift element shift from top id
+    */
+    function element(Queue storage queue, uint256 shift) internal view returns (Batch memory _item, uint256 _id) {
+        require(queue.size > 0, "WithdrawalQueue: queue is empty");
+        require(shift < queue.size, "WithdrawalQueue: index outside queue");
+        uint256 index = (queue.first + shift) % queue.cap;
+        _item = queue.items[index];
+        _id = queue.ids[index];
+    }
+
+    /**
     * @notice Return last element of the queue
     * @param queue current queue
     */
