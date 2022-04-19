@@ -3,7 +3,7 @@ from brownie import *
 
 def main():
     # NOTE: change address to encoder address in specific chain
-    encoder = RelayEncoder.at('0x14C9D16e3d1f688609761F82437Be62E9aDB1C76')
+    encoder = RelayEncoder.at('0xA3F1cF087E87dA96047D75776fDa014227ce6E27')
     enc = interface.IRelayEncoder('0x0000000000000000000000000000000000000805')
 
     # bond
@@ -49,3 +49,5 @@ def main():
             print("Error: " + str(i))
         i *= 2
         nominees.append(i)
+
+    print("Done")
