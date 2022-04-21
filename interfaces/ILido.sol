@@ -32,6 +32,8 @@ interface ILido {
 
     function ORACLE_MASTER() external view returns (address);
 
+    function decimals() external view returns (uint8);
+
     function getPooledKSMByShares(uint256 sharesAmount) external view returns (uint256);
 
     function getSharesByPooledKSM(uint256 amount) external view returns (uint256);

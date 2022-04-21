@@ -1,4 +1,65 @@
 networks:
+    polkadot:
+        deployer: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+        auth_sudo: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+        treasury: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+        developers: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+        sovereign_account: "5Ec4AhPVjsshXjh8ynp6MwaJTJBnen3pkHiiyDhHfie5VWkN"
+        root_derivative_index: 30
+        stash_indexes: [1, 2]
+        oracles: []
+        quorum: 1
+        token_name: "Liquid staked DOT"
+        token_symbol: "stDOT"
+        token_decimals: 10
+        withdrawal_cap: 40 # max element in withdrawal queue
+        deposit_cap: 1_000_000_000_000_000 # 100.000 xcDOT
+        hex1: "0x630801000100511f0100010300"
+        hex2: "0x010400000000"
+        as_derevative_hex: "0x1801" # TODO:
+        oracle_limit: 3000 # 30 %
+        precompiles:
+            vksm: "0xFFFFFFFF1FCACBD218EDC0EBA20FC2308C778080"
+            xcm_transactor: "0x0000000000000000000000000000000000000806"
+            relay_encoder: "0x0000000000000000000000000000000000000805"
+            x_token: "0x0000000000000000000000000000000000000804"
+        relay_spec:
+            era_duratation: 86400
+            max_validators_per_ledger: 16
+            min_nominator_bond: 100_000_000_000
+            min_active_balance: 1_000
+            reverse_transfer_fee: 4_000_000 # TODO:
+            transfer_fee: 18_700_000_000 # TODO:
+            max_unlocking_chunks: 32
+        roles:
+            ROLE_BEACON_MANAGER: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+            ROLE_SPEC_MANAGER: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+            ROLE_PAUSE_MANAGER: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+            ROLE_FEE_MANAGER: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+            ROLE_LEDGER_MANAGER: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+            ROLE_STAKE_MANAGER: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+            ROLE_ORACLE_MEMBERS_MANAGER: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+            ROLE_ORACLE_QUORUM_MANAGER: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+            ROLE_CONTROLLER_MANAGER: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+            ROLE_SET_TREASURY: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+            ROLE_SET_DEVELOPERS: "0x749C992900dcc143D85E140c3aBE271FC021D498"
+        controller_initial_balance: 500_000_000_000 # 50 xcDOT
+        xcm_max_weight: 1_833_637_000
+        xcm_weights:
+         - 255_512_000   #AS_DERIVATIVE
+         - 559_923_000   #BOND_BASE
+         - 958_225_000   #BOND_EXTRA_BASE
+         - 1_164_825_000 #UNBOND_BASE
+         - 1_478_125_000 #WITHDRAW_UNBONDED_KILL
+         - 0             #WITHDRAW_UNBONDED_PER_UNIT
+         - 1_082_937_000 #REBOND_BASE
+         - 69_000        #REBOND_PER_UNIT
+         - 839_287_000   #CHILL_BASE
+         - 945_933_000   #NOMINATE_BASE
+         - 28_003_000    #NOMINATE_PER_UNIT
+         - 1_100_000_000 #TRANSFER_TO_PARA_BASE
+         - 4_000_000_000 #TRANSFER_TO_RELAY_BASE
+
     kusama:
         deployer: "0x749C992900dcc143D85E140c3aBE271FC021D498"
         auth_sudo: "0x749C992900dcc143D85E140c3aBE271FC021D498"
@@ -10,6 +71,9 @@ networks:
         oracles:
          - "0x416291c3145237e79c6d2Eb45d3EFE0467C387bc"
         quorum: 1
+        token_name: "Liquid staked KSM"
+        token_symbol: "stKSM"
+        token_decimals: 12
         withdrawal_cap: 40 # max element in withdrawal queue
         deposit_cap: 10_000_000_000_000_000 # 10.000 xcKSM
         hex1: "0x6308010001009d1f0100010300"
@@ -70,6 +134,9 @@ networks:
          - "0x04a72797360815e33Fc6676Bf0b02F7D3E901c78"
          - "0x21aeb270e48bFB111F8d1e64EACe51C3fE43E944"
         quorum: 2
+        token_name: "Liquid staked KSM"
+        token_symbol: "stKSM"
+        token_decimals: 12
         withdrawal_cap: 40 # max element in withdrawal queue
         deposit_cap: 10_000_000_000_000_000 # 10.000 xcKSM
         hex1: "0x630801000100a10f0100010300"
