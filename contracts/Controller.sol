@@ -10,10 +10,12 @@ import "../interfaces/IXcmTransactor.sol";
 import "../interfaces/ILedger.sol";
 import "../interfaces/IAuthManager.sol";
 import "../interfaces/ILido.sol";
-
+import "./utils/Encoding.sol";
 
 
 contract Controller is Initializable {
+    using Encoding for uint256;
+
     // Event emitted when weight updated
     event WeightUpdated (
         uint8 index,
@@ -147,6 +149,9 @@ contract Controller is Initializable {
     // Controller manager role
     bytes32 internal constant ROLE_CONTROLLER_MANAGER = keccak256("ROLE_CONTROLLER_MANAGER");
 
+    // Beacon manager role
+    bytes32 internal constant ROLE_BEACON_MANAGER = keccak256("ROLE_BEACON_MANAGER");
+
     // Allows function calls only for registered ledgers
     modifier onlyRegistred() {
         require(senderToIndex[msg.sender] != 0, "CONTROLLER: UNREGISTERED_SENDER");
@@ -231,6 +236,16 @@ contract Controller is Initializable {
     function setTransferFee(uint256 _transferFee) external auth(ROLE_CONTROLLER_MANAGER) {
         TRANSFER_FEE = _transferFee;
     }
+
+    /**
+    * @notice Set new relay encoder
+    * @param _relayEncoder - new relay encoder
+    */
+    function setRelayEncoder(address _relayEncoder) external auth(ROLE_BEACON_MANAGER) {
+        require(_relayEncoder != address(0), "CONTROLLER: ENCODER_ZERO_ADDRESS");
+        RELAY_ENCODER = IRelayEncoder(_relayEncoder);
+    }
+
     /**
     * @notice Set new hexes parametes for encodeTransfer
     * @param _hex1 - first hex for encodeTransfer
@@ -491,7 +506,7 @@ contract Controller is Initializable {
             hex1,
             abi.encodePacked(to),
             hex2,
-            scaleCompactUint(amount),
+            amount.scaleCompactUint(),
             hex"00000000"
         );
     }
@@ -507,56 +522,9 @@ contract Controller is Initializable {
             hex1,
             abi.encodePacked(to),
             hex2,
-            scaleCompactUint(amount),
+            amount.scaleCompactUint(),
             hex"0000000001",
-            scaleCompactUint(uint256(weight))
+            uint256(weight).scaleCompactUint()
         );
-    }
-
-    /**
-    * @notice Converting uint256 value to le bytes
-    * @param value - uint256 value
-    * @param len - length of output bytes array
-    */
-    function toLeBytes(uint256 value, uint256 len) internal returns(bytes memory) {
-        bytes memory out = new bytes(len);
-        for (uint256 idx = 0; idx < len; ++idx) {
-            out[idx] = bytes1(uint8(value));
-            value = value >> 8;
-        }
-        return out;
-    }
-
-    /**
-    * @notice Converting uint256 value to bytes
-    * @param value - uint256 value
-    */
-    function scaleCompactUint(uint256 value) internal returns(bytes memory) {
-        if (value < 1<<6) {
-            return toLeBytes(value << 2, 1);
-        }
-        else if(value < 1 << 14) {
-            return toLeBytes((value << 2) + 1, 2);
-        }
-        else if(value < 1 << 30) {
-            return toLeBytes((value << 2) + 2, 4);
-        }
-        else {
-            uint256 numBytes = 0;
-            {
-                uint256 m = value;
-                for (; numBytes < 256 && m != 0; ++numBytes) {
-                    m = m >> 8;
-                }
-            }
-
-            bytes memory out = new bytes(numBytes + 1);
-            out[0] = bytes1(uint8(((numBytes - 4) << 2) + 3));
-            for (uint256 i = 0; i < numBytes; ++i) {
-                out[i + 1] = bytes1(uint8(value & 0xFF));
-                value = value >> 8;
-            }
-            return out;
-        }
     }
 }
