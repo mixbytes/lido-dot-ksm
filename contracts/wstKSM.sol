@@ -12,12 +12,17 @@ contract WstKSM is ERC20 {
     // vKSM precompile
     IERC20 public VKSM;
 
+    // Token decimals
+    uint8 internal _decimals;
+
     /**
      * @param _lido address of the StKSM token to wrap
      */
-    constructor(ILido _lido, IERC20 _vKSM) ERC20("Wrapped liquid staked KSM", "wstKSM") {
+    constructor(ILido _lido, IERC20 _vKSM, uint8 __decimals) ERC20("Wrapped liquid staked KSM", "wstKSM") {
+        require(__decimals > 0, "WSTKSM: INCORRECT_DECIMALS");
         LIDO = _lido;
         VKSM = _vKSM;
+        _decimals = __decimals;
     }
 
     /**
@@ -31,7 +36,7 @@ contract WstKSM is ERC20 {
      * @return the number of decimals for getting user representation of a token amount.
      */
     function decimals() public view override returns (uint8) {
-        return 12;
+        return _decimals;
     }
 
     /**

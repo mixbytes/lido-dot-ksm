@@ -13,7 +13,7 @@ import os
 init(autoreset=True)
 
 
-NETWORK=os.getenv("NETWORK", "moonbase")
+NETWORK=os.getenv("NETWORK", "polkadot")
 
 
 def get_derivative_account(root_account, index):
@@ -61,7 +61,7 @@ DEPLOYMENTS = load_deployments(NETWORK)
 
 # global configs
 CONFS = 1
-GAS_PRICE = "10 gwei"
+GAS_PRICE = "100 gwei"
 GAS_LIMIT = 10*10**6
 
 
@@ -185,8 +185,8 @@ def deploy_ledger_clone(deployer):
     return deploy(Ledger, deployer)
 
 
-def deploy_wstksm(deployer, lido, vksm):
-    return deploy(WstKSM, deployer, lido, vksm)
+def deploy_wstksm(deployer, lido, vksm, token_decimals):
+    return deploy(WstKSM, deployer, lido, vksm, token_decimals)
 
 
 def deploy_controller(deployer, proxy_admin, root_derivative_index, vksm, relay_encoder, xcm_transactor, x_token, hex1, hex2, as_derevative_hex):
@@ -230,6 +230,10 @@ def main():
     withdrawal_cap = CONFIG['withdrawal_cap']
     deposit_cap = CONFIG['deposit_cap']
 
+    token_name = CONFIG['token_name']
+    token_symbol = CONFIG['token_symbol']
+    token_decimals = CONFIG['token_decimals']
+
     hex1 = CONFIG['hex1']
     hex2 = CONFIG['hex2']
     as_derevative_hex = CONFIG['as_derevative_hex']
@@ -269,6 +273,8 @@ def main():
 
     lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal, deposit_cap, max_difference)
 
+    lido.setTokenInfo(token_name, token_symbol, token_decimals, get_opts(CONFIG['deployer']))
+
     print(f"\n{Fore.GREEN}Configuring controller...")
     controller.setLido(lido, get_opts(deployer))
     controller.setMaxWeight(xcm_max_weight, get_opts(roles['ROLE_CONTROLLER_MANAGER']))
@@ -301,7 +307,7 @@ def main():
         lido.addLedger(s_bytes, s_bytes, stash_idxs[i], get_opts(roles['ROLE_LEDGER_MANAGER']))
         ledgers.append(lido.findLedger(s_bytes))
 
-    wStKSM = deploy_wstksm(deployer, lido, vksm)
+    wStKSM = deploy_wstksm(deployer, lido, vksm, token_decimals)
 
     for ledger in ledgers:
         print("Refreshing allowances for ledger:", ledger)

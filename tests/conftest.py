@@ -104,6 +104,7 @@ def lido(Lido, vKSM, controller, auth_manager, oracle_master, withdrawal, proxy_
     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': accounts[0]})
     _lido.setLedgerBeacon(ledger_beacon)
     _lido.setLedgerFactory(ledger_factory)
+    _lido.setTokenInfo("TST", "TST", 12)
     era_sec = 60 * 60 * 6
     _lido.setRelaySpec((16, 1, 0, 32))  # kusama settings except min nominator bond
     oracle_master.setAnchorEra(0, chain.time(), era_sec)
@@ -125,6 +126,7 @@ def mocklido(Lido, LedgerMock, LedgerBeacon, LedgerFactory, Oracle, OracleMaster
     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': admin})
     _lido.setLedgerBeacon(ledger_beacon, {'from': admin})
     _lido.setLedgerFactory(ledger_factory, {'from': admin})
+    _lido.setTokenInfo("TST", "TST", 12)
 
     return _lido
 
@@ -137,5 +139,5 @@ def mockledger(mocklido, admin, LedgerMock):
 
 @pytest.fixture(scope="module")
 def wstKSM(lido, WstKSM, vKSM, admin):
-    _wstKSM = WstKSM.deploy(lido, vKSM, {'from': admin})
+    _wstKSM = WstKSM.deploy(lido, vKSM, 12, {'from': admin})
     return _wstKSM

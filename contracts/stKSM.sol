@@ -27,28 +27,6 @@ abstract contract stKSM is IERC20, Pausable {
     uint256 internal totalShares;
 
     /**
-     * @return the name of the token.
-     */
-    function name() public pure returns (string memory) {
-        return "Liquid staked KSM";
-    }
-
-    /**
-     * @return the symbol of the token, usually a shorter version of the
-     * name.
-     */
-    function symbol() public pure returns (string memory) {
-        return "stKSM";
-    }
-
-    /**
-     * @return the number of decimals for getting user representation of a token amount.
-     */
-    function decimals() public pure returns (uint8) {
-        return 12;
-    }
-
-    /**
      * @return the amount of tokens in existence.
      *
      * @dev Always equals to `_getTotalPooledKSM()` since token amount

@@ -171,10 +171,54 @@ contract Lido is stKSM, Initializable {
     // Developers address change role
     bytes32 internal constant ROLE_DEVELOPERS = keccak256("ROLE_SET_DEVELOPERS");
 
+    // Token name
+    string internal _name;
+
+    // Token symbol
+    string internal _symbol;
+
+    // Token decimals
+    uint8 internal _decimals;
+
     // Allow function calls only from member with specific role
     modifier auth(bytes32 role) {
         require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "LIDO: UNAUTHORIZED");
         _;
+    }
+
+    /**
+     * @return the name of the token.
+     */
+    function name() public view returns (string memory) {
+        return _name;
+    }
+
+    /**
+     * @return the symbol of the token, usually a shorter version of the
+     * name.
+     */
+    function symbol() public view returns (string memory) {
+        return _symbol;
+    }
+
+    /**
+     * @return the number of decimals for getting user representation of a token amount.
+     */
+    function decimals() public view returns (uint8) {
+        return _decimals;
+    }
+
+    /**
+     * @notice setting token parameters
+     */
+    function setTokenInfo(string memory __name, string memory __symbol, uint8 __decimals) external {
+        require(bytes(__name).length > 0, "LIDO: EMPTY_NAME");
+        require(bytes(__symbol).length > 0, "LIDO: EMPTY_SYMBOL");
+        require(__decimals > 0, "LIDO: ZERO_DECIMALS");
+        require(bytes(_name).length == 0, "LIDO: NAME_SETTED");
+        _name = __name;
+        _symbol = __symbol;
+        _decimals = __decimals;
     }
 
     /**
@@ -654,22 +698,23 @@ contract Lido is stKSM, Initializable {
     * @notice Transfer vKSM from ledger to LIDO. Can be called only from ledger
     * @param _amount - amount of transfered vKSM
     */
-    function transferFromLedger(uint256 _amount) external {
-        require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
+    // NOTE: DEPRECATED
+    // function transferFromLedger(uint256 _amount) external {
+    //     require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
-        if (_amount > ledgerBorrow[msg.sender]) { // some donations
-            uint256 excess = _amount - ledgerBorrow[msg.sender];
-            fundRaisedBalance += excess; //just distribute it as rewards
-            bufferedDeposits += excess;
-            ledgerBorrow[msg.sender] = 0;
-            VKSM.transferFrom(msg.sender, address(this), excess);
-            VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount - excess);
-        }
-        else {
-            ledgerBorrow[msg.sender] -= _amount;
-            VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount);
-        }
-    }
+    //     if (_amount > ledgerBorrow[msg.sender]) { // some donations
+    //         uint256 excess = _amount - ledgerBorrow[msg.sender];
+    //         fundRaisedBalance += excess; //just distribute it as rewards
+    //         bufferedDeposits += excess;
+    //         ledgerBorrow[msg.sender] = 0;
+    //         VKSM.transferFrom(msg.sender, address(this), excess);
+    //         VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount - excess);
+    //     }
+    //     else {
+    //         ledgerBorrow[msg.sender] -= _amount;
+    //         VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount);
+    //     }
+    // }
 
     /**
     * @notice Transfer vKSM from LIDO to ledger. Can be called only from ledger
