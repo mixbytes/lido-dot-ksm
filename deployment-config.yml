@@ -46,7 +46,7 @@ networks:
         controller_initial_balance: 500_000_000_000 # 50 xcDOT
         xcm_max_weight: 1_833_637_000
         xcm_weights:
-         - 255_512_000   #AS_DERIVATIVE
+         - 355_512_000   #AS_DERIVATIVE
          - 559_923_000   #BOND_BASE
          - 958_225_000   #BOND_EXTRA_BASE
          - 1_164_825_000 #UNBOND_BASE

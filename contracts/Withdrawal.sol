@@ -108,7 +108,7 @@ contract Withdrawal is Initializable {
             // batchSharePrice = pool_xcKSM_balance / pool_shares
             // when user try to claim: user_KSM = user_pool_share * batchSharePrice
             uint256 sharePriceForBatch = getBatchSharePrice(topBatch);
-            uint256 xcKSMForBatch = topBatch.batchTotalShares * sharePriceForBatch / stKSM.decimals();
+            uint256 xcKSMForBatch = topBatch.batchTotalShares * sharePriceForBatch / 10**stKSM.decimals();
             if (newXcKSMAmount >= xcKSMForBatch) {
                 batchSharePrice[topId] = sharePriceForBatch;
 
@@ -161,7 +161,7 @@ contract Withdrawal is Initializable {
         // batchSharePrice = pool_xcKSM_balance / pool_shares
         // when user try to claim: user_KSM = user_pool_share * batchSharePrice
         uint256 sharePriceForBatch = getBatchSharePrice(specificBatch);
-        uint256 xcKSMForBatch = specificBatch.batchTotalShares * sharePriceForBatch / stKSM.decimals();
+        uint256 xcKSMForBatch = specificBatch.batchTotalShares * sharePriceForBatch / 10**stKSM.decimals();
         return xcKSMForBatch;
     }
 
@@ -201,7 +201,7 @@ contract Withdrawal is Initializable {
         uint256 readyToClaim = 0;
         uint256 readyToClaimCount = 0;
         Request[] storage requests = userRequests[_holder];
-        uint8 stKSMDecimals = stKSM.decimals();
+        uint256 stKSMDecimals = 10**stKSM.decimals();
 
         for (uint256 i = 0; i < requests.length; ++i) {
             if (requests[i].batchId <= claimableId) {
@@ -240,7 +240,7 @@ contract Withdrawal is Initializable {
     */
     function getRedeemStatus(address _holder) external view returns(uint256 _waiting, uint256 _available) {
         Request[] storage requests = userRequests[_holder];
-        uint8 stKSMDecimals = stKSM.decimals();
+        uint256 stKSMDecimals = 10**stKSM.decimals();
 
         for (uint256 i = 0; i < requests.length; ++i) {
             if (requests[i].batchId <= claimableId) {
@@ -263,21 +263,21 @@ contract Withdrawal is Initializable {
             // user_xcKSM = user_batch_share * batch_share_price
             // batch_share_price = (1 / batch_total_shares) * batch_pool_shares * (total_xcKSM / total_pool_shares)
             if (_batch.batchTotalShares > 0) {
-                batchKSMPrice = (stKSM.decimals() * _batch.batchXcKSMShares * totalVirtualXcKSMAmount) / 
+                batchKSMPrice = (10**stKSM.decimals() * _batch.batchXcKSMShares * totalVirtualXcKSMAmount) / 
                                 (_batch.batchTotalShares * totalXcKSMPoolShares);
             }
             else {
                 // NOTE: This means that batch not added to queue currently
                 if (batchVirtualXcKSMAmount > 0) {
-                    batchKSMPrice = (stKSM.decimals() * getKSMPoolShares(batchVirtualXcKSMAmount) * totalVirtualXcKSMAmount) / 
+                    batchKSMPrice = (10**stKSM.decimals() * getKSMPoolShares(batchVirtualXcKSMAmount) * totalVirtualXcKSMAmount) / 
                                     (batchVirtualXcKSMAmount * totalXcKSMPoolShares);
                 }
             }
         }
         else {
-            // NOTE: This means that we have only one batch that no in the pool (batch share price == stKSM.decimals())
+            // NOTE: This means that we have only one batch that no in the pool (batch share price == 10**stKSM.decimals())
             if (batchVirtualXcKSMAmount > 0) {
-                batchKSMPrice = stKSM.decimals();
+                batchKSMPrice = 10**stKSM.decimals();
             }
         }
         return batchKSMPrice;
