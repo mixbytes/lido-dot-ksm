@@ -273,7 +273,7 @@ def main():
 
     lido = deploy_lido(deployer, proxy_admin, auth_manager, vksm, controller, treasury, developers, oracle_master, withdrawal, deposit_cap, max_difference)
 
-    lido.setTokenInfo(token_name, token_symbol, token_decimals)
+    lido.setTokenInfo(token_name, token_symbol, token_decimals, get_opts(CONFIG['deployer']))
 
     print(f"\n{Fore.GREEN}Configuring controller...")
     controller.setLido(lido, get_opts(deployer))
