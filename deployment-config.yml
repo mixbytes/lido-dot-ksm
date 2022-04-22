@@ -28,8 +28,8 @@ networks:
             max_validators_per_ledger: 16
             min_nominator_bond: 100_000_000_000
             min_active_balance: 1_000
-            reverse_transfer_fee: 4_000_000 # TODO:
-            transfer_fee: 18_700_000_000 # TODO:
+            reverse_transfer_fee: 104_000_000
+            transfer_fee: 4_000_000_000
             max_unlocking_chunks: 32
         roles:
             ROLE_BEACON_MANAGER: "0x749C992900dcc143D85E140c3aBE271FC021D498"
