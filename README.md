@@ -100,3 +100,18 @@ Deploy commit: 2f2725faa0bc371e4d1ddfceacd8c45d8f0905f8
 |LedgerFactory|[0x780825fD0E7b09A8c136aD41090E356c138E0EdE](https://moonriver.moonscan.io/address/0x780825fD0E7b09A8c136aD41090E356c138E0EdE)|
 |WstKSM|[0x3bfd113ad0329a7994a681236323fb16E16790e3](https://moonriver.moonscan.io/address/0x3bfd113ad0329a7994a681236323fb16E16790e3)|
 |Withdrawal|[0x50afC32c3E5D25aee36D035806D80eE0C09c2a16](https://moonriver.moonscan.io/address/0x50afC32c3E5D25aee36D035806D80eE0C09c2a16)|
+
+### Moonbeam (Polkadot)
+Deploy commit: 7db47f7fef94eb40781f62beb551ae45d82dd40f
+|Contract|Address|
+|-|-|
+|Controller|[0xa4b43F9B0aef0b22365727e93E91c096a09ef091](https://moonscan.io/address/0xa4b43F9B0aef0b22365727e93E91c096a09ef091)|
+|AuthManager|[0x78d36208D2Eb3a1E6D84a727Ee1C012FF4cc293F](https://moonscan.io/address/0x78d36208D2Eb3a1E6D84a727Ee1C012FF4cc293F)|
+|Lido|[0xFA36Fe1dA08C89eC72Ea1F0143a35bFd5DAea108](https://moonscan.io/address/0xFA36Fe1dA08C89eC72Ea1F0143a35bFd5DAea108)|
+|Oracle|[0x91069b93062c1Fdd6998741C9CA3C6eA57672956](https://moonscan.io/address/0x91069b93062c1Fdd6998741C9CA3C6eA57672956)|
+|OracleMaster|[0x29767b69c2c39b22667dfD960e95911AC6e0CCEd](https://moonscan.io/address/0x29767b69c2c39b22667dfD960e95911AC6e0CCEd)|
+|Ledger|[0x891F6825afEbfbB4Bf6889b86724ac859477E4C4](https://moonscan.io/address/0x891F6825afEbfbB4Bf6889b86724ac859477E4C4)|
+|LedgerBeacon|[0xB9675751CE5840acD4c0Ba0E2d5a9188A8f34Bb8](https://moonscan.io/address/0xB9675751CE5840acD4c0Ba0E2d5a9188A8f34Bb8)|
+|LedgerFactory|[0xf8B73E2Ffb2d0e25cf3166A22ea3Fe1F73483F49](https://moonscan.io/address/0xf8B73E2Ffb2d0e25cf3166A22ea3Fe1F73483F49)|
+|WstKSM|[0x191cf2602Ca2e534c5Ccae7BCBF4C46a704bb949](https://moonscan.io/address/0x191cf2602Ca2e534c5Ccae7BCBF4C46a704bb949)|
+|Withdrawal|[0x25442Adf37379BE90ed1F7FcCd9c9417b10aA4DC](https://moonscan.io/address/0x25442Adf37379BE90ed1F7FcCd9c9417b10aA4DC)|

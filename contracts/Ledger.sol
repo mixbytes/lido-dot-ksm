@@ -207,12 +207,13 @@ contract Ledger {
         }
         uint128 _cachedTotalBalance = cachedTotalBalance;
         
-        if (cachedTotalBalance > 0) {
-            uint128 relativeDifference = _report.stashBalance > cachedTotalBalance ? 
+        uint256 totalSupply = LIDO.totalSupply();
+        if (totalSupply > 0) {
+            uint256 relativeDifference = _report.stashBalance > cachedTotalBalance ? 
                 _report.stashBalance - cachedTotalBalance :
                 cachedTotalBalance - _report.stashBalance;
             // NOTE: 1 / 10000 - one base point
-            relativeDifference = relativeDifference * 10000 / cachedTotalBalance;
+            relativeDifference = relativeDifference * 10000 / totalSupply;
             require(relativeDifference < LIDO.MAX_ALLOWABLE_DIFFERENCE(), "LEDGER: DIFFERENCE_EXCEEDS_BALANCE");
         }
 
