@@ -207,7 +207,7 @@ contract OracleMaster is Pausable {
     function addOracleMember(address _member) external auth(ROLE_ORACLE_MEMBERS_MANAGER) {
         require(_member != address(0), "OM: BAD_ARGUMENT");
         require(_getMemberId(_member) == MEMBER_NOT_FOUND, "OM: MEMBER_EXISTS");
-        require(members.length < MAX_MEMBERS - 1, "OM: MEMBERS_TOO_MANY");
+        require(members.length < MAX_MEMBERS, "OM: MEMBERS_TOO_MANY");
 
         members.push(_member);
         emit MemberAdded(_member);

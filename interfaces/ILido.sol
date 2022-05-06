@@ -34,6 +34,8 @@ interface ILido {
 
     function decimals() external view returns (uint8);
 
+    function totalSupply() external view returns (uint256);
+
     function getPooledKSMByShares(uint256 sharesAmount) external view returns (uint256);
 
     function getSharesByPooledKSM(uint256 amount) external view returns (uint256);
