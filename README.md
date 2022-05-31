@@ -75,16 +75,16 @@ brownie test --coverage
 Deploy commit: 617b60fd8a0da43e44e11d62793334053269fa1a
 |Contract|Address|
 |-|-|
-|Controller|[0xa7477a06027149c551457cFc9f76e179e9267146](https://moonbase.moonscan.io/address/0xa7477a06027149c551457cFc9f76e179e9267146)|
-|AuthManager|[0x0D5A598086F89e8B22e5e5F30fc315C07F2e5291](https://moonbase.moonscan.io/address/0x0D5A598086F89e8B22e5e5F30fc315C07F2e5291)|
-|Lido|[0x708702be8e5e91320f5503AA8df076a1fe9f39a6](https://moonbase.moonscan.io/address/0x708702be8e5e91320f5503AA8df076a1fe9f39a6)|
-|Oracle|[0x7Fab8A0f5c7F5B3A87A1A63AD62c6C450a4b8ceE](https://moonbase.moonscan.io/address/0x7Fab8A0f5c7F5B3A87A1A63AD62c6C450a4b8ceE)|
-|OracleMaster|[0x68a6520c459faAcB662E1f5206B63D8fa698Fea7](https://moonbase.moonscan.io/address/0x68a6520c459faAcB662E1f5206B63D8fa698Fea7)|
-|Ledger|[0xDcBDCa2bD5c1f64452318bEda8a6350a0545cA35](https://moonbase.moonscan.io/address/0xDcBDCa2bD5c1f64452318bEda8a6350a0545cA35)|
-|LedgerBeacon|[0x8589b22F597a9c02376A7f60B7Bb7aB6295A570e](https://moonbase.moonscan.io/address/0x8589b22F597a9c02376A7f60B7Bb7aB6295A570e)|
-|LedgerFactory|[0xD446000EFd2931a2890d0F0FF0d6e856beb98441](https://moonbase.moonscan.io/address/0xD446000EFd2931a2890d0F0FF0d6e856beb98441)|
-|WstKSM|[0x9fc8EBF545CdcD3363137ebac72c06165acA4c06](https://moonbase.moonscan.io/address/00x9fc8EBF545CdcD3363137ebac72c06165acA4c06)|
-|Withdrawal|[0x5b95D3632B0377fae76CC029E98D63BdcF55B378](https://moonbase.moonscan.io/address/0x5b95D3632B0377fae76CC029E98D63BdcF55B378)|
+|Controller|[0xB9AEC6Cd04b97EC674e7FDcAdDF1315D59fC6842](https://moonbase.moonscan.io/address/0xB9AEC6Cd04b97EC674e7FDcAdDF1315D59fC6842)|
+|AuthManager|[0x918C4f26945a02402a3E30d62dB2bE702aBaE0C4](https://moonbase.moonscan.io/address/0x918C4f26945a02402a3E30d62dB2bE702aBaE0C4)|
+|Lido|[0xC3EEEc5f6BFad2D0bFE6F58B8212aF9874E7160B](https://moonbase.moonscan.io/address/0xC3EEEc5f6BFad2D0bFE6F58B8212aF9874E7160B)|
+|Oracle|[0x0bc00c94744f0103f1bC059049D461B7Da593DB5](https://moonbase.moonscan.io/address/0x0bc00c94744f0103f1bC059049D461B7Da593DB5)|
+|OracleMaster|[0x8acdf52eB1c78c0e641Ea37dcA3b8F4010E235f2](https://moonbase.moonscan.io/address/0x8acdf52eB1c78c0e641Ea37dcA3b8F4010E235f2)|
+|Ledger|[0xD9ff2f841aE95B180C2468C1B4AddceD8be00497](https://moonbase.moonscan.io/address/0xD9ff2f841aE95B180C2468C1B4AddceD8be00497)|
+|LedgerBeacon|[0xAD082FfdA68ab9210328ff496E07a44E81e0dC89](https://moonbase.moonscan.io/address/0xAD082FfdA68ab9210328ff496E07a44E81e0dC89)|
+|LedgerFactory|[0x7d34c26790F2652D29aFdf68B59dDDf89FF9cd83](https://moonbase.moonscan.io/address/0x7d34c26790F2652D29aFdf68B59dDDf89FF9cd83)|
+|WstKSM|[0xFa900DB303584FCe6F5026b8c4083eDC87866f8e](https://moonbase.moonscan.io/address/0xFa900DB303584FCe6F5026b8c4083eDC87866f8e)|
+|Withdrawal|[0x22364D0f3faECbE002271B6D0D023FE76857EaBE](https://moonbase.moonscan.io/address/0x22364D0f3faECbE002271B6D0D023FE76857EaBE)|
 
 ### Moonriver (Kusama)
 Deploy commit: 2f2725faa0bc371e4d1ddfceacd8c45d8f0905f8
