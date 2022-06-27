@@ -11,6 +11,9 @@ interface IWithdrawal {
     // Returns total virtual xcKSM balance of contract for which losses can be applied
     function totalBalanceForLosses() external view returns (uint256);
 
+    // Returns total xcKSM balance of contract which waiting for claim
+    function pendingForClaiming() external view returns (uint256);
+
     // Burn pool shares from first element of queue and move index for allow claiming. After that add new batch
     function newEra() external;
 

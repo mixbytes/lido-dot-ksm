@@ -661,8 +661,18 @@ contract Lido is stKSM, Initializable {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
         uint256 withdrawalBalance = IWithdrawal(WITHDRAWAL).totalBalanceForLosses();
+        uint256 withdrawalPendingForClaiming = IWithdrawal(WITHDRAWAL).pendingForClaiming();
+        uint256 withdrawalVKSMBalance = VKSM.balanceOf(WITHDRAWAL);
+        // NOTE: VKSM balance that was "fasttracked" to Withdrawal can't receive slash
+        uint256 virtualWithdrawalBalance = 0;
+        if (withdrawalBalance + withdrawalPendingForClaiming > withdrawalVKSMBalance) {
+            // NOTE: protection from ddos
+            virtualWithdrawalBalance =
+                withdrawalBalance - (withdrawalVKSMBalance - withdrawalPendingForClaiming);
+        }
+
         // lidoPart = _totalLosses * lido_xcKSM_balance / sum_xcKSM_balance
-        uint256 lidoPart = (_totalLosses * fundRaisedBalance) / (fundRaisedBalance + withdrawalBalance);
+        uint256 lidoPart = (_totalLosses * fundRaisedBalance) / (fundRaisedBalance + virtualWithdrawalBalance);
 
         fundRaisedBalance -= lidoPart;
         if ((_totalLosses - lidoPart) > 0) {
@@ -670,7 +680,7 @@ contract Lido is stKSM, Initializable {
         }
 
         // edge case when loss can be more than stake
-        ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= _totalLosses ? _totalLosses : ledgerStake[msg.sender];
+        ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= lidoPart ? lidoPart : ledgerStake[msg.sender];
         ledgerBorrow[msg.sender] -= _totalLosses;
 
         emit Losses(msg.sender, _totalLosses, _ledgerBalance);
