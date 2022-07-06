@@ -122,14 +122,10 @@ def test_losses_distribution(lido, oracle_master, vKSM, withdrawal, accounts):
 
     assert relay.ledgers[0].total_balance() == deposit
 
-    #losses = 50 * 10**12
-    losses = 51234567890373
+    losses = 51234567890377
     relay.new_era([-losses])
 
     assert relay.ledgers[0].total_balance() == deposit - losses
-
-    lido_virtual_balance_upd = lido.fundRaisedBalance()
-    withdrawal_virtual_balance_upd = withdrawal.totalVirtualXcKSMAmount()
 
     # travel for 28 eras
     relay.timetravel(28) # wait unbonding
@@ -139,11 +135,32 @@ def test_losses_distribution(lido, oracle_master, vKSM, withdrawal, accounts):
     relay.new_era()  # should downward transfer got completed
     relay.new_era()  # update era in withdrawal
 
-    balance_before_claim = vKSM.balanceOf(accounts[0])
     lido.claimUnbonded({'from': accounts[0]})
 
     assert withdrawal.totalXcKSMPoolShares() == 0
     assert withdrawal.totalVirtualXcKSMAmount() == 0
+    assert vKSM.balanceOf(withdrawal) <= 100
+    assert relay.ledgers[0].total_balance() == lido.totalSupply()
+    assert relay.ledgers[0].active_balance == lido.totalSupply()
+
+    lido.redeem(lido.balanceOf(accounts[0]), {'from': accounts[0]})
+    relay.new_era()
+
+    relay.timetravel(28) # wait unbonding
+
+    relay.new_era()  # should send 'withdraw'
+    relay.new_era()  # should downward transfer
+    relay.new_era()  # should downward transfer got completed
+    relay.new_era()  # update era in withdrawal
+
+    lido.claimUnbonded({'from': accounts[0]})
+
+    assert withdrawal.totalXcKSMPoolShares() == 0
+    assert withdrawal.totalVirtualXcKSMAmount() == 0
+    assert vKSM.balanceOf(withdrawal) <= 100
+    assert lido.totalSupply() == 0
+    assert relay.ledgers[0].total_balance() == lido.totalSupply()
+    assert relay.ledgers[0].active_balance == lido.totalSupply()
 
 
 @pytest.mark.skip_coverage
@@ -205,3 +222,164 @@ def test_relay_block(lido, oracle_master, vKSM, withdrawal, Ledger, accounts):
     lido.claimUnbonded({'from': accounts[0]})
 
     assert vKSM.balanceOf(accounts[0]) == (deposit + balance_before_claim)
+
+
+def test_losses_distribution_with_fast_track(lido, oracle_master, vKSM, withdrawal, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+    lido.setMaxAllowableDifference(51000, {'from': accounts[0]})
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+
+    deposit = 100 * 10**12
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    relay.new_era()
+    relay.new_era()
+
+    assert relay.ledgers[0].active_balance == deposit
+
+    redeem = 60 * 10**12
+    lido.redeem(redeem, {'from': accounts[0]})
+    relay.new_era()
+
+    deposit_2 = 56678123504984
+    lido.deposit(deposit_2, {'from': accounts[1]})
+    relay.new_era()
+
+    lido_virtual_balance = lido.fundRaisedBalance()
+    withdrawal_virtual_balance = withdrawal.totalVirtualXcKSMAmount()
+
+    assert lido_virtual_balance == deposit + deposit_2 - redeem
+    assert withdrawal_virtual_balance == redeem
+
+    assert relay.ledgers[0].total_balance() == deposit
+
+    (waiting, available) = lido.getUnbonded(accounts[0])
+    print("Waiting = " + str(waiting / 10**12))
+
+    losses = 51234567890377
+    relay.new_era([-losses])
+
+    (waiting, available) = lido.getUnbonded(accounts[0])
+    print("Waiting = " + str(waiting / 10**12))
+
+
+    assert relay.ledgers[0].total_balance() == deposit - losses
+
+    # travel for 28 eras
+    relay.timetravel(28) # wait unbonding
+
+    relay.new_era()  # should send 'withdraw'
+    relay.new_era()  # should downward transfer
+    relay.new_era()  # should downward transfer got completed
+    relay.new_era()  # update era in withdrawal
+
+    lido.claimUnbonded({'from': accounts[0]})
+
+    assert withdrawal.totalXcKSMPoolShares() == 0
+    assert withdrawal.totalVirtualXcKSMAmount() == 0
+    assert vKSM.balanceOf(withdrawal) <= 100
+    assert relay.ledgers[0].total_balance() == lido.totalSupply()
+    assert relay.ledgers[0].active_balance == lido.totalSupply()
+
+    lido.redeem(lido.balanceOf(accounts[0]), {'from': accounts[0]})
+    lido.redeem(lido.balanceOf(accounts[1]), {'from': accounts[1]})
+    relay.new_era()
+
+    relay.timetravel(28) # wait unbonding
+
+    relay.new_era()  # should send 'withdraw'
+    relay.new_era()  # should downward transfer
+    relay.new_era()  # should downward transfer got completed
+    relay.new_era()  # update era in withdrawal
+
+    lido.claimUnbonded({'from': accounts[0]})
+    lido.claimUnbonded({'from': accounts[1]})
+
+    assert withdrawal.totalXcKSMPoolShares() == 0
+    assert withdrawal.totalVirtualXcKSMAmount() == 0
+    assert vKSM.balanceOf(withdrawal) <= 100
+    assert lido.totalSupply() < 10
+    assert relay.ledgers[0].total_balance() == lido.totalSupply()
+    assert relay.ledgers[0].active_balance == lido.totalSupply()
+
+
+def test_losses_distribution_with_fast_track_2_ledgers(lido, oracle_master, vKSM, withdrawal, accounts):
+    distribute_initial_tokens(vKSM, lido, accounts)
+    lido.setMaxAllowableDifference(51000, {'from': accounts[0]})
+
+    relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
+    relay.new_ledger("0x10", "0x11")
+    relay.new_ledger("0x20", "0x21")
+    relay.new_ledger("0x30", "0x31")
+
+    deposit = 1500 * 10**12
+    lido.deposit(deposit, {'from': accounts[0]})
+
+    relay.new_era()
+    relay.new_era()
+
+    redeem = 1350 * 10**12
+    lido.redeem(redeem, {'from': accounts[0]})
+    relay.new_era()
+
+    deposit_2 = 1200 * 10**12
+    lido.deposit(deposit_2, {'from': accounts[1]})
+    relay.new_era()
+
+    lido_virtual_balance = lido.fundRaisedBalance()
+    withdrawal_virtual_balance = withdrawal.totalVirtualXcKSMAmount()
+
+    assert lido_virtual_balance == deposit + deposit_2 - redeem
+    assert withdrawal_virtual_balance == redeem
+
+    (waiting, available) = lido.getUnbonded(accounts[0])
+    print("Waiting = " + str(waiting / 10**12))
+
+    losses = 400 * 10**12
+    relay.new_era([-losses])
+
+    (waiting, available) = lido.getUnbonded(accounts[0])
+    print("Waiting = " + str(waiting / 10**12))
+
+    # travel for 28 eras
+    relay.timetravel(28) # wait unbonding
+
+    relay.new_era()  # should send 'withdraw'
+    relay.new_era()  # should downward transfer
+    relay.new_era()  # should downward transfer got completed
+    relay.new_era()  # update era in withdrawal
+
+    lido.claimUnbonded({'from': accounts[0]})
+
+    assert withdrawal.totalXcKSMPoolShares() == 0
+    assert withdrawal.totalVirtualXcKSMAmount() == 0
+    assert vKSM.balanceOf(withdrawal) <= 1000
+    assert relay.ledgers[0].total_balance() == 90 * 10**12
+    assert relay.ledgers[0].active_balance == 90 * 10**12
+    assert relay.ledgers[1].total_balance() == 450 * 10**12
+    assert relay.ledgers[1].active_balance == 450 * 10**12
+    assert relay.ledgers[1].total_balance() == 450 * 10**12
+    assert relay.ledgers[1].active_balance == 450 * 10**12
+
+    lido.redeem(lido.balanceOf(accounts[0]), {'from': accounts[0]})
+    lido.redeem(lido.balanceOf(accounts[1]), {'from': accounts[1]})
+    relay.new_era()
+
+    relay.timetravel(28) # wait unbonding
+
+    relay.new_era()  # should send 'withdraw'
+    relay.new_era()  # should downward transfer
+    relay.new_era()  # should downward transfer got completed
+    relay.new_era()  # update era in withdrawal
+
+    lido.claimUnbonded({'from': accounts[0]})
+    lido.claimUnbonded({'from': accounts[1]})
+
+    assert withdrawal.totalXcKSMPoolShares() == 0
+    assert withdrawal.totalVirtualXcKSMAmount() == 0
+    assert vKSM.balanceOf(withdrawal) <= 1000
+    assert lido.totalSupply() == 0
+    assert relay.ledgers[0].total_balance() == lido.totalSupply()
+    assert relay.ledgers[0].active_balance == lido.totalSupply()
