@@ -1,5 +1,5 @@
-
 from brownie import Ledger
+
 
 class RelayLedger:
     ledger_address = None
@@ -47,7 +47,7 @@ class RelayLedger:
 
     def rebond(self, amount):
         rebonded = 0
-        while len(self.unlocking_chunks) > 0:
+        while self.unlocking_chunks:
             if rebonded + self.unlocking_chunks[0][0] <= amount:
                 rebonded += self.unlocking_chunks[0][0]
                 self.unlocking_chunks.pop(0)
@@ -56,19 +56,22 @@ class RelayLedger:
                 rebonded += diff
                 self.unlocking_chunks[0] = (self.unlocking_chunks[0][0] - diff, self.unlocking_chunks[0][1])
                 break
-        
+
+            if rebonded >= amount:
+                break
+
         self.active_balance += rebonded
 
     def withdraw(self):
-        while len(self.unlocking_chunks) > 0 and self.unlocking_chunks[0][1] < self.relay.era:
+        while self.unlocking_chunks and self.unlocking_chunks[0][1] < self.relay.era:
             self.free_balance += self.unlocking_chunks[0][0]
             self.unlocking_chunks.pop(0)
 
     def _unlocking_sum(self):
-        sum = 0
+        _sum = 0
         for i in range(len(self.unlocking_chunks)):
-            sum += self.unlocking_chunks[i][0]
-        return sum
+            _sum += self.unlocking_chunks[i][0]
+        return _sum
 
     def _status_num(self):
         if self.status == 'Chill':
@@ -90,7 +93,7 @@ class RelayLedger:
             self.unlocking_chunks,
             [],
             self.total_balance(),
-            0 # ledger slashing spans (for test always 0)
+            0  # ledger slashing spans (for test always 0)
         )
 
 
@@ -107,9 +110,9 @@ class RelayChain:
     transfer_enabled = True
     block_xcm_messages = False
 
-    def __init__(self, lido, vKSM, oracle_master, accounts, chain):
+    def __init__(self, lido, vksm, oracle_master, accounts, chain):
         self.lido = lido
-        self.vKSM = vKSM
+        self.vKSM = vksm
         self.oracle_master = oracle_master
         self.accounts = accounts
         self.chain = chain
@@ -195,7 +198,7 @@ class RelayChain:
             pass
 
     def _after_report(self, tx):
-        if not(self.block_xcm_messages):
+        if not self.block_xcm_messages:
             for i in range(len(tx.events)):
                 name = tx.events[i].name
                 event = tx.events[i]
@@ -207,16 +210,19 @@ class RelayChain:
                 else:
                     self._process_call(name, event)
 
-    def new_era(self, rewards=[]):
+    def new_era(self, rewards=None):
+        if rewards is None:
+            rewards = []
+
         self.era += 1
         self.chain.sleep(6 * 60 * 60)
         for i in range(len(self.ledgers)):
             if i < len(rewards) and self.ledgers[i].status != 'Chill':
                 self.total_rewards += rewards[i]
-                if (rewards[i] >= 0):
+                if rewards[i] >= 0:
                     self.ledgers[i].active_balance += rewards[i]
                 else:
-                    if ((self.ledgers[i].active_balance + rewards[i]) >= 0):
+                    if (self.ledgers[i].active_balance + rewards[i]) >= 0:
                         self.ledgers[i].active_balance += rewards[i]
                         rewards[i] = 0
                     else:
@@ -226,7 +232,7 @@ class RelayChain:
                         upd_idx = -1
                         upd_val = 0
                         for chunk in self.ledgers[i].unlocking_chunks:
-                            if ((chunk[0] + rewards[i]) >= 0):
+                            if (chunk[0] + rewards[i]) >= 0:
                                 upd_val = chunk[0] + rewards[i]
                                 rewards[i] = 0
                                 upd_idx = i
@@ -234,13 +240,15 @@ class RelayChain:
                                 rewards[i] += chunk[0]
                                 remove_idx += 1
 
-                        if (upd_idx >= 0):
-                            self.ledgers[i].unlocking_chunks[upd_idx] = (upd_val, self.ledgers[i].unlocking_chunks[upd_idx][1])
+                        if upd_idx >= 0:
+                            self.ledgers[i].unlocking_chunks[upd_idx] = (
+                                upd_val, self.ledgers[i].unlocking_chunks[upd_idx][1]
+                            )
 
                         self.ledgers[i].unlocking_chunks = self.ledgers[i].unlocking_chunks[remove_idx:]
 
                     assert rewards[i] == 0
-                
+
             tx = self.oracle_master.reportRelay(self.era, self.ledgers[i].get_report_data())
             tx.info()
             self._after_report(tx)
@@ -251,9 +259,9 @@ class RelayChain:
         self.chain.mine()
 
 
-def distribute_initial_tokens(vKSM, lido, accounts):
+def distribute_initial_tokens(vksm, lido, accounts):
     for acc in accounts[1:]:
-        vKSM.transfer(acc, 10**6 * 10**18, {'from': accounts[0]})
+        vksm.transfer(acc, 10 ** 6 * 10 ** 18, {'from': accounts[0]})
 
     for acc in accounts:
-        vKSM.approve(lido, 2**255, {'from': acc})
+        vksm.approve(lido, 2 ** 255, {'from': acc})
