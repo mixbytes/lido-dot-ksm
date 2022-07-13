@@ -1,17 +1,27 @@
 from brownie import Ledger
 
 
+MAX_UNLOCKING_CHUNKS = 32  # defined in the staking pallet
+
+MINIMUM_BALANCE = 33_333_333  # Existential Deposit in Kusama
+# MINIMUM_BALANCE = 10_000_000_000  # Existential Deposit in Polkadot
+
+MIN_NOMINATOR_BOND = 100_000_000_000  # Kusama and Polkadot
+MIN_VALIDATOR_BOND = 0  # Kusama and Polkadot
+
+
 class RelayLedger:
     ledger_address = None
     stash_account = None
     controller_account = None
 
-    active_balance = 0
-    free_balance = 0
-    unlocking_chunks = []
-    validators = 0
-    status = None
+    active_balance: int
+    free_balance: int
+    unlocking_chunks: list
+    validators: int
+    status: str
 
+    bonded: bool
     relay = None
 
     def __init__(self, relay, ledger_address, stash_account, controller_account):
@@ -24,28 +34,54 @@ class RelayLedger:
         self.free_balance = 0
         self.unlocking_chunks = []
         self.validators = 0
-        self.status = None
+        self.status = ''
 
-    def total_balance(self):
+        self.bonded = False
+
+    def total_balance(self) -> int:
         return self.active_balance + self._unlocking_sum() + self.free_balance
 
-    def unbond(self, amount):
+    def unbond(self, amount: int):
         assert self.active_balance >= amount
+        assert len(self.unlocking_chunks) < MAX_UNLOCKING_CHUNKS, "No more chunks"
+        if amount == 0:
+            return
+
         self.active_balance -= amount
+        if self.active_balance < MINIMUM_BALANCE:
+            amount += self.active_balance
+            self.active_balance = 0
+
+        if self.status == 'Validator':
+            assert self.active_balance >= MIN_VALIDATOR_BOND, "Insufficient bond"
+        elif self.status == 'Nominator':
+            assert self.active_balance >= MIN_NOMINATOR_BOND, "Insufficient bond"
+
         self.unlocking_chunks.append((amount, self.relay.era + 28))
-        assert len(self.unlocking_chunks) < 32
+        self.bonded = False
 
-    def bond(self, amount):
+    def bond(self, amount: int):
+        # assert not self.bonded, "Already bonded"
         assert self.free_balance >= amount
+        assert amount >= MINIMUM_BALANCE, "Insufficient bond"
+
+        # self.active_balance = amount
         self.active_balance += amount
         self.free_balance -= amount
+        self.bonded = True
 
-    def bond_extra(self, amount):
+    def bond_extra(self, amount: int):
+        assert self.bonded, "Not bonded"
         assert self.free_balance >= amount
+
+        extra = self.free_balance - (self.active_balance + self._unlocking_sum())
+        amount = min(amount, extra) if extra >= 0 else amount
+
         self.active_balance += amount
         self.free_balance -= amount
+        assert self.active_balance >= MINIMUM_BALANCE, "Insufficient bond"
 
-    def rebond(self, amount):
+    def rebond(self, amount: int):
         rebonded = 0
         while self.unlocking_chunks:
             if rebonded + self.unlocking_chunks[0][0] <= amount:
@@ -61,19 +97,18 @@ class RelayLedger:
                 break
 
         self.active_balance += rebonded
+        assert self.active_balance >= MINIMUM_BALANCE, "Insufficient bond"
+        self.bonded = True
 
     def withdraw(self):
         while self.unlocking_chunks and self.unlocking_chunks[0][1] < self.relay.era:
             self.free_balance += self.unlocking_chunks[0][0]
             self.unlocking_chunks.pop(0)
 
-    def _unlocking_sum(self):
-        _sum = 0
-        for i in range(len(self.unlocking_chunks)):
-            _sum += self.unlocking_chunks[i][0]
-        return _sum
+    def _unlocking_sum(self) -> int:
+        return sum(i[0] for i in self.unlocking_chunks)
 
-    def _status_num(self):
+    def _status_num(self) -> int:
         if self.status == 'Chill':
             return 0
         elif self.status == 'Nominator':
@@ -83,7 +118,7 @@ class RelayLedger:
         else:
             return 3
 
-    def get_report_data(self):
+    def get_report_data(self) -> tuple:
         return (
             self.stash_account,
             self.controller_account,
@@ -210,7 +245,7 @@ class RelayChain:
                 else:
                     self._process_call(name, event)
 
-    def new_era(self, rewards=None):
+    def new_era(self, rewards: list = None):
         if rewards is None:
             rewards = []
 
