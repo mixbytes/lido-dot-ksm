@@ -65,7 +65,6 @@ class RelayLedger:
         assert self.free_balance >= amount
         assert amount >= MINIMUM_BALANCE, "Insufficient bond"
 
-        # self.active_balance = amount
         self.active_balance += amount
         self.free_balance -= amount
         self.bonded = True
