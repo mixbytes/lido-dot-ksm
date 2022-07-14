@@ -61,7 +61,7 @@ class RelayLedger:
         self.bonded = False
 
     def bond(self, amount: int):
-        # assert not self.bonded, "Already bonded"
+        assert not self.bonded, "Already bonded"
         assert self.free_balance >= amount
         assert amount >= MINIMUM_BALANCE, "Insufficient bond"
 
