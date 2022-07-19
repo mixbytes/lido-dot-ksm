@@ -1,6 +1,7 @@
 from brownie import Ledger
 
 
+BONDING_DURATION = 28  # Polkadot
 MAX_UNLOCKING_CHUNKS = 32  # defined in the staking pallet
 
 MINIMUM_BALANCE = 33_333_333  # Existential Deposit in Kusama
@@ -57,11 +58,11 @@ class RelayLedger:
         elif self.status == 'Nominator':
             assert self.active_balance >= MIN_NOMINATOR_BOND, "Insufficient bond"
 
-        self.unlocking_chunks.append((amount, self.relay.era + 28))
+        self.unlocking_chunks.append([amount, self.relay.era + BONDING_DURATION])
         self.bonded = False
 
     def bond(self, amount: int):
-        assert not self.bonded, "Already bonded"
+        # assert not self.bonded, "Already bonded"
         assert self.free_balance >= amount
         assert amount >= MINIMUM_BALANCE, "Insufficient bond"
 
@@ -89,7 +90,7 @@ class RelayLedger:
             else:
                 diff = amount - rebonded
                 rebonded += diff
-                self.unlocking_chunks[0] = (self.unlocking_chunks[0][0] - diff, self.unlocking_chunks[0][1])
+                self.unlocking_chunks[0] = [self.unlocking_chunks[0][0] - diff, self.unlocking_chunks[0][1]]
                 break
 
             if rebonded >= amount:
@@ -244,6 +245,85 @@ class RelayChain:
                 else:
                     self._process_call(name, event)
 
+    @staticmethod
+    def _slash_out_of(target: int, remaining_slash: int,
+                      affected_balance: int, slash_amount: int, ratio: float) -> (int, int):
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L587-L602
+        if slash_amount < affected_balance:
+            slash_from_target = ratio * target
+        else:
+            slash_from_target = remaining_slash
+            
+        slash_from_target = target if slash_from_target < target else slash_from_target
+        target -= slash_from_target
+        if target < MINIMUM_BALANCE:
+            slash_from_target += target
+            target = 0
+            
+        remaining_slash -= slash_from_target
+        
+        return target, remaining_slash
+
+    def slash(self, rewards: list, i: int):
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L542
+        slash_amount = rewards[i]
+        remaining_slash = rewards[i]
+
+        era_after_slash = self.era + 1
+        chunk_unlock_era_after_slash = era_after_slash + BONDING_DURATION
+
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L561-L583
+        affected_balance, slash_chunks_priority = None, None
+        for idx, unlocking in enumerate(self.ledgers[i].unlocking_chunks):
+            era = unlocking[1]
+            if era < chunk_unlock_era_after_slash:
+                continue
+            
+            affected_indices = [j for j in range(idx, len(self.ledgers[i].unlocking_chunks))]
+            affected_balance = self.ledgers[i].active_balance
+            for _idx in affected_indices:
+                affected_balance += self.ledgers[i].unlocking_chunks[_idx]
+                slash_chunks_priority = [j for j in range(idx)].reverse()
+            break
+        if affected_balance is None:
+            affected_balance = self.ledgers[i].active_balance
+            slash_chunks_priority = [j for j in range(len(self.ledgers[i].unlocking_chunks))]
+
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L586
+        ratio = slash_amount / affected_balance
+
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L605
+        self.ledgers[i].active_balance, remaining_slash = self._slash_out_of(
+            affected_balance=affected_balance,
+            ratio=ratio,
+            remaining_slash=remaining_slash,
+            slash_amount=slash_amount,
+            target=self.ledgers[i].active_balance,
+        )
+        
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L608-L621
+        for c in slash_chunks_priority:
+            if not self.ledgers[i].unlocking_chunks:
+                break
+                
+            if remaining_slash == 0:
+                break
+
+            self.ledgers[i].unlocking_chunks[c][0], remaining_slash = self._slash_out_of(
+                affected_balance=affected_balance,
+                ratio=ratio,
+                remaining_slash=remaining_slash,
+                slash_amount=slash_amount,
+                target=self.ledgers[i].unlocking_chunks[c][0],
+            )
+
+        unlocking_upd = []
+        for c in self.ledgers[i].unlocking_chunks:
+            if c[0] != 0:
+                unlocking_upd.append(c)
+        self.ledgers[i].unlocking_chunks = unlocking_upd
+        rewards[i] = 0
+
     def new_era(self, rewards: list = None):
         if rewards is None:
             rewards = []
@@ -256,31 +336,7 @@ class RelayChain:
                 if rewards[i] >= 0:
                     self.ledgers[i].active_balance += rewards[i]
                 else:
-                    if (self.ledgers[i].active_balance + rewards[i]) >= 0:
-                        self.ledgers[i].active_balance += rewards[i]
-                        rewards[i] = 0
-                    else:
-                        rewards[i] += self.ledgers[i].active_balance
-                        self.ledgers[i].active_balance = 0
-                        remove_idx = 0
-                        upd_idx = -1
-                        upd_val = 0
-                        for chunk in self.ledgers[i].unlocking_chunks:
-                            if (chunk[0] + rewards[i]) >= 0:
-                                upd_val = chunk[0] + rewards[i]
-                                rewards[i] = 0
-                                upd_idx = i
-                            else:
-                                rewards[i] += chunk[0]
-                                remove_idx += 1
-
-                        if upd_idx >= 0:
-                            self.ledgers[i].unlocking_chunks[upd_idx] = (
-                                upd_val, self.ledgers[i].unlocking_chunks[upd_idx][1]
-                            )
-
-                        self.ledgers[i].unlocking_chunks = self.ledgers[i].unlocking_chunks[remove_idx:]
-
+                    self.slash(rewards, i)
                     assert rewards[i] == 0
 
             tx = self.oracle_master.reportRelay(self.era, self.ledgers[i].get_report_data())
