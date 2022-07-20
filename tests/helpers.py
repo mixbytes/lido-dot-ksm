@@ -42,12 +42,17 @@ class RelayLedger:
     def total_balance(self) -> int:
         return self.active_balance + self._unlocking_sum() + self.free_balance
 
-    def unbond(self, amount: int):
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L871-L952
+    def unbond(self, amount: int, era: int):
+        if amount == 0:
+            return
+
         assert self.active_balance >= amount
         assert len(self.unlocking_chunks) < MAX_UNLOCKING_CHUNKS, "No more chunks"
         if amount == 0:
             return
 
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L905-L923
         self.active_balance -= amount
         if self.active_balance < MINIMUM_BALANCE:
             amount += self.active_balance
@@ -58,11 +63,21 @@ class RelayLedger:
         elif self.status == 'Nominator':
             assert self.active_balance >= MIN_NOMINATOR_BOND, "Insufficient bond"
 
-        self.unlocking_chunks.append([amount, self.relay.era + BONDING_DURATION])
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L925-L939
+        found_chunk = False
+        for c in self.unlocking_chunks:
+            if c[1] == era:
+                c[0] += amount
+                found_chunk = True
+                break
+        if not found_chunk:
+            self.unlocking_chunks.append([amount, self.relay.era + BONDING_DURATION])
+
         self.bonded = False
 
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L755-L819
     def bond(self, amount: int):
-        # assert not self.bonded, "Already bonded"
+        assert not self.bonded, "Already bonded"
         assert self.free_balance >= amount
         assert amount >= MINIMUM_BALANCE, "Insufficient bond"
 
@@ -70,6 +85,7 @@ class RelayLedger:
         self.free_balance -= amount
         self.bonded = True
 
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L821-L869
     def bond_extra(self, amount: int):
         assert self.bonded, "Not bonded"
         assert self.free_balance >= amount
@@ -81,25 +97,33 @@ class RelayLedger:
         self.free_balance -= amount
         assert self.active_balance >= MINIMUM_BALANCE, "Insufficient bond"
 
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L1403-L1439
     def rebond(self, amount: int):
-        rebonded = 0
+        assert len(self.unlocking_chunks) != 0, "No unlock chunk"
+
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L509-L527
+        rebonded_value = 0
         while self.unlocking_chunks:
-            if rebonded + self.unlocking_chunks[0][0] <= amount:
-                rebonded += self.unlocking_chunks[0][0]
-                self.unlocking_chunks.pop(0)
+            chunk = self.unlocking_chunks[-1]
+            if rebonded_value + chunk[0] <= amount:
+                rebonded_value += chunk[0]
+                self.unlocking_chunks.pop()
             else:
-                diff = amount - rebonded
-                rebonded += diff
-                self.unlocking_chunks[0] = [self.unlocking_chunks[0][0] - diff, self.unlocking_chunks[0][1]]
+                diff = amount - rebonded_value
+                rebonded_value += diff
+                chunk[0] -= diff
                 break
 
-            if rebonded >= amount:
+            if rebonded_value >= amount:
                 break
 
-        self.active_balance += rebonded
+        self.active_balance += rebonded_value
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L1424
         assert self.active_balance >= MINIMUM_BALANCE, "Insufficient bond"
         self.bonded = True
 
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L954-L1009
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L475-L503
     def withdraw(self):
         while self.unlocking_chunks and self.unlocking_chunks[0][1] < self.relay.era:
             self.free_balance += self.unlocking_chunks[0][0]
@@ -216,7 +240,7 @@ class RelayChain:
             self.ledgers[idx].bond_extra(event['amount'])
         elif name == 'Unbond':
             idx = self._ledger_idx_by_ledger_address(event['caller'])
-            self.ledgers[idx].unbond(event['amount'])
+            self.ledgers[idx].unbond(event['amount'], self.era + BONDING_DURATION)
         elif name == 'Rebond':
             idx = self._ledger_idx_by_ledger_address(event['caller'])
             self.ledgers[idx].rebond(event['amount'])
@@ -245,10 +269,10 @@ class RelayChain:
                 else:
                     self._process_call(name, event)
 
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L587-L602
     @staticmethod
     def _slash_out_of(target: int, remaining_slash: int,
                       affected_balance: int, slash_amount: int, ratio: float) -> (int, int):
-        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L587-L602
         if slash_amount < affected_balance:
             slash_from_target = ratio * target
         else:
@@ -264,8 +288,8 @@ class RelayChain:
         
         return target, remaining_slash
 
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L532-L624
     def slash(self, rewards: list, i: int):
-        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L542
         slash_amount = rewards[i]
         remaining_slash = rewards[i]
 
