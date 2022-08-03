@@ -115,7 +115,8 @@ class RelayChain:
         self.chain = chain
 
         self.oracle_master.addOracleMember(self.accounts[0], {'from': self.accounts[0]})
-        self.oracle_master.setQuorum(1, {'from': self.accounts[0]})
+        self.oracle_master.addOracleMember(self.accounts[1], {'from': self.accounts[0]})
+        self.oracle_master.setQuorum(2, {'from': self.accounts[0]})
 
         self.ledgers = []
         self.era = 0
@@ -207,7 +208,7 @@ class RelayChain:
                 else:
                     self._process_call(name, event)
 
-    def new_era(self, rewards=[]):
+    def new_era(self, rewards=[], blocked_quorum=[]):
         self.era += 1
         self.chain.sleep(6 * 60 * 60)
         for i in range(len(self.ledgers)):
@@ -240,10 +241,17 @@ class RelayChain:
                         self.ledgers[i].unlocking_chunks = self.ledgers[i].unlocking_chunks[remove_idx:]
 
                     assert rewards[i] == 0
-                
-            tx = self.oracle_master.reportRelay(self.era, self.ledgers[i].get_report_data())
-            tx.info()
-            self._after_report(tx)
+
+            for j in range(2):
+                send_report = True
+                if (len(blocked_quorum) > i):
+                    if (blocked_quorum[i] and j == 1):
+                        send_report = False
+                        
+                if send_report:
+                    tx = self.oracle_master.reportRelay(self.era, self.ledgers[i].get_report_data(), {'from': self.accounts[j]})
+                    tx.info()
+                    self._after_report(tx)
 
     def timetravel(self, eras):
         self.chain.sleep(6 * 60 * 60 * eras)
