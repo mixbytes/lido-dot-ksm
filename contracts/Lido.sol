@@ -67,16 +67,20 @@ contract Lido is stKSM, Initializable {
     // sum of all deposits and rewards
     uint256 public fundRaisedBalance;
 
-    // haven't executed buffrered deposits
+    // haven't executed buffrered deposits:
+    //
+    // this is the amount of funds that must either sent to the ledgers
+    // or rebalanced to buffered redeems
     uint256 public bufferedDeposits;
 
-    // haven't executed buffrered redeems
+    // haven't executed buffrered redeems:
+    // this is the amount of funds that should be sent to the WITHDRAWAL contract
     uint256 public bufferedRedeems;
 
-    // Ledger target stakes
+    // this is the active stake on the ledger = [ledgerBorrow] - unbonded funds - free funds
     mapping(address => uint256) public ledgerStake;
 
-    // Ledger borrow
+    // this is the total amount of funds in the ledger = active stake + unbonded funds + free funds
     mapping(address => uint256) public ledgerBorrow;
 
     // Disabled ledgers
@@ -723,21 +727,29 @@ contract Lido is stKSM, Initializable {
     * @notice Rebalance stake accross ledgers by soft manner.
     */
     function _softRebalanceStakes() internal {
-        uint256 excess = 0;
+        uint256 totalStakeExcess = 0;
         for (uint256 i = 0; i < enabledLedgers.length + disabledLedgers.length; ++i) {
             address ledgerAddr = i < enabledLedgers.length ? 
                 enabledLedgers[i] : disabledLedgers[i - enabledLedgers.length];
 
+            // consider an incorrect case when our records about the ledger are wrong:
+            // the ledger's active stake > the ledger's total amount of funds
             if (ledgerStake[ledgerAddr] > ledgerBorrow[ledgerAddr]) {
-                uint256 unsendedDiff = ledgerStake[ledgerAddr] - ledgerBorrow[ledgerAddr];
-                if (excess + unsendedDiff <= VKSM.balanceOf(address(this)) - bufferedDeposits) {
-                    excess += unsendedDiff;
-                    ledgerStake[ledgerAddr] -= unsendedDiff;
+
+                uint256 ledgerStakeExcess = ledgerStake[ledgerAddr] - ledgerBorrow[ledgerAddr];
+
+                // new total stake excess <= the amount of funds that won't be sent to the ledgers
+                if (totalStakeExcess + ledgerStakeExcess <= VKSM.balanceOf(address(this)) - bufferedDeposits) {
+                    totalStakeExcess += ledgerStakeExcess;
+
+                    // correcting the ledger's active stake record
+                    ledgerStake[ledgerAddr] -= ledgerStakeExcess;
                 }
             }
         }
 
-        bufferedDeposits += excess;
+        // the amount of funds to be sent to the ledgers should decrease the ledgers' stake excess
+        bufferedDeposits += totalStakeExcess;
 
         if (bufferedDeposits > 0 || bufferedRedeems > 0) {
             // first try to distribute redeems accross disabled ledgers
