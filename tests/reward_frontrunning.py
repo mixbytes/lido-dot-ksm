@@ -3,11 +3,11 @@ from helpers import RelayChain, distribute_initial_tokens
 
 
 
-def test_reward_frontrunning(lido, oracle_master, vKSM, accounts, developers, treasury):
+def test_reward_frontrunning(lido, oracle_master, vKSM, accounts):
     distribute_initial_tokens(vKSM, lido, accounts)
 
     relay = RelayChain(lido, vKSM, oracle_master, accounts, chain)
-    relay.new_ledger("0x10", "0x11", 100)
+    relay.new_ledger("0x10", "0x11")
 
     deposit1 = 20 * 10**18
     lido.deposit(deposit1, {'from': accounts[0]})
@@ -38,8 +38,17 @@ def test_reward_frontrunning(lido, oracle_master, vKSM, accounts, developers, tr
     lido.redeem(balance_for_redeem, {'from': accounts[1]})
 
     balance_before_claim = vKSM.balanceOf(accounts[1])
+
+    relay.new_era()
+
     # move time forward to 28 epoches
-    relay.timetravel(29)
+    relay.timetravel(28)
+
+    relay.new_era()  # should send 'withdraw'acc1_balance
+    relay.new_era()  # should downward transfer
+    relay.new_era()  # should downward transfer got completed
+    relay.new_era()  # update era in withdrawal
+
     # Deposit to add some funds to redeem
     deposit3 = 10 * 10**18
     lido.deposit(deposit3, {'from': accounts[2]})
