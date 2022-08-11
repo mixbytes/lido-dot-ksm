@@ -278,7 +278,7 @@ class RelayChain:
         else:
             slash_from_target = remaining_slash
             
-        slash_from_target = target if slash_from_target < target else slash_from_target
+        slash_from_target = target if slash_from_target > target else slash_from_target
         target -= slash_from_target
         if target < MINIMUM_BALANCE:
             slash_from_target += target
