@@ -289,11 +289,11 @@ class RelayChain:
         return target, remaining_slash
 
     # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L532-L624
-    def slash(self, rewards: list, i: int):
+    def slash(self, rewards: list, i: int, slash_era: int):
         slash_amount = rewards[i]
         remaining_slash = rewards[i]
 
-        era_after_slash = self.era + 1
+        era_after_slash = slash_era + 1
         chunk_unlock_era_after_slash = era_after_slash + BONDING_DURATION
 
         # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L561-L583
@@ -350,7 +350,7 @@ class RelayChain:
         self.ledgers[i].unlocking_chunks = unlocking_upd
         rewards[i] = 0
 
-    def new_era(self, rewards: list = None):
+    def new_era(self, rewards: list = None, slash_era: int = None):
         if rewards is None:
             rewards = []
 
@@ -362,7 +362,8 @@ class RelayChain:
                 if rewards[i] >= 0:
                     self.ledgers[i].active_balance += rewards[i]
                 else:
-                    self.slash(rewards, i)
+                    slash_era = self.era if slash_era is None else slash_era
+                    self.slash(rewards, i, slash_era)
                     assert rewards[i] == 0
 
             tx = self.oracle_master.reportRelay(self.era, self.ledgers[i].get_report_data())
