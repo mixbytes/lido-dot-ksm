@@ -43,7 +43,7 @@ class RelayLedger:
         return self.active_balance + self._unlocking_sum() + self.free_balance
 
     # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L871-L952
-    def unbond(self, amount: int, era: int):
+    def unbond(self, amount: int):
         if amount == 0:
             return
 
@@ -66,7 +66,7 @@ class RelayLedger:
         # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L925-L939
         found_chunk = False
         for c in self.unlocking_chunks:
-            if c[1] == era:
+            if c[1] == self.relay.era + BONDING_DURATION:
                 c[0] += amount
                 found_chunk = True
                 break
@@ -240,7 +240,7 @@ class RelayChain:
             self.ledgers[idx].bond_extra(event['amount'])
         elif name == 'Unbond':
             idx = self._ledger_idx_by_ledger_address(event['caller'])
-            self.ledgers[idx].unbond(event['amount'], self.era + BONDING_DURATION)
+            self.ledgers[idx].unbond(event['amount'])
         elif name == 'Rebond':
             idx = self._ledger_idx_by_ledger_address(event['caller'])
             self.ledgers[idx].rebond(event['amount'])
