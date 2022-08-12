@@ -306,8 +306,9 @@ class RelayChain:
             affected_indices = [j for j in range(idx, len(self.ledgers[i].unlocking_chunks))]
             affected_balance = self.ledgers[i].active_balance
             for _idx in affected_indices:
-                affected_balance += self.ledgers[i].unlocking_chunks[_idx]
-                slash_chunks_priority = [j for j in range(idx)].reverse()
+                affected_balance += self.ledgers[i].unlocking_chunks[_idx][0]
+                slash_chunks_priority = [j for j in range(idx)]
+                slash_chunks_priority.reverse()
             break
         if affected_balance is None:
             affected_balance = self.ledgers[i].active_balance
