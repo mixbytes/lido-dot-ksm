@@ -312,6 +312,7 @@ class RelayChain:
         if affected_balance is None:
             affected_balance = self.ledgers[i].active_balance
             slash_chunks_priority = [j for j in range(len(self.ledgers[i].unlocking_chunks))]
+            slash_chunks_priority.reverse()
 
         # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L586
         ratio = slash_amount / affected_balance
