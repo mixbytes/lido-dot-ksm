@@ -73,8 +73,6 @@ class RelayLedger:
         if not found_chunk:
             self.unlocking_chunks.append([amount, self.relay.era + BONDING_DURATION])
 
-        self.bonded = False
-
     # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L755-L819
     def bond(self, amount: int):
         assert not self.bonded, "Already bonded"
@@ -89,9 +87,6 @@ class RelayLedger:
     def bond_extra(self, amount: int):
         assert self.bonded, "Not bonded"
         assert self.free_balance >= amount
-
-        extra = self.free_balance - (self.active_balance + self._unlocking_sum())
-        amount = min(amount, extra) if extra >= 0 else amount
 
         self.active_balance += amount
         self.free_balance -= amount
