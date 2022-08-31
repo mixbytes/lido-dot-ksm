@@ -106,7 +106,7 @@ def lido(Lido, vKSM, controller, auth_manager, oracle_master, withdrawal, proxy_
     _lido.setLedgerFactory(ledger_factory)
     _lido.setTokenInfo("TST", "TST", 12)
     era_sec = 60 * 60 * 6
-    _lido.setRelaySpec((16, 1, 0, 32))  # kusama settings except min nominator bond
+    _lido.setRelaySpec((16, 100_000_000_000, 33_333_333, 32))  # kusama settings except min nominator bond
     oracle_master.setAnchorEra(0, chain.time(), era_sec)
     return _lido
 

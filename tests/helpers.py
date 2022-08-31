@@ -82,6 +82,8 @@ class RelayLedger:
         self.active_balance += amount
         self.free_balance -= amount
         self.bonded = True
+        # NOTE: because we do not call `Nominate` in test
+        self.status = 'Nominator'
 
     # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L821-L869
     def bond_extra(self, amount: int):
@@ -91,6 +93,8 @@ class RelayLedger:
         self.active_balance += amount
         self.free_balance -= amount
         assert self.active_balance >= MINIMUM_BALANCE, "Insufficient bond"
+        # NOTE: because we do not call `Nominate` in test
+        self.status = 'Nominator'
 
     # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L1403-L1439
     def rebond(self, amount: int):
@@ -115,7 +119,6 @@ class RelayLedger:
         self.active_balance += rebonded_value
         # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L1424
         assert self.active_balance >= MINIMUM_BALANCE, "Insufficient bond"
-        self.bonded = True
 
     # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L954-L1009
     # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L475-L503
@@ -230,6 +233,9 @@ class RelayChain:
             if self.bond_enabled:
                 idx = self._ledger_idx_by_ledger_address(event['caller'])
                 self.ledgers[idx].bond(event['amount'])
+        elif name == 'Chill':
+            idx = self._ledger_idx_by_ledger_address(event['caller'])
+            self.ledgers[idx].status = 'Chill'
         elif name == 'BondExtra':
             idx = self._ledger_idx_by_ledger_address(event['caller'])
             self.ledgers[idx].bond_extra(event['amount'])
@@ -246,9 +252,6 @@ class RelayChain:
             idx = self._ledger_idx_by_ledger_address(event['caller'])
             self.ledgers[idx].validators += event['validators']
             self.ledgers[idx].status = 'Nominator'
-        elif name == 'Chill':
-            idx = self._ledger_idx_by_ledger_address(event['caller'])
-            self.ledgers[idx].status = 'Chill'
             pass
 
     def _after_report(self, tx):
@@ -269,7 +272,7 @@ class RelayChain:
     def _slash_out_of(target: int, remaining_slash: int,
                       affected_balance: int, slash_amount: int, ratio: float) -> (int, int):
         if slash_amount < affected_balance:
-            slash_from_target = ratio * target
+            slash_from_target = int(ratio * target)
         else:
             slash_from_target = remaining_slash
             
@@ -285,8 +288,8 @@ class RelayChain:
 
     # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L532-L624
     def slash(self, rewards: list, i: int, slash_era: int):
-        slash_amount = rewards[i]
-        remaining_slash = rewards[i]
+        slash_amount = -rewards[i]
+        remaining_slash = -rewards[i]
 
         era_after_slash = slash_era + 1
         chunk_unlock_era_after_slash = era_after_slash + BONDING_DURATION
@@ -321,7 +324,7 @@ class RelayChain:
             slash_amount=slash_amount,
             target=self.ledgers[i].active_balance,
         )
-        
+
         # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L608-L621
         for c in slash_chunks_priority:
             if not self.ledgers[i].unlocking_chunks:

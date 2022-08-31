@@ -243,7 +243,7 @@ def test_losses_distribution_with_fast_track(lido, oracle_master, vKSM, withdraw
     lido.redeem(redeem, {'from': accounts[0]})
     relay.new_era()
 
-    deposit_2 = 56678123504984
+    deposit_2 = 56678100000000
     lido.deposit(deposit_2, {'from': accounts[1]})
     relay.new_era()
 
@@ -258,7 +258,7 @@ def test_losses_distribution_with_fast_track(lido, oracle_master, vKSM, withdraw
     (waiting, available) = lido.getUnbonded(accounts[0])
     print("Waiting = " + str(waiting / 10**12))
 
-    losses = 51234567890377
+    losses = 51234000000000
     relay.new_era([-losses])
 
     (waiting, available) = lido.getUnbonded(accounts[0])
