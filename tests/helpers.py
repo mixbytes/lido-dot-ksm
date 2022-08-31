@@ -1,17 +1,28 @@
-
 from brownie import Ledger
+
+
+BONDING_DURATION = 28  # Polkadot
+MAX_UNLOCKING_CHUNKS = 32  # defined in the staking pallet
+
+MINIMUM_BALANCE = 33_333_333  # Existential Deposit in Kusama
+# MINIMUM_BALANCE = 10_000_000_000  # Existential Deposit in Polkadot
+
+MIN_NOMINATOR_BOND = 100_000_000_000  # Kusama and Polkadot
+MIN_VALIDATOR_BOND = 0  # Kusama and Polkadot
+
 
 class RelayLedger:
     ledger_address = None
     stash_account = None
     controller_account = None
 
-    active_balance = 0
-    free_balance = 0
-    unlocking_chunks = []
-    validators = 0
-    status = None
+    active_balance: int
+    free_balance: int
+    unlocking_chunks: list
+    validators: int
+    status: str
 
+    bonded: bool
     relay = None
 
     def __init__(self, relay, ledger_address, stash_account, controller_account):
@@ -24,53 +35,102 @@ class RelayLedger:
         self.free_balance = 0
         self.unlocking_chunks = []
         self.validators = 0
-        self.status = None
+        self.status = ''
 
-    def total_balance(self):
+        self.bonded = False
+
+    def total_balance(self) -> int:
         return self.active_balance + self._unlocking_sum() + self.free_balance
 
-    def unbond(self, amount):
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L871-L952
+    def unbond(self, amount: int):
+        if amount == 0:
+            return
+
         assert self.active_balance >= amount
+        assert len(self.unlocking_chunks) < MAX_UNLOCKING_CHUNKS, "No more chunks"
+        if amount == 0:
+            return
+
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L905-L923
         self.active_balance -= amount
-        self.unlocking_chunks.append((amount, self.relay.era + 28))
-        assert len(self.unlocking_chunks) < 32
+        if self.active_balance < MINIMUM_BALANCE:
+            amount += self.active_balance
+            self.active_balance = 0
 
-    def bond(self, amount):
-        assert self.free_balance >= amount
-        self.active_balance += amount
-        self.free_balance -= amount
+        if self.status == 'Validator':
+            assert self.active_balance >= MIN_VALIDATOR_BOND, "Insufficient bond"
+        elif self.status == 'Nominator':
+            assert self.active_balance >= MIN_NOMINATOR_BOND, "Insufficient bond"
 
-    def bond_extra(self, amount):
-        assert self.free_balance >= amount
-        self.active_balance += amount
-        self.free_balance -= amount
-
-    def rebond(self, amount):
-        rebonded = 0
-        while len(self.unlocking_chunks) > 0:
-            if rebonded + self.unlocking_chunks[0][0] <= amount:
-                rebonded += self.unlocking_chunks[0][0]
-                self.unlocking_chunks.pop(0)
-            else:
-                diff = amount - rebonded
-                rebonded += diff
-                self.unlocking_chunks[0] = (self.unlocking_chunks[0][0] - diff, self.unlocking_chunks[0][1])
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L925-L939
+        found_chunk = False
+        for c in self.unlocking_chunks:
+            if c[1] == self.relay.era + BONDING_DURATION:
+                c[0] += amount
+                found_chunk = True
                 break
-        
-        self.active_balance += rebonded
+        if not found_chunk:
+            self.unlocking_chunks.append([amount, self.relay.era + BONDING_DURATION])
 
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L755-L819
+    def bond(self, amount: int):
+        assert not self.bonded, "Already bonded"
+        assert self.free_balance >= amount
+        assert amount >= MINIMUM_BALANCE, "Insufficient bond"
+
+        self.active_balance += amount
+        self.free_balance -= amount
+        self.bonded = True
+        # NOTE: because we do not call `Nominate` in test
+        self.status = 'Nominator'
+
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L821-L869
+    def bond_extra(self, amount: int):
+        assert self.bonded, "Not bonded"
+        assert self.free_balance >= amount
+
+        self.active_balance += amount
+        self.free_balance -= amount
+        assert self.active_balance >= MINIMUM_BALANCE, "Insufficient bond"
+        # NOTE: because we do not call `Nominate` in test
+        self.status = 'Nominator'
+
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L1403-L1439
+    def rebond(self, amount: int):
+        assert len(self.unlocking_chunks) != 0, "No unlock chunk"
+
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L509-L527
+        rebonded_value = 0
+        while self.unlocking_chunks:
+            chunk = self.unlocking_chunks[-1]
+            if rebonded_value + chunk[0] <= amount:
+                rebonded_value += chunk[0]
+                self.unlocking_chunks.pop()
+            else:
+                diff = amount - rebonded_value
+                rebonded_value += diff
+                chunk[0] -= diff
+                break
+
+            if rebonded_value >= amount:
+                break
+
+        self.active_balance += rebonded_value
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L1424
+        assert self.active_balance >= MINIMUM_BALANCE, "Insufficient bond"
+
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/pallet/mod.rs#L954-L1009
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L475-L503
     def withdraw(self):
-        while len(self.unlocking_chunks) > 0 and self.unlocking_chunks[0][1] < self.relay.era:
+        while self.unlocking_chunks and self.unlocking_chunks[0][1] < self.relay.era:
             self.free_balance += self.unlocking_chunks[0][0]
             self.unlocking_chunks.pop(0)
 
-    def _unlocking_sum(self):
-        sum = 0
-        for i in range(len(self.unlocking_chunks)):
-            sum += self.unlocking_chunks[i][0]
-        return sum
+    def _unlocking_sum(self) -> int:
+        return sum(i[0] for i in self.unlocking_chunks)
 
-    def _status_num(self):
+    def _status_num(self) -> int:
         if self.status == 'Chill':
             return 0
         elif self.status == 'Nominator':
@@ -80,7 +140,7 @@ class RelayLedger:
         else:
             return 3
 
-    def get_report_data(self):
+    def get_report_data(self) -> tuple:
         return (
             self.stash_account,
             self.controller_account,
@@ -90,7 +150,7 @@ class RelayLedger:
             self.unlocking_chunks,
             [],
             self.total_balance(),
-            0 # ledger slashing spans (for test always 0)
+            0  # ledger slashing spans (for test always 0)
         )
 
 
@@ -107,9 +167,9 @@ class RelayChain:
     transfer_enabled = True
     block_xcm_messages = False
 
-    def __init__(self, lido, vKSM, oracle_master, accounts, chain):
+    def __init__(self, lido, vksm, oracle_master, accounts, chain):
         self.lido = lido
-        self.vKSM = vKSM
+        self.vKSM = vksm
         self.oracle_master = oracle_master
         self.accounts = accounts
         self.chain = chain
@@ -173,6 +233,9 @@ class RelayChain:
             if self.bond_enabled:
                 idx = self._ledger_idx_by_ledger_address(event['caller'])
                 self.ledgers[idx].bond(event['amount'])
+        elif name == 'Chill':
+            idx = self._ledger_idx_by_ledger_address(event['caller'])
+            self.ledgers[idx].status = 'Chill'
         elif name == 'BondExtra':
             idx = self._ledger_idx_by_ledger_address(event['caller'])
             self.ledgers[idx].bond_extra(event['amount'])
@@ -189,13 +252,10 @@ class RelayChain:
             idx = self._ledger_idx_by_ledger_address(event['caller'])
             self.ledgers[idx].validators += event['validators']
             self.ledgers[idx].status = 'Nominator'
-        elif name == 'Chill':
-            idx = self._ledger_idx_by_ledger_address(event['caller'])
-            self.ledgers[idx].status = 'Chill'
             pass
 
     def _after_report(self, tx):
-        if not(self.block_xcm_messages):
+        if not self.block_xcm_messages:
             for i in range(len(tx.events)):
                 name = tx.events[i].name
                 event = tx.events[i]
@@ -207,40 +267,103 @@ class RelayChain:
                 else:
                     self._process_call(name, event)
 
-    def new_era(self, rewards=[]):
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L587-L602
+    @staticmethod
+    def _slash_out_of(target: int, remaining_slash: int,
+                      affected_balance: int, slash_amount: int, ratio: float) -> (int, int):
+        if slash_amount < affected_balance:
+            slash_from_target = int(ratio * target)
+        else:
+            slash_from_target = remaining_slash
+            
+        slash_from_target = target if slash_from_target > target else slash_from_target
+        target -= slash_from_target
+        if target < MINIMUM_BALANCE:
+            slash_from_target += target
+            target = 0
+            
+        remaining_slash -= slash_from_target
+        
+        return target, remaining_slash
+
+    # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L532-L624
+    def slash(self, rewards: list, i: int, slash_era: int):
+        slash_amount = -rewards[i]
+        remaining_slash = -rewards[i]
+
+        era_after_slash = slash_era + 1
+        chunk_unlock_era_after_slash = era_after_slash + BONDING_DURATION
+
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L561-L583
+        affected_balance, slash_chunks_priority = None, None
+        for idx, unlocking in enumerate(self.ledgers[i].unlocking_chunks):
+            era = unlocking[1]
+            if era < chunk_unlock_era_after_slash:
+                continue
+            
+            affected_indices = [j for j in range(idx, len(self.ledgers[i].unlocking_chunks))]
+            affected_balance = self.ledgers[i].active_balance
+            for _idx in affected_indices:
+                affected_balance += self.ledgers[i].unlocking_chunks[_idx][0]
+                slash_chunks_priority = [j for j in range(idx)]
+                slash_chunks_priority.reverse()
+            break
+        if affected_balance is None:
+            affected_balance = self.ledgers[i].active_balance
+            slash_chunks_priority = [j for j in range(len(self.ledgers[i].unlocking_chunks))]
+            slash_chunks_priority.reverse()
+
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L586
+        ratio = slash_amount / affected_balance
+
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L605
+        self.ledgers[i].active_balance, remaining_slash = self._slash_out_of(
+            affected_balance=affected_balance,
+            ratio=ratio,
+            remaining_slash=remaining_slash,
+            slash_amount=slash_amount,
+            target=self.ledgers[i].active_balance,
+        )
+
+        # https://github.com/paritytech/substrate/blob/814752f60ab8cce7e2ece3ce0c1b10799b4eab28/frame/staking/src/lib.rs#L608-L621
+        for c in slash_chunks_priority:
+            if not self.ledgers[i].unlocking_chunks:
+                break
+                
+            if remaining_slash == 0:
+                break
+
+            self.ledgers[i].unlocking_chunks[c][0], remaining_slash = self._slash_out_of(
+                affected_balance=affected_balance,
+                ratio=ratio,
+                remaining_slash=remaining_slash,
+                slash_amount=slash_amount,
+                target=self.ledgers[i].unlocking_chunks[c][0],
+            )
+
+        unlocking_upd = []
+        for c in self.ledgers[i].unlocking_chunks:
+            if c[0] != 0:
+                unlocking_upd.append(c)
+        self.ledgers[i].unlocking_chunks = unlocking_upd
+        rewards[i] = 0
+
+    def new_era(self, rewards: list = None, slash_era: int = None):
+        if rewards is None:
+            rewards = []
+
         self.era += 1
         self.chain.sleep(6 * 60 * 60)
         for i in range(len(self.ledgers)):
             if i < len(rewards) and self.ledgers[i].status != 'Chill':
                 self.total_rewards += rewards[i]
-                if (rewards[i] >= 0):
+                if rewards[i] >= 0:
                     self.ledgers[i].active_balance += rewards[i]
                 else:
-                    if ((self.ledgers[i].active_balance + rewards[i]) >= 0):
-                        self.ledgers[i].active_balance += rewards[i]
-                        rewards[i] = 0
-                    else:
-                        rewards[i] += self.ledgers[i].active_balance
-                        self.ledgers[i].active_balance = 0
-                        remove_idx = 0
-                        upd_idx = -1
-                        upd_val = 0
-                        for chunk in self.ledgers[i].unlocking_chunks:
-                            if ((chunk[0] + rewards[i]) >= 0):
-                                upd_val = chunk[0] + rewards[i]
-                                rewards[i] = 0
-                                upd_idx = i
-                            else:
-                                rewards[i] += chunk[0]
-                                remove_idx += 1
-
-                        if (upd_idx >= 0):
-                            self.ledgers[i].unlocking_chunks[upd_idx] = (upd_val, self.ledgers[i].unlocking_chunks[upd_idx][1])
-
-                        self.ledgers[i].unlocking_chunks = self.ledgers[i].unlocking_chunks[remove_idx:]
-
+                    slash_era = self.era if slash_era is None else slash_era
+                    self.slash(rewards, i, slash_era)
                     assert rewards[i] == 0
-                
+
             tx = self.oracle_master.reportRelay(self.era, self.ledgers[i].get_report_data())
             tx.info()
             self._after_report(tx)
@@ -251,9 +374,9 @@ class RelayChain:
         self.chain.mine()
 
 
-def distribute_initial_tokens(vKSM, lido, accounts):
+def distribute_initial_tokens(vksm, lido, accounts):
     for acc in accounts[1:]:
-        vKSM.transfer(acc, 10**6 * 10**18, {'from': accounts[0]})
+        vksm.transfer(acc, 10 ** 6 * 10 ** 18, {'from': accounts[0]})
 
     for acc in accounts:
-        vKSM.approve(lido, 2**255, {'from': acc})
+        vksm.approve(lido, 2 ** 255, {'from': acc})
