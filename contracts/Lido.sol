@@ -64,6 +64,14 @@ contract Lido is stKSM, Initializable {
         address addr
     );
 
+    // Referral program
+    event Referral(
+        address userAddr,
+        address referralAddr,
+        uint256 amount,
+        uint256 shares
+    );
+
     // sum of all deposits and rewards
     uint256 public fundRaisedBalance;
 
@@ -215,15 +223,17 @@ contract Lido is stKSM, Initializable {
     /**
      * @notice setting token parameters
      */
-    function setTokenInfo(string memory __name, string memory __symbol, uint8 __decimals) external {
-        require(bytes(__name).length > 0, "LIDO: EMPTY_NAME");
-        require(bytes(__symbol).length > 0, "LIDO: EMPTY_SYMBOL");
-        require(__decimals > 0, "LIDO: ZERO_DECIMALS");
-        require(bytes(_name).length == 0, "LIDO: NAME_SETTED");
-        _name = __name;
-        _symbol = __symbol;
-        _decimals = __decimals;
-    }
+    // NOTE: function was removed from Lido, because it can be called only once to set parameters and after that
+    // it is unnecessary in the code. It was removed to decrease contract bytecode size
+    // function setTokenInfo(string memory __name, string memory __symbol, uint8 __decimals) external {
+    //     require(bytes(__name).length > 0, "LIDO: EMPTY_NAME");
+    //     require(bytes(__symbol).length > 0, "LIDO: EMPTY_SYMBOL");
+    //     require(__decimals > 0, "LIDO: ZERO_DECIMALS");
+    //     require(bytes(_name).length == 0, "LIDO: NAME_SETTED");
+    //     _name = __name;
+    //     _symbol = __symbol;
+    //     _decimals = __decimals;
+    // }
 
     /**
     * @notice Initialize lido contract.
@@ -555,13 +565,23 @@ contract Lido is stKSM, Initializable {
         }
     }
 
+    function deposit(uint256 _amount) external returns (uint256) {
+        return _deposit(_amount);
+    }
+
+    function deposit(uint256 _amount, address _referral) external returns (uint256) {
+        uint256 shares = _deposit(_amount);
+        emit Referral(msg.sender, _referral, _amount, shares);
+        return shares;
+    }
+
     /**
     * @notice Deposit vKSM tokens to the pool and recieve stKSM(liquid staked tokens) instead.
               User should approve tokens before executing this call.
     * @dev Method accoumulate vKSMs on contract
     * @param _amount - amount of vKSM tokens to be deposited
     */
-    function deposit(uint256 _amount) external whenNotPaused returns (uint256) {
+    function _deposit(uint256 _amount) internal whenNotPaused returns (uint256) {
         require(fundRaisedBalance + _amount < depositCap, "LIDO: DEPOSITS_EXCEED_CAP");
 
         VKSM.transferFrom(msg.sender, address(this), _amount);

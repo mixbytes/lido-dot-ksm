@@ -3,10 +3,6 @@ from brownie import reverts
 MUNIT = 1_000_000
 UNIT = 1_000_000_000
 
-def test_lido_new_name_revert(lido):
-    with reverts("LIDO: NAME_SETTED"):
-        lido.setTokenInfo("TST", "TST", 12)
-
 
 def test_fee_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, developers, admin):
     '''
