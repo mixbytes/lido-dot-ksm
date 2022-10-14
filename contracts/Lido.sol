@@ -64,19 +64,31 @@ contract Lido is stKSM, Initializable {
         address addr
     );
 
+    // Referral program
+    event Referral(
+        address userAddr,
+        address referralAddr,
+        uint256 amount,
+        uint256 shares
+    );
+
     // sum of all deposits and rewards
     uint256 public fundRaisedBalance;
 
-    // haven't executed buffrered deposits
+    // haven't executed buffrered deposits:
+    //
+    // this is the amount of funds that must either sent to the ledgers
+    // or rebalanced to buffered redeems
     uint256 public bufferedDeposits;
 
-    // haven't executed buffrered redeems
+    // haven't executed buffrered redeems:
+    // this is the amount of funds that should be sent to the WITHDRAWAL contract
     uint256 public bufferedRedeems;
 
-    // Ledger target stakes
+    // this is the active stake on the ledger = [ledgerBorrow] - unbonded funds - free funds
     mapping(address => uint256) public ledgerStake;
 
-    // Ledger borrow
+    // this is the total amount of funds in the ledger = active stake + unbonded funds + free funds
     mapping(address => uint256) public ledgerBorrow;
 
     // Disabled ledgers
@@ -211,15 +223,17 @@ contract Lido is stKSM, Initializable {
     /**
      * @notice setting token parameters
      */
-    function setTokenInfo(string memory __name, string memory __symbol, uint8 __decimals) external {
-        require(bytes(__name).length > 0, "LIDO: EMPTY_NAME");
-        require(bytes(__symbol).length > 0, "LIDO: EMPTY_SYMBOL");
-        require(__decimals > 0, "LIDO: ZERO_DECIMALS");
-        require(bytes(_name).length == 0, "LIDO: NAME_SETTED");
-        _name = __name;
-        _symbol = __symbol;
-        _decimals = __decimals;
-    }
+    // NOTE: function was removed from Lido, because it can be called only once to set parameters and after that
+    // it is unnecessary in the code. It was removed to decrease contract bytecode size
+    // function setTokenInfo(string memory __name, string memory __symbol, uint8 __decimals) external {
+    //     require(bytes(__name).length > 0, "LIDO: EMPTY_NAME");
+    //     require(bytes(__symbol).length > 0, "LIDO: EMPTY_SYMBOL");
+    //     require(__decimals > 0, "LIDO: ZERO_DECIMALS");
+    //     require(bytes(_name).length == 0, "LIDO: NAME_SETTED");
+    //     _name = __name;
+    //     _symbol = __symbol;
+    //     _decimals = __decimals;
+    // }
 
     /**
     * @notice Initialize lido contract.
@@ -362,12 +376,7 @@ contract Lido is stKSM, Initializable {
     * @return unbonded - amount of token which unbonded and ready to claim
     */
     function getUnbonded(address _holder) external view returns (uint256 waiting, uint256 unbonded) {
-        uint256 waitingToUnbonding = 0;
-        uint256 readyToClaim = 0;
-
-        (waitingToUnbonding, readyToClaim) = IWithdrawal(WITHDRAWAL).getRedeemStatus(_holder);
-
-        return (waitingToUnbonding, readyToClaim);
+        return IWithdrawal(WITHDRAWAL).getRedeemStatus(_holder);
     }
 
     /**
@@ -377,13 +386,13 @@ contract Lido is stKSM, Initializable {
     function getStashAccounts() public view returns (bytes32[] memory) {
         bytes32[] memory _stashes = new bytes32[](enabledLedgers.length + disabledLedgers.length);
 
-        for (uint i = 0; i < enabledLedgers.length; i++) {
-            _stashes[i] = bytes32(ILedger(enabledLedgers[i]).stashAccount());
+        for (uint i = 0; i < enabledLedgers.length + disabledLedgers.length; i++) {
+            address ledgerAddr = i < enabledLedgers.length ?
+                enabledLedgers[i] : disabledLedgers[i - enabledLedgers.length];
+                
+            _stashes[i] = bytes32(ILedger(ledgerAddr).stashAccount());
         }
 
-        for (uint i = 0; i < disabledLedgers.length; i++) {
-            _stashes[enabledLedgers.length + i] = bytes32(ILedger(disabledLedgers[i]).stashAccount());
-        }
         return _stashes;
     }
 
@@ -395,12 +404,9 @@ contract Lido is stKSM, Initializable {
     function getLedgerAddresses() public view returns (address[] memory) {
         address[] memory _ledgers = new address[](enabledLedgers.length + disabledLedgers.length);
 
-        for (uint i = 0; i < enabledLedgers.length; i++) {
-            _ledgers[i] = enabledLedgers[i];
-        }
-
-        for (uint i = 0; i < disabledLedgers.length; i++) {
-            _ledgers[enabledLedgers.length + i] = disabledLedgers[i];
+        for (uint i = 0; i < enabledLedgers.length + disabledLedgers.length; i++) {
+            _ledgers[i] = i < enabledLedgers.length ?
+                enabledLedgers[i] : disabledLedgers[i - enabledLedgers.length];
         }
 
         return _ledgers;
@@ -414,20 +420,6 @@ contract Lido is stKSM, Initializable {
     */
     function findLedger(bytes32 _stashAccount) external view returns (address) {
         return ledgerByStash[_stashAccount];
-    }
-
-    /**
-    * @notice Returns total fee basis points
-    */
-    function getFee() external view returns (uint16){
-        return FEE.total;
-    }
-
-    /**
-    * @notice Returns all fees basis points
-    */
-    function getAllFees() external view returns (Types.Fee memory){
-        return FEE;
     }
 
     /**
@@ -530,7 +522,8 @@ contract Lido is stKSM, Initializable {
     function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
         require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
         require(ledgerStake[_ledgerAddress] == 0, "LIDO: LEDGER_HAS_NON_ZERO_STAKE");
-        uint256 ledgerIdx = _findDisabledLedger(_ledgerAddress);
+        // uint256 ledgerIdx = _findDisabledLedger(_ledgerAddress);
+        uint256 ledgerIdx = _findLedger(_ledgerAddress, false);
         require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_DISABLED");
 
         ILedger ledger = ILedger(_ledgerAddress);
@@ -572,18 +565,41 @@ contract Lido is stKSM, Initializable {
         }
     }
 
+    function deposit(uint256 _amount) external returns (uint256) {
+        return _deposit(_amount);
+    }
+
+    function deposit(uint256 _amount, address _referral) external returns (uint256) {
+        uint256 shares = _deposit(_amount);
+        emit Referral(msg.sender, _referral, _amount, shares);
+        return shares;
+    }
+
     /**
     * @notice Deposit vKSM tokens to the pool and recieve stKSM(liquid staked tokens) instead.
               User should approve tokens before executing this call.
     * @dev Method accoumulate vKSMs on contract
     * @param _amount - amount of vKSM tokens to be deposited
     */
-    function deposit(uint256 _amount) external whenNotPaused returns (uint256) {
+    function _deposit(uint256 _amount) internal whenNotPaused returns (uint256) {
         require(fundRaisedBalance + _amount < depositCap, "LIDO: DEPOSITS_EXCEED_CAP");
 
         VKSM.transferFrom(msg.sender, address(this), _amount);
 
-        uint256 shares = _submit(_amount);
+        require(_amount != 0, "LIDO: ZERO_DEPOSIT");
+
+        uint256 shares = getSharesByPooledKSM(_amount);
+        if (shares == 0) {
+            // totalPooledKSM is 0: either the first-ever deposit or complete slashing
+            // assume that shares correspond to KSM as 1-to-1
+            shares = _amount;
+        }
+
+        fundRaisedBalance += _amount;
+        bufferedDeposits += _amount;
+        _mintShares(msg.sender, shares);
+
+        _emitTransferAfterMintingShares(msg.sender, shares);
 
         emit Deposited(msg.sender, _amount);
 
@@ -705,28 +721,6 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
-    * @notice Transfer vKSM from ledger to LIDO. Can be called only from ledger
-    * @param _amount - amount of transfered vKSM
-    */
-    // NOTE: DEPRECATED
-    // function transferFromLedger(uint256 _amount) external {
-    //     require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
-
-    //     if (_amount > ledgerBorrow[msg.sender]) { // some donations
-    //         uint256 excess = _amount - ledgerBorrow[msg.sender];
-    //         fundRaisedBalance += excess; //just distribute it as rewards
-    //         bufferedDeposits += excess;
-    //         ledgerBorrow[msg.sender] = 0;
-    //         VKSM.transferFrom(msg.sender, address(this), excess);
-    //         VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount - excess);
-    //     }
-    //     else {
-    //         ledgerBorrow[msg.sender] -= _amount;
-    //         VKSM.transferFrom(msg.sender, WITHDRAWAL, _amount);
-    //     }
-    // }
-
-    /**
     * @notice Transfer vKSM from LIDO to ledger. Can be called only from ledger
     * @param _amount - amount of transfered vKSM
     */
@@ -753,6 +747,30 @@ contract Lido is stKSM, Initializable {
     * @notice Rebalance stake accross ledgers by soft manner.
     */
     function _softRebalanceStakes() internal {
+        uint256 totalStakeExcess = 0;
+        for (uint256 i = 0; i < enabledLedgers.length + disabledLedgers.length; ++i) {
+            address ledgerAddr = i < enabledLedgers.length ? 
+                enabledLedgers[i] : disabledLedgers[i - enabledLedgers.length];
+
+            // consider an incorrect case when our records about the ledger are wrong:
+            // the ledger's active stake > the ledger's total amount of funds
+            if (ledgerStake[ledgerAddr] > ledgerBorrow[ledgerAddr]) {
+
+                uint256 ledgerStakeExcess = ledgerStake[ledgerAddr] - ledgerBorrow[ledgerAddr];
+
+                // new total stake excess <= the amount of funds that won't be sent to the ledgers
+                if (totalStakeExcess + ledgerStakeExcess <= VKSM.balanceOf(address(this)) - bufferedDeposits) {
+                    totalStakeExcess += ledgerStakeExcess;
+
+                    // correcting the ledger's active stake record
+                    ledgerStake[ledgerAddr] -= ledgerStakeExcess;
+                }
+            }
+        }
+
+        // the amount of funds to be sent to the ledgers should decrease the ledgers' stake excess
+        bufferedDeposits += totalStakeExcess;
+
         if (bufferedDeposits > 0 || bufferedRedeems > 0) {
             // first try to distribute redeems accross disabled ledgers
             if (disabledLedgers.length > 0 && bufferedRedeems > 0) {
@@ -916,12 +934,10 @@ contract Lido is stKSM, Initializable {
     * @param _maxUnlockingChunks - new maximum unlocking chunks
     */
     function _updateLedgerRelaySpecs(uint128 _minNominatorBalance, uint128 _minimumBalance, uint256 _maxUnlockingChunks) internal {
-        for (uint i = 0; i < enabledLedgers.length; i++) {
-            ILedger(enabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance, _maxUnlockingChunks);
-        }
-
-        for (uint i = 0; i < disabledLedgers.length; i++) {
-            ILedger(disabledLedgers[i]).setRelaySpecs(_minNominatorBalance, _minimumBalance, _maxUnlockingChunks);
+        for (uint i = 0; i < enabledLedgers.length + disabledLedgers.length; i++) {
+            address ledgerAddress = i < enabledLedgers.length ?
+                enabledLedgers[i] : disabledLedgers[i - enabledLedgers.length];
+            ILedger(ledgerAddress).setRelaySpecs(_minNominatorBalance, _minimumBalance, _maxUnlockingChunks);
         }
     }
 
@@ -932,7 +948,7 @@ contract Lido is stKSM, Initializable {
     */
     function _disableLedger(address _ledgerAddress) internal {
         require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
-        uint256 ledgerIdx = _findEnabledLedger(_ledgerAddress);
+        uint256 ledgerIdx = _findLedger(_ledgerAddress, true);
         require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_ENABLED");
 
         address lastLedger = enabledLedgers[enabledLedgers.length - 1];
@@ -943,31 +959,6 @@ contract Lido is stKSM, Initializable {
 
         emit LedgerDisable(_ledgerAddress);
     }
-
-    /**
-    * @notice Process user deposit, mints stKSM and increase the pool buffer
-    * @return amount of stKSM shares generated
-    */
-    function _submit(uint256 _deposit) internal returns (uint256) {
-        address sender = msg.sender;
-
-        require(_deposit != 0, "LIDO: ZERO_DEPOSIT");
-
-        uint256 sharesAmount = getSharesByPooledKSM(_deposit);
-        if (sharesAmount == 0) {
-            // totalPooledKSM is 0: either the first-ever deposit or complete slashing
-            // assume that shares correspond to KSM as 1-to-1
-            sharesAmount = _deposit;
-        }
-
-        fundRaisedBalance += _deposit;
-        bufferedDeposits += _deposit;
-        _mintShares(sender, sharesAmount);
-
-        _emitTransferAfterMintingShares(sender, sharesAmount);
-        return sharesAmount;
-    }
-
 
     /**
     * @notice Emits an {Transfer} event where from is 0 address. Indicates mint events.
@@ -985,25 +976,14 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
-    * @notice Returns enabled ledger index by given address
-    * @return enabled ledger index or uint256_max if not found
+    * @notice Returns enabled or disabled ledger index by given address
+    * @return enabled or disabled ledger index or uint256_max if not found
     */
-    function _findEnabledLedger(address _ledgerAddress) internal view returns(uint256) {
-        for (uint256 i = 0; i < enabledLedgers.length; ++i) {
-            if (enabledLedgers[i] == _ledgerAddress) {
-                return i;
-            }
-        }
-        return type(uint256).max;
-    }
-
-    /**
-    * @notice Returns disabled ledger index by given address
-    * @return disabled ledger index or uint256_max if not found
-    */
-    function _findDisabledLedger(address _ledgerAddress) internal view returns(uint256) {
-        for (uint256 i = 0; i < disabledLedgers.length; ++i) {
-            if (disabledLedgers[i] == _ledgerAddress) {
+    function _findLedger(address _ledgerAddress, bool _enabled) internal view returns(uint256) {
+        uint256 length = _enabled ? enabledLedgers.length : disabledLedgers.length;
+        for (uint256 i = 0; i < length; ++i) {
+            address ledgerAddress = _enabled ? enabledLedgers[i] : disabledLedgers[i];
+            if (ledgerAddress == _ledgerAddress) {
                 return i;
             }
         }

@@ -631,7 +631,7 @@ def test_soften_quorum(lido, oracle_master, vKSM, accounts):
     relay.new_ledger("0x10", "0x11")
     ledger_1 = relay.ledgers[0]
 
-    oracle_master.setQuorum(2, {'from': accounts[0]})
+    oracle_master.setQuorum(3, {'from': accounts[0]})
 
     deposit = 20 * 10**18
     lido.deposit(deposit, {'from': accounts[0]})
@@ -640,7 +640,7 @@ def test_soften_quorum(lido, oracle_master, vKSM, accounts):
 
     assert ledger_1.free_balance == 0
 
-    tx = oracle_master.setQuorum(1, {'from': accounts[0]})
+    tx = oracle_master.setQuorum(2, {'from': accounts[0]})
 
     relay._after_report(tx)
 

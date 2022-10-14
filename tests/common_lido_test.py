@@ -3,13 +3,6 @@ from brownie import reverts
 MUNIT = 1_000_000
 UNIT = 1_000_000_000
 
-def test_default_fees(lido):
-    assert lido.getAllFees() == (1000, 0, 200, 800)
-
-def test_lido_new_name_revert(lido):
-    with reverts("LIDO: NAME_SETTED"):
-        lido.setTokenInfo("TST", "TST", 12)
-
 
 def test_fee_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, developers, admin):
     '''
@@ -28,7 +21,6 @@ def test_fee_distribution(vKSM, LedgerMock, mocklido, mockledger, treasury, deve
     beacon = mocklido.LEDGER_BEACON()
     print(beacon)
 
-    assert mocklido.getFee() == 1000
     # call lido.distributeRewards via mock Ledger
     # 1 UNIT has already withdrawn operators (3%) fee
     t = mockledger.distributeRewards(1*UNIT, 0, {'from': admin})
@@ -51,7 +43,6 @@ def test_fee_change_distribution(vKSM, LedgerMock, mocklido, mockledger, treasur
     assert mocklido.balanceOf(admin) == 10 * UNIT
     # call lido.distributeRewards via mock Ledger
     mocklido.setFee(300, 0, 700)
-    assert mocklido.getFee() == 1000
 
     assert mocklido.balanceOf(treasury) == 0
     t = mockledger.distributeRewards(1*UNIT, 0, {'from': admin})

@@ -24,7 +24,7 @@ def deploy_with_proxy(contract, proxy_admin, *args):
     )
 
     TransparentUpgradeableProxy.remove(proxy_instance)
-    return contract.at(proxy_instance.address, owner=owner)
+    return (contract.at(proxy_instance.address, owner=owner), logic_instance)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -45,7 +45,7 @@ def vKSM(vKSM_mock, accounts):
 
 @pytest.fixture(scope="module")
 def auth_manager(AuthManager, proxy_admin, accounts):
-    am = deploy_with_proxy(AuthManager, proxy_admin, accounts[0])
+    (am, _) = deploy_with_proxy(AuthManager, proxy_admin, accounts[0])
     am.addByString('ROLE_SPEC_MANAGER', accounts[0], {'from': accounts[0]})
     am.addByString('ROLE_BEACON_MANAGER', accounts[0], {'from': accounts[0]})
     am.addByString('ROLE_PAUSE_MANAGER', accounts[0], {'from': accounts[0]})
@@ -97,14 +97,24 @@ def developers(accounts):
 
 
 @pytest.fixture(scope="module")
-def lido(Lido, vKSM, controller, auth_manager, oracle_master, withdrawal, proxy_admin, chain, Ledger, LedgerBeacon, LedgerFactory, accounts, developers, treasury):
+def lido(Lido, vKSM, controller, auth_manager, oracle_master, withdrawal, proxy_admin, chain, Ledger, LedgerBeacon, LedgerFactory, accounts, developers, treasury, LidoToken):
     lc = Ledger.deploy({'from': accounts[0]})
-    _lido = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury, oracle_master, withdrawal, 50000 * 10**18, 3000)
+    (_lido, _lido_impl) = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury, oracle_master, withdrawal, 50000 * 10**18, 3000)
     ledger_beacon = LedgerBeacon.deploy(lc, _lido, {'from': accounts[0]})
     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': accounts[0]})
     _lido.setLedgerBeacon(ledger_beacon)
     _lido.setLedgerFactory(ledger_factory)
-    _lido.setTokenInfo("TST", "TST", 12)
+
+    owner = proxy_admin.owner()
+    lidoToken = LidoToken.deploy({'from': accounts[0]})
+    proxy_admin.upgrade(_lido, lidoToken, {'from': owner})
+    Lido.remove(_lido)
+    lidoTokenInit = LidoToken.at(_lido, owner=accounts[0])
+    lidoTokenInit.setTokenInfo("TST", "TST", 12, {'from': accounts[0]})
+    proxy_admin.upgrade(_lido, _lido_impl, {'from': owner})
+    LidoToken.remove(_lido)
+    _lido = Lido.at(_lido, owner=accounts[0])
+
     era_sec = 60 * 60 * 6
     _lido.setRelaySpec((16, 1, 0, 32))  # kusama settings except min nominator bond
     oracle_master.setAnchorEra(0, chain.time(), era_sec)
@@ -126,7 +136,7 @@ def mocklido(Lido, LedgerMock, LedgerBeacon, LedgerFactory, Oracle, OracleMaster
     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': admin})
     _lido.setLedgerBeacon(ledger_beacon, {'from': admin})
     _lido.setLedgerFactory(ledger_factory, {'from': admin})
-    _lido.setTokenInfo("TST", "TST", 12)
+    # _lido.setTokenInfo("TST", "TST", 12)
 
     return _lido
 
