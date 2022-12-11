@@ -151,3 +151,15 @@ def mockledger(mocklido, admin, LedgerMock):
 def wstKSM(lido, WstKSM, vKSM, admin):
     _wstKSM = WstKSM.deploy(lido, vKSM, 12, {'from': admin})
     return _wstKSM
+
+
+@pytest.fixture(scope="module")
+def localAsset(LocalAsset_mock, accounts):
+    return LocalAsset_mock.deploy({'from': accounts[0]})
+
+
+@pytest.fixture(scope="module")
+def xcWSTDOT(xcwstDOT, lido, vKSM, proxy_admin, localAsset):
+    _xcwstDOT = deploy_with_proxy(xcwstDOT, proxy_admin, lido, vKSM)
+    _xcwstDOT.setLocalAsset(localAsset, "Wrapped liquid staked DOT", "xcwstDOT", 10)
+    return _xcwstDOT
