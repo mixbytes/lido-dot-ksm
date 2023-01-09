@@ -1,5 +1,6 @@
 read = 1_000_000 * 25
 write = 1_000_000 * 100
+num_slashing_spans = 32
 
 NETWORK="polkadot"
 
@@ -32,10 +33,10 @@ if (NETWORK == "polkadot"):
     bond_extra_base = 58_225_000 + rw(8, 7)
     if (max_weight < bond_extra_base):
         max_weight = bond_extra_base
-    unbond_base = 64_825_000 + rw(12, 8)
+    unbond_base = 91_901_000 + rw(12, 8)
     if (max_weight < unbond_base):
         max_weight = unbond_base
-    withdraw_unbonded_kill = 53_125_000 + rw(13, 11)
+    withdraw_unbonded_kill = 83_605_753 + 942_989 * num_slashing_spans + rw(13, 12) + rw(0, num_slashing_spans)
     withdraw_unbonded_per_unit = 0
     if (max_weight < withdraw_unbonded_kill + 32 * withdraw_unbonded_per_unit):
         max_weight = withdraw_unbonded_kill + 32 * withdraw_unbonded_per_unit
@@ -61,8 +62,8 @@ if (NETWORK == "kusama"):
     as_derevative = (4_636_000 + rw(1, 1)) * 2
     bond_base = 60_400_000 + rw(5, 4)
     bond_extra_base = 98_893_000 + rw(8, 7)
-    unbond_base = 106_618_000 + rw(12, 8)
-    withdraw_unbonded_kill = 87_523_000 + rw(13, 11)
+    unbond_base = 95_427_000 + rw(12, 8)
+    withdraw_unbonded_kill = 85_727_324 + 942_386 * num_slashing_spans + rw(13, 12) + rw(0, num_slashing_spans)
     withdraw_unbonded_per_unit = 0
     nominate_base = 71_169_000 + rw(12, 6)
     nominate_per_unit = 4_786_000 + rw(1, 0)
@@ -77,8 +78,8 @@ if (NETWORK == "moonbase"):
     as_derevative = (4_542_000 + rw(1, 1)) * 2
     bond_base = 62_057_000 + rw(5, 4)
     bond_extra_base = 102_780_000 + rw(8, 7)
-    unbond_base = 111_135_000 + rw(12, 8)
-    withdraw_unbonded_kill = 89_350_000 + rw(13, 11)
+    unbond_base = 95_544_000 + rw(12, 8)
+    withdraw_unbonded_kill = 86_233_015 + 928_106 * num_slashing_spans + rw(13, 12) + rw(0, num_slashing_spans)
     withdraw_unbonded_per_unit = 0
     nominate_base = 73_227_000 + rw(12, 6)
     nominate_per_unit = 4_820_000 + rw(1, 0)
