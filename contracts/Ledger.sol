@@ -190,7 +190,7 @@ contract Ledger {
     * @notice Declare no desire to nominate. Will take effect at the beginning of the next era.
     * @dev Method spawns xcm call to relaychain.
     */
-    function chill() auth(ROLE_LEDGER_MANAGER) external {
+    function chill() external auth(ROLE_LEDGER_MANAGER) {
         require(status != Types.LedgerStatus.Idle, "LEDGER: ALREADY_IDLE");
         CONTROLLER.chill();
     }
