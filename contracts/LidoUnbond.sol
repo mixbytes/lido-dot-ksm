@@ -154,6 +154,9 @@ contract Lido is stKSM, Initializable {
     // Flag indicating redeem availability
     bool private isRedeemEnabled;
 
+    // Flag indicating if unbond is forced
+    bool private isUnbondForced;
+
     // default interest value in base points.
     uint16 internal constant DEFAULT_DEVELOPERS_FEE = 200;
     uint16 internal constant DEFAULT_OPERATORS_FEE = 0;
@@ -395,6 +398,16 @@ contract Lido is stKSM, Initializable {
     function setBufferedRedeems(uint256 _bufferedRedeems) external auth(ROLE_BEACON_MANAGER) {
         require(!isRedeemEnabled, "LIDO: REDEEM_ENABLED");
         bufferedRedeems = _bufferedRedeems;
+    }
+
+    /**
+    * @notice Sets isUnbondForced flag, allowed to call only by ROLE_BEACON_MANAGER
+    * @dev used to indicate the start of the forced unbond proccess
+    * @param _isUnbondForced - new isUnbondForced value
+    */
+    function setIsUnbondForced(bool _isUnbondForced) external auth(ROLE_BEACON_MANAGER) {
+        require(!isRedeemEnabled, "LIDO: REDEEM_ENABLED");
+        isUnbondForced = _isUnbondForced;
     }
 
     /**
@@ -665,6 +678,35 @@ contract Lido is stKSM, Initializable {
     function claimUnbonded() external whenNotPaused {
         uint256 amount = IWithdrawal(WITHDRAWAL).claim(msg.sender);
         emit Claimed(msg.sender, amount);
+    }
+
+    /**
+    * @notice Claim all vKSM tokens which were forcefully unbonded. Burns stKSM shares
+    */
+    function claimForcefullyUnbonded() external whenNotPaused {
+        require(isUnbondForced, "LIDO: UNBOND_NOT_FORCED");
+
+        uint256 sharesToBurn = _sharesOf(msg.sender);
+        require(sharesToBurn > 0, "LIDO: NOTHING_TO_CLAIM");
+        uint256 tokensToClaim = getPooledKSMByShares(sharesToBurn);
+
+        _burnShares(msg.sender, sharesToBurn);
+        fundRaisedBalance -= tokensToClaim;
+
+        // Balance of Withdrawal contract which is claimable via claimUnbonded()
+        uint256 withdrawalClaimableBalance = IWithdrawal(WITHDRAWAL).totalVirtualXcKSMAmount +
+            IWithdrawal(WITHDRAWAL).pendingForClaiming;
+
+        require(VKSM.balanceOf(WITHDRAWAL) > withdrawalClaimableBalance,
+            "LIDO: INSUFFICIENT_WITHDRAWAL_BALANCE");
+
+        // Balance of Withdrawal contract which is free to claim via claimForcefullyUnbonded()
+        uint256 withdrawalFreeBalance = VKSM.balanceOf(WITHDRAWAL) - withdrawalClaimableBalance;
+
+        require(tokensToClaim <= withdrawalFreeBalance, "LIDO: CLAIM_EXCEEDS_BALANCE");
+
+        VKSM.transferFrom(WITHDRAWAL, msg.sender, tokensToClaim);
+        emit Claimed(msg.sender, tokensToClaim);
     }
 
     /**
