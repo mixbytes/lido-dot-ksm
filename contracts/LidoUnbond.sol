@@ -16,7 +16,7 @@ import "../interfaces/IWithdrawal.sol";
 import "./stKSM.sol";
 
 
-contract Lido is stKSM, Initializable {
+contract LidoUnbond is stKSM, Initializable {
     using SafeCast for uint256;
 
     // Records a deposit made by a user
