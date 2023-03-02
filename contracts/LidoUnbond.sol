@@ -151,6 +151,9 @@ contract Lido is stKSM, Initializable {
     */
     Types.Fee private FEE;
 
+    // Flag indicating redeem availability
+    bool private isRedeemEnabled;
+
     // default interest value in base points.
     uint16 internal constant DEFAULT_DEVELOPERS_FEE = 200;
     uint16 internal constant DEFAULT_OPERATORS_FEE = 0;
@@ -192,9 +195,6 @@ contract Lido is stKSM, Initializable {
     // Token decimals
     uint8 internal _decimals;
 
-    // Flag indicating redeem availability
-    bool internal _isRedeemEnabled;
-
     // Allow function calls only from member with specific role
     modifier auth(bytes32 role) {
         require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "LIDO: UNAUTHORIZED");
@@ -202,8 +202,8 @@ contract Lido is stKSM, Initializable {
     }
 
     // Allow call to redeem only when it's enabled
-    modifier isRedeemEnabled() {
-        require(_isRedeemEnabled, "LIDO: REDEEM_DISABLED");
+    modifier redeemEnabled() {
+        require(isRedeemEnabled, "LIDO: REDEEM_DISABLED");
         _;
     }
 
@@ -379,11 +379,11 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
-    * @notice Sets _isRedeemEnabled flag, allowed to call only by ROLE_DROLE_BEACON_MANAGEREVELOPERS
-    * @param _redeemStatus - new value for the _isRedeemEnabled flag
+    * @notice Sets isRedeemEnabled flag, allowed to call only by ROLE_BEACON_MANAGER
+    * @param _isRedeemEnabled - new value for the isRedeemEnabled flag
     */
-    function setIsRedeemEnabled(bool _redeemStatus) external auth(ROLE_BEACON_MANAGER) {
-        _isRedeemEnabled = _redeemStatus;
+    function setIsRedeemEnabled(bool _isRedeemEnabled) external auth(ROLE_BEACON_MANAGER) {
+        isRedeemEnabled = _isRedeemEnabled;
     }
 
     /**
@@ -393,7 +393,7 @@ contract Lido is stKSM, Initializable {
     * @param _bufferedRedeems - new bufferedRedeems value
     */
     function setBufferedRedeems(uint256 _bufferedRedeems) external auth(ROLE_BEACON_MANAGER) {
-        require(!_isRedeemEnabled, "LIDO: REDEEM_ENABLED");
+        require(!isRedeemEnabled, "LIDO: REDEEM_ENABLED");
         bufferedRedeems = _bufferedRedeems;
     }
 
@@ -640,7 +640,7 @@ contract Lido is stKSM, Initializable {
               User can have up to 20 redeem requests in parallel.
     * @param _amount - amount of stKSM tokens to be redeemed
     */
-    function redeem(uint256 _amount) external whenNotPaused isRedeemEnabled {
+    function redeem(uint256 _amount) external whenNotPaused redeemEnabled {
         uint256 _shares = getSharesByPooledKSM(_amount);
         require(_shares > 0, "LIDO: AMOUNT_TOO_LOW");
         require(_shares <= _sharesOf(msg.sender), "LIDO: REDEEM_AMOUNT_EXCEEDS_BALANCE");
