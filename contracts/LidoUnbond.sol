@@ -389,7 +389,7 @@ contract Lido is stKSM, Initializable {
         for (uint i = 0; i < enabledLedgers.length + disabledLedgers.length; i++) {
             address ledgerAddr = i < enabledLedgers.length ?
                 enabledLedgers[i] : disabledLedgers[i - enabledLedgers.length];
-                
+
             _stashes[i] = bytes32(ILedger(ledgerAddr).stashAccount());
         }
 
@@ -462,7 +462,7 @@ contract Lido is stKSM, Initializable {
         require(enabledLedgers.length + disabledLedgers.length < MAX_LEDGERS_AMOUNT, "LIDO: LEDGERS_POOL_LIMIT");
         require(ledgerByStash[_stashAccount] == address(0), "LIDO: STASH_ALREADY_EXISTS");
 
-        address ledger = ILedgerFactory(LEDGER_FACTORY).createLedger( 
+        address ledger = ILedgerFactory(LEDGER_FACTORY).createLedger(
             _stashAccount,
             _controllerAccount,
             address(VKSM),
@@ -749,7 +749,7 @@ contract Lido is stKSM, Initializable {
     function _softRebalanceStakes() internal {
         uint256 totalStakeExcess = 0;
         for (uint256 i = 0; i < enabledLedgers.length + disabledLedgers.length; ++i) {
-            address ledgerAddr = i < enabledLedgers.length ? 
+            address ledgerAddr = i < enabledLedgers.length ?
                 enabledLedgers[i] : disabledLedgers[i - enabledLedgers.length];
 
             // consider an incorrect case when our records about the ledger are wrong:
@@ -915,8 +915,8 @@ contract Lido is stKSM, Initializable {
                 // NOTE: and new deposits increase ledger stake
                 ledgerStake[ledgersCache[i]] > ledgerStakePrevious[i]
                 ) {
-                    freeToTransferFunds += 
-                        ledgerStake[ledgersCache[i]] > updatedLedgerBorrow ? 
+                    freeToTransferFunds +=
+                        ledgerStake[ledgersCache[i]] > updatedLedgerBorrow ?
                         updatedLedgerBorrow - ledgerStakePrevious[i] :
                         ledgerStake[ledgersCache[i]] - ledgerStakePrevious[i];
             }
