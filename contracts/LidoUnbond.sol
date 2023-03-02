@@ -1059,4 +1059,11 @@ contract LidoUnbond is stKSM, Initializable {
         }
         return type(uint256).max;
     }
+
+    /**
+    * @notice Approve vKSM from Withdrawal to Lido contract
+    */
+    function refreshWithdrawalAllowance() external auth(ROLE_BEACON_MANAGER) {
+        IWithdrawal(WITHDRAWAL).refreshLidoAllowance();
+    }
 }
