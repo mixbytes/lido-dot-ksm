@@ -918,7 +918,7 @@ contract Lido is stKSM, Initializable {
         int256 preciseDiffSum = 0;
 
         {
-            uint256 targetStake = getTotalPooledKSM() / ledgersLength;
+            uint256 targetStake = isUnbondForced ? 0 : getTotalPooledKSM() / ledgersLength;
             int256 diff = 0;
             for (uint256 i = 0; i < ledgersLength; ++i) {
                 ledgersCache[i] = enabledLedgers[i];
