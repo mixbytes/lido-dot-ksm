@@ -387,6 +387,17 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
+    * @notice Sets bufferedRedeems value in a forced manner, allowed to call only by ROLE_BEACON_MANAGER
+    * @dev used to start forced unbond proccess by assigning bufferedRedeems with
+    *      the value of the fundRaisedBalance
+    * @param _bufferedRedeems - new bufferedRedeems value
+    */
+    function setBufferedRedeems(uint256 _bufferedRedeems) external auth(ROLE_BEACON_MANAGER) {
+        require(!_isRedeemEnabled, "LIDO: REDEEM_ENABLED");
+        bufferedRedeems = _bufferedRedeems;
+    }
+
+    /**
     * @notice Return unbonded tokens amount for user
     * @param _holder - user account for whom need to calculate unbonding
     * @return waiting - amount of tokens which are not unbonded yet
