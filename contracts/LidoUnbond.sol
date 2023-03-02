@@ -694,8 +694,8 @@ contract LidoUnbond is stKSM, Initializable {
         fundRaisedBalance -= tokensToClaim;
 
         // Balance of Withdrawal contract which is claimable via claimUnbonded()
-        uint256 withdrawalClaimableBalance = IWithdrawal(WITHDRAWAL).totalVirtualXcKSMAmount +
-            IWithdrawal(WITHDRAWAL).pendingForClaiming;
+        uint256 withdrawalClaimableBalance = IWithdrawal(WITHDRAWAL).totalVirtualXcKSMAmount() +
+            IWithdrawal(WITHDRAWAL).pendingForClaiming();
 
         require(VKSM.balanceOf(WITHDRAWAL) > withdrawalClaimableBalance,
             "LIDO: INSUFFICIENT_WITHDRAWAL_BALANCE");
