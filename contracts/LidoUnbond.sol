@@ -919,7 +919,16 @@ contract LidoUnbond is stKSM, Initializable {
         int256 preciseDiffSum = 0;
 
         {
-            uint256 targetStake = isUnbondForced ? 0 : getTotalPooledKSM() / ledgersLength;
+            if (
+                isUnbondForced &&
+                !isRedeemEnabled &&
+                bufferedDeposits == fundRaisedBalance
+            ) {
+                // We want to unbond all stake in case of the forced unbond
+                targetStake = 0;
+            } else {
+                uint256 targetStake = getTotalPooledKSM() / ledgersLength;
+            }
             int256 diff = 0;
             for (uint256 i = 0; i < ledgersLength; ++i) {
                 ledgersCache[i] = enabledLedgers[i];
