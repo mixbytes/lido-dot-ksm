@@ -51,6 +51,4 @@ interface ILidoUnbond {
     function setIsUnbondForced(bool) external;
 
     function claimForcefullyUnbonded() external;
-
-    function refreshWithdrawalAllowance() external;
 }

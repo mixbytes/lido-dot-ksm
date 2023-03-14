@@ -689,24 +689,12 @@ contract LidoUnbond is stKSM, Initializable {
 
         uint256 sharesToBurn = _sharesOf(msg.sender);
         require(sharesToBurn > 0, "LIDO: NOTHING_TO_CLAIM");
-        uint256 tokensToClaim = getPooledKSMByShares(sharesToBurn);
 
-        _burnShares(msg.sender, sharesToBurn);
+        uint256 tokensToClaim = getPooledKSMByShares(sharesToBurn);
         fundRaisedBalance -= tokensToClaim;
 
-        // Balance of Withdrawal contract which is claimable via claimUnbonded()
-        uint256 withdrawalClaimableBalance = IWithdrawal(WITHDRAWAL).totalVirtualXcKSMAmount() +
-            IWithdrawal(WITHDRAWAL).pendingForClaiming();
-
-        require(VKSM.balanceOf(WITHDRAWAL) > withdrawalClaimableBalance,
-            "LIDO: INSUFFICIENT_WITHDRAWAL_BALANCE");
-
-        // Balance of Withdrawal contract which is free to claim via claimForcefullyUnbonded()
-        uint256 withdrawalFreeBalance = VKSM.balanceOf(WITHDRAWAL) - withdrawalClaimableBalance;
-
-        require(tokensToClaim <= withdrawalFreeBalance, "LIDO: CLAIM_EXCEEDS_BALANCE");
-
-        VKSM.transferFrom(WITHDRAWAL, msg.sender, tokensToClaim);
+        _burnShares(msg.sender, sharesToBurn);
+        IWithdrawal(WITHDRAWAL).claimForcefullyUnbonded(msg.sender, tokensToClaim);
         emit Claimed(msg.sender, tokensToClaim);
     }
 
@@ -1068,12 +1056,5 @@ contract LidoUnbond is stKSM, Initializable {
             }
         }
         return type(uint256).max;
-    }
-
-    /**
-    * @notice Approve vKSM from Withdrawal to Lido contract
-    */
-    function refreshWithdrawalAllowance() external auth(ROLE_BEACON_MANAGER) {
-        IWithdrawal(WITHDRAWAL).refreshLidoAllowance();
     }
 }

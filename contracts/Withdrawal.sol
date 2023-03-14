@@ -225,6 +225,19 @@ contract Withdrawal is Initializable {
         return readyToClaim;
     }
 
+    function claimForcefullyUnbonded(address _holder, uint256 _amount) external onlyLido {
+        // Funds claimable via claimUnbonded()
+        uint256 claimableBalance = totalVirtualXcKSMAmount + pendingForClaiming;
+        uint256 totalXcKsmBalance = xcKSM.balanceOf(address(this));
+        require(totalXcKsmBalance > claimableBalance, "WITHDRAWAL: INSUFFICIENT_BALANCE");
+
+        // Funds which are free to claim via claimForcefullyUnbonded()
+        uint256 freeBalance = totalXcKsmBalance - claimableBalance;
+        require(_amount <= freeBalance, "WITHDRAWAL: CLAIM_EXCEEDS_BALANCE");
+
+        xcKSM.transfer(_holder, _amount);
+    }
+
     /**
     * @notice Apply losses to current stKSM shares on this contract
     * @param _losses user address for claiming

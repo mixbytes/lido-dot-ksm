@@ -30,5 +30,5 @@ interface IWithdrawal {
     // Check available for claim xcKSM balance for user
     function getRedeemStatus(address _holder) external view returns(uint256 _waiting, uint256 _available);
 
-    function refreshLidoAllowance() external;
+    function claimForcefullyUnbonded(address _holder, uint256 _amount) external;
 }
