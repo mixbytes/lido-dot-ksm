@@ -151,12 +151,6 @@ contract LidoUnbond is stKSM, Initializable {
     */
     Types.Fee private FEE;
 
-    // Flag indicating redeem availability
-    bool private isRedeemEnabled;
-
-    // Flag indicating if unbond is forced
-    bool private isUnbondForced;
-
     // default interest value in base points.
     uint16 internal constant DEFAULT_DEVELOPERS_FEE = 200;
     uint16 internal constant DEFAULT_OPERATORS_FEE = 0;
@@ -197,6 +191,12 @@ contract LidoUnbond is stKSM, Initializable {
 
     // Token decimals
     uint8 internal _decimals;
+
+    // Flag indicating redeem availability
+    bool private isRedeemEnabled;
+
+    // Flag indicating if unbond is forced
+    bool private isUnbondForced;
 
     // Allow function calls only from member with specific role
     modifier auth(bytes32 role) {
