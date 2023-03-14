@@ -397,6 +397,7 @@ contract LidoUnbond is stKSM, Initializable {
     */
     function setBufferedRedeems(uint256 _bufferedRedeems) external auth(ROLE_BEACON_MANAGER) {
         require(!isRedeemEnabled, "LIDO: REDEEM_ENABLED");
+        require(_bufferedRedeems <= fundRaisedBalance, "LIDO: VALUE_TOO_BIG");
         bufferedRedeems = _bufferedRedeems;
     }
 
