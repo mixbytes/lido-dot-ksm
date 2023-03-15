@@ -557,39 +557,6 @@ contract LidoUnbond is stKSM, Initializable {
     }
 
     /**
-    * @notice Remove ledger, allowed to call only by ROLE_LEDGER_MANAGER
-    * @dev That method cannot be executed for running ledger, so need to drain funds
-    * @param _ledgerAddress - target ledger address
-    */
-    function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
-        require(ledgerStake[_ledgerAddress] == 0, "LIDO: LEDGER_HAS_NON_ZERO_STAKE");
-        // uint256 ledgerIdx = _findDisabledLedger(_ledgerAddress);
-        uint256 ledgerIdx = _findLedger(_ledgerAddress, false);
-        require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_DISABLED");
-
-        ILedger ledger = ILedger(_ledgerAddress);
-        require(ledger.isEmpty(), "LIDO: LEDGER_IS_NOT_EMPTY");
-
-        address lastLedger = disabledLedgers[disabledLedgers.length - 1];
-        disabledLedgers[ledgerIdx] = lastLedger;
-        disabledLedgers.pop();
-
-        delete ledgerByAddress[_ledgerAddress];
-        delete ledgerByStash[ledger.stashAccount()];
-
-        if (pausedledgers[_ledgerAddress]) {
-            delete pausedledgers[_ledgerAddress];
-        }
-
-        IOracleMaster(ORACLE_MASTER).removeLedger(_ledgerAddress);
-
-        IController(CONTROLLER).deleteSubAccount(_ledgerAddress);
-
-        emit LedgerRemove(_ledgerAddress);
-    }
-
-    /**
     * @notice Nominate on behalf of gived array of stash accounts, allowed to call only by ROLE_STAKE_MANAGER
     * @dev Method spawns xcm call to relaychain
     * @param _stashAccounts - target stash accounts id
