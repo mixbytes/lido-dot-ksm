@@ -193,7 +193,7 @@ contract LidoUnbond is stKSM, Initializable {
     uint8 internal _decimals;
 
     // Flag indicating redeem availability
-    bool private isRedeemEnabled;
+    bool private isRedeemDisabled;
 
     // Flag indicating if unbond is forced
     bool private isUnbondForced;
@@ -206,7 +206,7 @@ contract LidoUnbond is stKSM, Initializable {
 
     // Allow call to redeem only when it's enabled
     modifier redeemEnabled() {
-        require(isRedeemEnabled, "LIDO: REDEEM_DISABLED");
+        require(!isRedeemDisabled, "LIDO: REDEEM_DISABLED");
         _;
     }
 
@@ -382,11 +382,11 @@ contract LidoUnbond is stKSM, Initializable {
     }
 
     /**
-    * @notice Sets isRedeemEnabled flag, allowed to call only by ROLE_BEACON_MANAGER
-    * @param _isRedeemEnabled - new value for the isRedeemEnabled flag
+    * @notice Sets isRedeemDisabled flag, allowed to call only by ROLE_BEACON_MANAGER
+    * @param _isRedeemDisabled - new value for the isRedeemDisabled flag
     */
-    function setIsRedeemEnabled(bool _isRedeemEnabled) external auth(ROLE_BEACON_MANAGER) {
-        isRedeemEnabled = _isRedeemEnabled;
+    function setIsRedeemDisabled(bool _isRedeemDisabled) external auth(ROLE_BEACON_MANAGER) {
+        isRedeemDisabled = _isRedeemDisabled;
     }
 
     /**
@@ -396,7 +396,7 @@ contract LidoUnbond is stKSM, Initializable {
     * @param _bufferedRedeems - new bufferedRedeems value
     */
     function setBufferedRedeems(uint256 _bufferedRedeems) external auth(ROLE_BEACON_MANAGER) {
-        require(!isRedeemEnabled, "LIDO: REDEEM_ENABLED");
+        require(isRedeemDisabled, "LIDO: REDEEM_ENABLED");
         require(_bufferedRedeems <= fundRaisedBalance, "LIDO: VALUE_TOO_BIG");
         bufferedRedeems = _bufferedRedeems;
     }
@@ -407,7 +407,7 @@ contract LidoUnbond is stKSM, Initializable {
     * @param _isUnbondForced - new isUnbondForced value
     */
     function setIsUnbondForced(bool _isUnbondForced) external auth(ROLE_BEACON_MANAGER) {
-        require(!isRedeemEnabled, "LIDO: REDEEM_ENABLED");
+        require(isRedeemDisabled, "LIDO: REDEEM_ENABLED");
         isUnbondForced = _isUnbondForced;
     }
 
@@ -908,7 +908,7 @@ contract LidoUnbond is stKSM, Initializable {
         uint256 targetStake = 0;
 
         {
-            if (!isUnbondForced && isRedeemEnabled && bufferedRedeems != fundRaisedBalance) {
+            if (!isUnbondForced && !isRedeemDisabled && bufferedRedeems != fundRaisedBalance) {
                 targetStake = getTotalPooledKSM() / ledgersLength;
             }
             int256 diff = 0;
