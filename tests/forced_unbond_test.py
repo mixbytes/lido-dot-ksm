@@ -66,6 +66,9 @@ def test_forced_unbond(lido, oracle_master, wstKSM, vKSM, accounts):
         lido.deposit(deposit_amount, {"from": accounts[0]})
 
     # Step 2. Chill all ledgers
+    relay.ledgers[0].status = "Chill"
+    relay.ledgers[1].status = "Chill"
+    relay.ledgers[2].status = "Chill"
 
     # Step 3. Disable redeems
     lido.setIsRedeemDisabled(True)
