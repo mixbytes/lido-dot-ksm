@@ -227,7 +227,7 @@ contract Withdrawal is Initializable {
 
     function claimForcefullyUnbonded(address _holder, uint256 _amount) external onlyLido {
         // Funds claimable via claimUnbonded()
-        uint256 claimableBalance = totalVirtualXcKSMAmount + pendingForClaiming;
+        uint256 claimableBalance = totalVirtualXcKSMAmount + pendingForClaiming + batchVirtualXcKSMAmount;
         uint256 totalXcKsmBalance = xcKSM.balanceOf(address(this));
         require(totalXcKsmBalance > claimableBalance, "WITHDRAWAL: INSUFFICIENT_BALANCE");
 
