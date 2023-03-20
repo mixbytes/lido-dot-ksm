@@ -210,6 +210,11 @@ contract LidoUnbond is stKSM, Initializable {
         _;
     }
 
+    modifier redeemDisabled() {
+        require(isRedeemDisabled, "LIDO: REDEEM_ENABLED");
+        _;
+    }
+
     /**
      * @return the name of the token.
      */
@@ -395,8 +400,7 @@ contract LidoUnbond is stKSM, Initializable {
     *      the value of the fundRaisedBalance
     * @param _bufferedRedeems - new bufferedRedeems value
     */
-    function setBufferedRedeems(uint256 _bufferedRedeems) external auth(ROLE_BEACON_MANAGER) {
-        require(isRedeemDisabled, "LIDO: REDEEM_ENABLED");
+    function setBufferedRedeems(uint256 _bufferedRedeems) external redeemDisabled auth(ROLE_BEACON_MANAGER) {
         require(_bufferedRedeems <= fundRaisedBalance, "LIDO: VALUE_TOO_BIG");
         bufferedRedeems = _bufferedRedeems;
     }
@@ -406,8 +410,7 @@ contract LidoUnbond is stKSM, Initializable {
     * @dev used to indicate the start of the forced unbond proccess
     * @param _isUnbondForced - new isUnbondForced value
     */
-    function setIsUnbondForced(bool _isUnbondForced) external auth(ROLE_BEACON_MANAGER) {
-        require(isRedeemDisabled, "LIDO: REDEEM_ENABLED");
+    function setIsUnbondForced(bool _isUnbondForced) external redeemDisabled auth(ROLE_BEACON_MANAGER) {
         isUnbondForced = _isUnbondForced;
     }
 
