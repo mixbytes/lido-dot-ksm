@@ -306,8 +306,4 @@ contract Withdrawal is Initializable {
         }
         return _amount;
     }
-
-    function refreshLidoAllowance() external onlyLido {
-        xcKSM.approve(address(stKSM), type(uint256).max);
-    }
 }
