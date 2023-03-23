@@ -39,7 +39,7 @@ def test_forced_unbond(
     for acc in accounts:
         initial_xc_ksm_balances.append(vKSM.balanceOf(acc))
 
-    deposit_amount = 20 * 10**18
+    deposit_amount = 20 * 10**12
 
     for i, acc in enumerate(accounts):
         if (i < n_wst_holders):
