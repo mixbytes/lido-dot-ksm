@@ -26,7 +26,7 @@ def test_forced_unbond(
 
     n_accounts = len(accounts)
 
-    wst_rate = 0.25
+    wst_rate = 37_894 / 100_000
     n_wst_holders = math.floor(n_accounts * wst_rate)
 
     redeem_rate = 0.25
