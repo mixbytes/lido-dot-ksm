@@ -4,7 +4,17 @@ import brownie
 from brownie import chain
 from helpers import RelayChain, distribute_initial_tokens
 
-def test_forced_unbond(lido, oracle_master, wstKSM, vKSM, accounts):
+
+def test_forced_unbond(
+        lido,
+        oracle_master,
+        proxy_admin,
+        wstKSM,
+        vKSM,
+        Lido,
+        LidoUnbond,
+        accounts
+    ):
     ########################
     #  Initial test setup  #
     ########################
@@ -58,8 +68,15 @@ def test_forced_unbond(lido, oracle_master, wstKSM, vKSM, accounts):
 
     # Start forced unbond process
 
+    # Step 0. Update Lido contract implementation
+    owner = proxy_admin.owner()
+    lido_unbond = LidoUnbond.deploy({"from": accounts[0]})
+    proxy_admin.upgrade(lido, lido_unbond, {"from": owner})
+    Lido.remove(lido)
+    lido = LidoUnbond.at(lido)
+
     # Step 1. Disable deposits
-    lido.setDepositCap(1)
+    lido.setDepositCap(1, {"from": accounts[0]})
 
     # Confirm that deposits are disabled
     with brownie.reverts("LIDO: DEPOSITS_EXCEED_CAP"):
@@ -71,7 +88,7 @@ def test_forced_unbond(lido, oracle_master, wstKSM, vKSM, accounts):
     relay.ledgers[2].status = "Chill"
 
     # Step 3. Disable redeems
-    lido.setIsRedeemDisabled(True)
+    lido.setIsRedeemDisabled(True, {"from": accounts[0]})
 
     # Confirm that redeems are disabled
     with brownie.reverts("LIDO: REDEEM_DISABLED"):
@@ -84,10 +101,10 @@ def test_forced_unbond(lido, oracle_master, wstKSM, vKSM, accounts):
         relay.new_era()
 
     # Step 5. Set bufferedRedeems to the value of fundRaisedBalance
-    lido.setBufferedRedeems(lido.fundRaisedBalance())
+    lido.setBufferedRedeems(lido.fundRaisedBalance(), {"from": owner})
 
     # Step 6. Set isForcedUnbond to True
-    lido.setIsUnbondForced(True)
+    lido.setIsUnbondForced(True, {"from": owner})
 
     # Trigger new era for bufferedRedeems = fundRaisedBalance to take effect
     relay.new_era()

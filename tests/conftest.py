@@ -96,54 +96,29 @@ def developers(accounts):
     return accounts.add()
 
 
-# @pytest.fixture(scope="module")
-# def lido(Lido, vKSM, controller, auth_manager, oracle_master, withdrawal, proxy_admin, chain, Ledger, LedgerBeacon, LedgerFactory, accounts, developers, treasury, LidoToken):
-#     lc = Ledger.deploy({'from': accounts[0]})
-#     (_lido, _lido_impl) = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury, oracle_master, withdrawal, 50000 * 10**18, 3000)
-#     ledger_beacon = LedgerBeacon.deploy(lc, _lido, {'from': accounts[0]})
-#     ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': accounts[0]})
-#     _lido.setLedgerBeacon(ledger_beacon)
-#     _lido.setLedgerFactory(ledger_factory)
-
-#     owner = proxy_admin.owner()
-#     lidoToken = LidoToken.deploy({'from': accounts[0]})
-#     proxy_admin.upgrade(_lido, lidoToken, {'from': owner})
-#     Lido.remove(_lido)
-#     lidoTokenInit = LidoToken.at(_lido, owner=accounts[0])
-#     lidoTokenInit.setTokenInfo("TST", "TST", 12, {'from': accounts[0]})
-#     proxy_admin.upgrade(_lido, _lido_impl, {'from': owner})
-#     LidoToken.remove(_lido)
-#     _lido = Lido.at(_lido, owner=accounts[0])
-
-#     era_sec = 60 * 60 * 6
-#     _lido.setRelaySpec((16, 1, 0, 32))  # kusama settings except min nominator bond
-#     oracle_master.setAnchorEra(0, chain.time(), era_sec)
-#     return _lido
-
-
 @pytest.fixture(scope="module")
-def lido(LidoUnbond, vKSM, controller, auth_manager, oracle_master, withdrawal, proxy_admin, chain, Ledger, LedgerBeacon, LedgerFactory, accounts, developers, treasury, LidoToken):
+def lido(Lido, vKSM, controller, auth_manager, oracle_master, withdrawal, proxy_admin, chain, Ledger, LedgerBeacon, LedgerFactory, accounts, developers, treasury, LidoToken):
     lc = Ledger.deploy({'from': accounts[0]})
-    (_lido_unbond, _lido_unbond_impl) = deploy_with_proxy(LidoUnbond, proxy_admin, auth_manager, vKSM, controller, developers, treasury, oracle_master, withdrawal, 50000 * 10**18, 3000)
-    ledger_beacon = LedgerBeacon.deploy(lc, _lido_unbond, {'from': accounts[0]})
-    ledger_factory = LedgerFactory.deploy(_lido_unbond, ledger_beacon, {'from': accounts[0]})
-    _lido_unbond.setLedgerBeacon(ledger_beacon)
-    _lido_unbond.setLedgerFactory(ledger_factory)
+    (_lido, _lido_impl) = deploy_with_proxy(Lido, proxy_admin, auth_manager, vKSM, controller, developers, treasury, oracle_master, withdrawal, 50000 * 10**18, 3000)
+    ledger_beacon = LedgerBeacon.deploy(lc, _lido, {'from': accounts[0]})
+    ledger_factory = LedgerFactory.deploy(_lido, ledger_beacon, {'from': accounts[0]})
+    _lido.setLedgerBeacon(ledger_beacon)
+    _lido.setLedgerFactory(ledger_factory)
 
     owner = proxy_admin.owner()
     lidoToken = LidoToken.deploy({'from': accounts[0]})
-    proxy_admin.upgrade(_lido_unbond, lidoToken, {'from': owner})
-    LidoUnbond.remove(_lido_unbond)
-    lidoTokenInit = LidoToken.at(_lido_unbond, owner=accounts[0])
+    proxy_admin.upgrade(_lido, lidoToken, {'from': owner})
+    Lido.remove(_lido)
+    lidoTokenInit = LidoToken.at(_lido, owner=accounts[0])
     lidoTokenInit.setTokenInfo("TST", "TST", 12, {'from': accounts[0]})
-    proxy_admin.upgrade(_lido_unbond, _lido_unbond_impl, {'from': owner})
-    LidoToken.remove(_lido_unbond)
-    _lido_unbond = LidoUnbond.at(_lido_unbond, owner=accounts[0])
+    proxy_admin.upgrade(_lido, _lido_impl, {'from': owner})
+    LidoToken.remove(_lido)
+    _lido = Lido.at(_lido, owner=accounts[0])
 
     era_sec = 60 * 60 * 6
-    _lido_unbond.setRelaySpec((16, 1, 0, 32))  # kusama settings except min nominator bond
+    _lido.setRelaySpec((16, 1, 0, 32))  # kusama settings except min nominator bond
     oracle_master.setAnchorEra(0, chain.time(), era_sec)
-    return _lido_unbond
+    return _lido
 
 
 @pytest.fixture(scope="module")
