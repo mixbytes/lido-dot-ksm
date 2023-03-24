@@ -61,7 +61,7 @@ def test_forced_unbond(
     for i in range(n_wst_holders, n_wst_holders + n_redeemers):
         acc = accounts[i]
         st_ksm_balance = lido.balanceOf(acc)
-        lido.redeem(st_ksm_balance, {"from": acc})
+        lido.redeem(st_ksm_balance // 2, {"from": acc})
 
     ########################
     # Test setup completed #
@@ -92,6 +92,13 @@ def test_forced_unbond(
     proxy_admin.upgrade(lido, lido_unbond, {"from": owner})
     Lido.remove(lido)
     lido = LidoUnbond.at(lido)
+
+    for i in range(n_wst_holders, n_wst_holders + n_redeemers):
+        acc = accounts[i]
+        st_ksm_balance = lido.balanceOf(acc)
+        lido.redeem(st_ksm_balance, {"from": acc})
+
+    relay.new_era([3.141592 * 10 ** 12] * len(relay.ledgers))
 
     # Step 3. Disable redeems
     lido.setIsRedeemDisabled(True, {"from": accounts[0]})
