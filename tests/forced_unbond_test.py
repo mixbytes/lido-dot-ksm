@@ -155,6 +155,17 @@ def test_forced_unbond(
     for _ in range(n_eras_in_week):
         relay.new_era()
 
+    # Confirm that wrap / unwrap works correctly for wst token holders
+    for i in range(n_wst_holders):
+        acc = accounts[i]
+        wst_balance = wstKSM.balanceOf(acc)
+        unwrapped_st_ksm = wstKSM.unwrap(wst_balance, {"from": acc})
+        assert lido.balanceOf(acc) == unwrapped_st_ksm.return_value
+
+        lido.approve(wstKSM, unwrapped_st_ksm.return_value, {"from": acc})
+        wst_balance_after = wstKSM.wrap(unwrapped_st_ksm.return_value, {"from": acc})
+        assert wst_balance_after.return_value == wst_balance
+
     # Step 10. Claim forcefully unbonded funds of stKSM holders
     for i in range(n_wst_holders + n_redeemers, n_accounts):
         acc = accounts[i]
