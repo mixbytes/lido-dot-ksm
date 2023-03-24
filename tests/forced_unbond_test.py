@@ -57,7 +57,7 @@ def test_forced_unbond(
     assert relay.ledgers[1].active_balance > 0
     assert relay.ledgers[2].active_balance > 0
 
-    # Initial setup. Redeem
+    # Initial setup. Redeem half of the balance
     for i in range(n_wst_holders, n_wst_holders + n_redeemers):
         acc = accounts[i]
         st_ksm_balance = lido.balanceOf(acc)
@@ -86,13 +86,14 @@ def test_forced_unbond(
     for _ledger in relay.ledgers:
         assert _ledger.status == "Chill"
 
-    # Update Lido contract implementation
+    # Step 3. Update Lido contract implementation
     owner = proxy_admin.owner()
     lido_unbond = LidoUnbond.deploy({"from": accounts[0]})
     proxy_admin.upgrade(lido, lido_unbond, {"from": owner})
     Lido.remove(lido)
     lido = LidoUnbond.at(lido)
 
+    # Step 4. Redeem remaining funds
     for i in range(n_wst_holders, n_wst_holders + n_redeemers):
         acc = accounts[i]
         st_ksm_balance = lido.balanceOf(acc)
@@ -100,7 +101,7 @@ def test_forced_unbond(
 
     relay.new_era([3.141592 * 10 ** 12] * len(relay.ledgers))
 
-    # Step 3. Disable redeems
+    # Step 5. Disable redeems
     lido.setIsRedeemDisabled(True, {"from": accounts[0]})
 
     # Confirm that redeems are disabled
@@ -108,15 +109,15 @@ def test_forced_unbond(
         st_ksm_balance = lido.balanceOf(accounts[0])
         lido.redeem(st_ksm_balance, {"from": accounts[0]})
 
-    # Step 4. Wait for unbonding chunks to mature
+    # Step 6. Wait for unbonding chunks to mature
     n_eras_to_unbond = 32
     for _ in range(n_eras_to_unbond):
         relay.new_era()
 
-    # Step 5. Set bufferedRedeems to the value of fundRaisedBalance
+    # Step 7. Set bufferedRedeems to the value of fundRaisedBalance
     lido.setBufferedRedeems(lido.fundRaisedBalance(), {"from": owner})
 
-    # Step 6. Set isForcedUnbond to True
+    # Step 8. Set isForcedUnbond to True
     lido.setIsUnbondForced(True, {"from": owner})
 
     # Trigger new era for bufferedRedeems = fundRaisedBalance to take effect
@@ -128,7 +129,7 @@ def test_forced_unbond(
     assert lido.ledgerStake(relay.ledgers[1].ledger_address) == 0
     assert lido.ledgerStake(relay.ledgers[2].ledger_address) == 0
 
-    # Step 7. Confirm that wrap / unwrap works correctly for wst token holders
+    # Step 9. Confirm that wrap / unwrap works correctly for wst token holders
     for i in range(n_wst_holders):
         acc = accounts[i]
         wst_balance = wstKSM.balanceOf(acc)
@@ -139,7 +140,7 @@ def test_forced_unbond(
         wst_balance_after = wstKSM.wrap(unwrapped_st_ksm.return_value, {"from": acc})
         assert wst_balance_after.return_value == wst_balance
 
-    # Step 8. Claim manually unbonded funds
+    # Step 10. Claim manually unbonded funds
     for i in range(n_wst_holders, n_wst_holders + n_redeemers):
         acc = accounts[i]
         lido.claimUnbonded({"from": acc})
@@ -151,7 +152,7 @@ def test_forced_unbond(
             acc = accounts[i]
             lido.claimForcefullyUnbonded({"from": acc})
 
-    # Step 9. Pause for 1 week
+    # Step 11. Pause for 1 week
     for _ in range(n_eras_to_unbond):
         relay.new_era()
 
@@ -166,7 +167,7 @@ def test_forced_unbond(
         wst_balance_after = wstKSM.wrap(unwrapped_st_ksm.return_value, {"from": acc})
         assert wst_balance_after.return_value == wst_balance
 
-    # Step 10. Claim forcefully unbonded funds of stKSM holders
+    # Step 12. Claim forcefully unbonded funds of stKSM holders
     for i in range(n_wst_holders + n_redeemers, n_accounts):
         acc = accounts[i]
         lido.claimForcefullyUnbonded({"from": acc})
@@ -175,7 +176,7 @@ def test_forced_unbond(
     # Confirm that only wstKSM hodlers' funds are remaining in Lido
     assert lido.fundRaisedBalance() == n_wst_holders * deposit_amount
 
-    # Step 11. Claim forcefully unbonded funds of wstKSM holders
+    # Step 13. Claim forcefully unbonded funds of wstKSM holders
     for i in range(n_wst_holders):
         acc = accounts[i]
         wst_ksm_to_unwrap = wstKSM.balanceOf(acc)
@@ -183,5 +184,5 @@ def test_forced_unbond(
         lido.claimForcefullyUnbonded({"from": acc})
         assert vKSM.balanceOf(acc) == initial_xc_ksm_balances[i]
 
-    # Step 12. Confirm that no funds remained in Lido
+    # Step 14. Confirm that no funds remained in Lido
     assert lido.fundRaisedBalance() == 0
