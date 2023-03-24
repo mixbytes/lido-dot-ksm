@@ -145,6 +145,12 @@ def test_forced_unbond(
         lido.claimUnbonded({"from": acc})
         assert vKSM.balanceOf(acc) == initial_xc_ksm_balances[i]
 
+    # Make sure claimForcefullyUnbonded() is unavaliable yet
+    with brownie.reverts("WITHDRAWAL: INSUFFICIENT_BALANCE"):
+        for i in range(n_wst_holders + n_redeemers, n_accounts):
+            acc = accounts[i]
+            lido.claimForcefullyUnbonded({"from": acc})
+
     # Step 9. Pause for 1 week
     for _ in range(n_eras_in_week):
         relay.new_era()
