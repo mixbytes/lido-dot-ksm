@@ -53,9 +53,8 @@ def test_forced_unbond(
     for _ in range(2):
         relay.new_era()
 
-    assert relay.ledgers[0].active_balance > 0
-    assert relay.ledgers[1].active_balance > 0
-    assert relay.ledgers[2].active_balance > 0
+    for _ledger in relay.ledgers:
+        assert _ledger.active_balance > 0
 
     # Initial setup. Redeem half of the balance
     for i in range(n_wst_holders, n_wst_holders + n_redeemers):
@@ -125,9 +124,8 @@ def test_forced_unbond(
     relay.new_era([-3.141592 * 10 ** 12] * len(relay.ledgers))
 
     # Make sure that forced unbond has started
-    assert lido.ledgerStake(relay.ledgers[0].ledger_address) == 0
-    assert lido.ledgerStake(relay.ledgers[1].ledger_address) == 0
-    assert lido.ledgerStake(relay.ledgers[2].ledger_address) == 0
+    for _ledger in relay.ledgers:
+        assert lido.ledgerStake(_ledger.ledger_address) == 0
 
     # Step 9. Confirm that wrap / unwrap works correctly for wst token holders
     for i in range(n_wst_holders):
