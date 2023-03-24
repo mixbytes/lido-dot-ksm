@@ -150,7 +150,7 @@ def test_forced_unbond(
             acc = accounts[i]
             lido.claimForcefullyUnbonded({"from": acc})
 
-    # Step 11. Pause for 1 week
+    # Step 11. Wait for unbonding chunks to mature
     for _ in range(n_eras_to_unbond):
         relay.new_era()
 
