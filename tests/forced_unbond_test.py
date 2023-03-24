@@ -120,7 +120,8 @@ def test_forced_unbond(
     lido.setIsUnbondForced(True, {"from": owner})
 
     # Trigger new era for bufferedRedeems = fundRaisedBalance to take effect
-    relay.new_era()
+    # also invoke losses
+    relay.new_era([-3.141592 * 10 ** 12] * len(relay.ledgers))
 
     # Make sure that forced unbond has started
     assert lido.ledgerStake(relay.ledgers[0].ledger_address) == 0
