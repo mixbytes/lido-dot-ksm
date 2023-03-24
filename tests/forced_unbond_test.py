@@ -108,9 +108,9 @@ def test_forced_unbond(
         st_ksm_balance = lido.balanceOf(accounts[0])
         lido.redeem(st_ksm_balance, {"from": accounts[0]})
 
-    # Step 4. Pause for 1 week
-    n_eras_in_week = 28
-    for _ in range(n_eras_in_week):
+    # Step 4. Wait for unbonding chunks to mature
+    n_eras_to_unbond = 32
+    for _ in range(n_eras_to_unbond):
         relay.new_era()
 
     # Step 5. Set bufferedRedeems to the value of fundRaisedBalance
@@ -152,7 +152,7 @@ def test_forced_unbond(
             lido.claimForcefullyUnbonded({"from": acc})
 
     # Step 9. Pause for 1 week
-    for _ in range(n_eras_in_week):
+    for _ in range(n_eras_to_unbond):
         relay.new_era()
 
     # Confirm that wrap / unwrap works correctly for wst token holders
