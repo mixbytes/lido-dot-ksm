@@ -13,6 +13,7 @@ def test_forced_unbond(
         vKSM,
         Lido,
         LidoUnbond,
+        Ledger,
         accounts
     ):
     ########################
@@ -83,9 +84,14 @@ def test_forced_unbond(
         lido.deposit(deposit_amount, {"from": accounts[0]})
 
     # Step 2. Chill all ledgers
-    relay.ledgers[0].status = "Chill"
-    relay.ledgers[1].status = "Chill"
-    relay.ledgers[2].status = "Chill"
+    for _ledger in relay.ledgers:
+        ledger = Ledger.at(_ledger.ledger_address)
+        tx = ledger.chill({"from": accounts[0]})
+        relay._after_report(tx)
+    relay.new_era()
+
+    for _ledger in relay.ledgers:
+        assert _ledger.status == "Chill"
 
     # Step 3. Disable redeems
     lido.setIsRedeemDisabled(True, {"from": accounts[0]})
