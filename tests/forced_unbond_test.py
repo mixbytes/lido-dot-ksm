@@ -69,13 +69,6 @@ def test_forced_unbond(
 
     # Start forced unbond process
 
-    # Step 0. Update Lido contract implementation
-    owner = proxy_admin.owner()
-    lido_unbond = LidoUnbond.deploy({"from": accounts[0]})
-    proxy_admin.upgrade(lido, lido_unbond, {"from": owner})
-    Lido.remove(lido)
-    lido = LidoUnbond.at(lido)
-
     # Step 1. Disable deposits
     lido.setDepositCap(1, {"from": accounts[0]})
 
@@ -92,6 +85,13 @@ def test_forced_unbond(
 
     for _ledger in relay.ledgers:
         assert _ledger.status == "Chill"
+
+    # Update Lido contract implementation
+    owner = proxy_admin.owner()
+    lido_unbond = LidoUnbond.deploy({"from": accounts[0]})
+    proxy_admin.upgrade(lido, lido_unbond, {"from": owner})
+    Lido.remove(lido)
+    lido = LidoUnbond.at(lido)
 
     # Step 3. Disable redeems
     lido.setIsRedeemDisabled(True, {"from": accounts[0]})
