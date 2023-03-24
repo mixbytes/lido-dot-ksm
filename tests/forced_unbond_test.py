@@ -102,7 +102,7 @@ def test_forced_unbond(
         lido.redeem(st_ksm_balance, {"from": accounts[0]})
 
     # Step 4. Pause for 1 week
-    n_eras_in_week = 7 * 24
+    n_eras_in_week = 28
     for _ in range(n_eras_in_week):
         relay.new_era()
 
