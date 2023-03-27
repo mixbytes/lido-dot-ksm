@@ -108,9 +108,9 @@ def test_forced_unbond(
         st_ksm_balance = lido.balanceOf(accounts[0])
         lido.redeem(st_ksm_balance, {"from": accounts[0]})
 
-    # Step 6. Wait for unbonding chunks to mature
-    n_eras_to_unbond = 32
-    for _ in range(n_eras_to_unbond):
+    # Step 6. Wait 7 eras after disabling redeems
+    n_eras_after_redeem_disable = 7
+    for _ in range(n_eras_after_redeem_disable):
         relay.new_era()
 
     # Step 7. Set bufferedRedeems to the value of fundRaisedBalance
@@ -138,6 +138,11 @@ def test_forced_unbond(
         wst_balance_after = wstKSM.wrap(unwrapped_st_ksm.return_value, {"from": acc})
         assert wst_balance_after.return_value == wst_balance
 
+    # Wait remaining eras for manually created unbonding chunks to mature
+    n_eras_to_unbond = 32
+    for _ in range(n_eras_to_unbond - n_eras_after_redeem_disable):
+        relay.new_era()
+
     # Step 10. Claim manually unbonded funds
     for i in range(n_wst_holders, n_wst_holders + n_redeemers):
         acc = accounts[i]
@@ -150,7 +155,7 @@ def test_forced_unbond(
             acc = accounts[i]
             lido.claimForcefullyUnbonded({"from": acc})
 
-    # Step 11. Wait for unbonding chunks to mature
+    # Step 11. Wait for forced unbonding chunks to mature
     for _ in range(n_eras_to_unbond):
         relay.new_era()
 
