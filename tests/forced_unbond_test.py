@@ -221,23 +221,24 @@ def test_forced_unbond(
     while relay.era < forced_unbond_era + n_eras_to_unbond:
         relay.new_era()
 
-    # Confirm that wrap / unwrap works correctly for wst token holders
-    for i in range(n_wst_holders):
-        acc = accounts[i]
-        wst_balance = wstKSM.balanceOf(acc)
-        unwrapped_st_ksm = wstKSM.unwrap(wst_balance, {"from": acc})
-        assert abs(lido.balanceOf(acc) - unwrapped_st_ksm.return_value) <= err_wei
-
-        lido.approve(wstKSM, unwrapped_st_ksm.return_value, {"from": acc})
-        wst_balance_after = wstKSM.wrap(unwrapped_st_ksm.return_value, {"from": acc})
-        assert abs(wst_balance_after.return_value - wst_balance) <= err_wei
-
     # Step 12. Claim forcefully unbonded funds of stKSM holders
     for i in range(n_wst_holders + n_redeemers, n_accounts):
         acc = accounts[i]
         lido.claimForcefullyUnbonded({"from": acc})
         assert abs(vKSM.balanceOf(acc) - initial_xc_ksm_balances[i]
                    - accrued_rewards[i] - received_losses[i]) <= err_wei
+        if i == n_wst_holders + n_redeemers:
+            # Confirm that wrap / unwrap works correctly for wst token holders
+            for i in range(n_wst_holders):
+                acc = accounts[i]
+                wst_balance = wstKSM.balanceOf(acc)
+                unwrapped_st_ksm = wstKSM.unwrap(wst_balance, {"from": acc})
+                assert abs(lido.balanceOf(acc) - unwrapped_st_ksm.return_value) <= err_wei
+
+                lido.approve(wstKSM, unwrapped_st_ksm.return_value, {"from": acc})
+                wst_balance_after = wstKSM.wrap(unwrapped_st_ksm.return_value, {"from": acc})
+                assert abs(wst_balance_after.return_value - wst_balance) <= err_wei
+
 
     # Confirm that only wstKSM hodlers' funds are remaining in Lido
     wst_holders_rewards = sum(accrued_rewards[:n_wst_holders])
