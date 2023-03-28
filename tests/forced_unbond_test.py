@@ -9,6 +9,7 @@ def test_forced_unbond(
         lido,
         oracle_master,
         proxy_admin,
+        withdrawal,
         wstKSM,
         vKSM,
         Lido,
@@ -40,7 +41,15 @@ def test_forced_unbond(
     for acc in accounts:
         initial_xc_ksm_balances.append(vKSM.balanceOf(acc))
 
-    deposit_amount = 20 * 10**12
+    precision = 10 ** lido.decimals()
+    deposit_amount = 20 * precision
+    reward_amount = math.pi * precision
+    loss_rate = -0.1 / len(relay.ledgers)
+
+    n_eras_to_unbond = 32
+    n_eras_after_redeem_disable = 7
+
+    err_wei = 15
 
     for i, acc in enumerate(accounts):
         if (i < n_wst_holders):
@@ -98,7 +107,20 @@ def test_forced_unbond(
         st_ksm_balance = lido.balanceOf(acc)
         lido.redeem(st_ksm_balance, {"from": acc})
 
-    relay.new_era([3.141592 * 10 ** 12] * len(relay.ledgers))
+    # Distribute rewards and calculate amount of rewards received by each account
+    balance_before = list(map(lambda u: lido.balanceOf(u), accounts))
+    for i in range(n_wst_holders):
+        balance_before[i] = wstKSM.getStKSMByWstKSM(wstKSM.balanceOf(accounts[i]))
+
+    relay.new_era([reward_amount] * len(relay.ledgers))
+
+    balance_after = list(map(lambda u: lido.balanceOf(u), accounts))
+    for i in range(n_wst_holders):
+        balance_after[i] = wstKSM.getStKSMByWstKSM(wstKSM.balanceOf(accounts[i]))
+
+    accrued_rewards = []
+    for after, before in zip(balance_after, balance_before):
+        accrued_rewards.append(after - before)
 
     # Step 5. Disable redeems
     lido.setIsRedeemDisabled(True, {"from": accounts[0]})
@@ -119,35 +141,62 @@ def test_forced_unbond(
     # Step 8. Set isForcedUnbond to True
     lido.setIsUnbondForced(True, {"from": owner})
 
-    # Trigger new era for bufferedRedeems = fundRaisedBalance to take effect
-    # also invoke losses
-    relay.new_era([-3.141592 * 10 ** 12] * len(relay.ledgers))
+    # Trigger new era to start forced unbond
+    relay.new_era()
+
+    forced_unbond_era = relay.era
 
     # Make sure that forced unbond has started
     for _ledger in relay.ledgers:
         assert lido.ledgerStake(_ledger.ledger_address) == 0
+
+    # Invoke losses after forced unbond has started
+    # and calculate received losses for each account
+    balance_before_loss = list(map(lambda u: lido.balanceOf(u), accounts))
+    for i in range(n_wst_holders):
+        balance_before_loss[i] = wstKSM.getStKSMByWstKSM(wstKSM.balanceOf(accounts[i]))
+
+    # For users who are already unbonding funds, losses are applied to
+    # unbonding chunks, therefore we calculate applied loss as a difference
+    # between expected amount of unbonded funds on withdrawal contract
+    expected_before_losses = list(map(
+        lambda u: withdrawal.getRedeemStatus(u)[0],
+        accounts[n_wst_holders : n_wst_holders + n_redeemers]
+    ))
+
+    loss_amount = loss_rate * lido.totalSupply()
+    relay.new_era([loss_amount])
+    loss_era = relay.era
+
+    balance_after_loss = list(map(lambda u: lido.balanceOf(u), accounts))
+    for i in range(n_wst_holders):
+        balance_after_loss[i] = wstKSM.getStKSMByWstKSM(wstKSM.balanceOf(accounts[i]))
+
+    expected_after_losses = list(map(
+        lambda u: withdrawal.getRedeemStatus(u)[0],
+        accounts[n_wst_holders : n_wst_holders + n_redeemers]
+    ))
+
+    received_losses = []
+    for after, before in zip(balance_after_loss, balance_before_loss):
+        received_losses.append(after - before)
+
+    # We only expect losses to impact the diff because rewards
+    # have been distributed after redeems
+    expected_diffs = []
+    for after, before in zip(expected_after_losses, expected_before_losses):
+        expected_diffs.append(after - before)
 
     # Step 9. Confirm that wrap / unwrap works correctly for wst token holders
     for i in range(n_wst_holders):
         acc = accounts[i]
         wst_balance = wstKSM.balanceOf(acc)
         unwrapped_st_ksm = wstKSM.unwrap(wst_balance, {"from": acc})
-        assert lido.balanceOf(acc) == unwrapped_st_ksm.return_value
+        assert abs(lido.balanceOf(acc) - unwrapped_st_ksm.return_value) <= err_wei
 
         lido.approve(wstKSM, unwrapped_st_ksm.return_value, {"from": acc})
         wst_balance_after = wstKSM.wrap(unwrapped_st_ksm.return_value, {"from": acc})
-        assert wst_balance_after.return_value == wst_balance
-
-    # Wait remaining eras for manually created unbonding chunks to mature
-    n_eras_to_unbond = 32
-    for _ in range(n_eras_to_unbond - n_eras_after_redeem_disable):
-        relay.new_era()
-
-    # Step 10. Claim manually unbonded funds
-    for i in range(n_wst_holders, n_wst_holders + n_redeemers):
-        acc = accounts[i]
-        lido.claimUnbonded({"from": acc})
-        assert vKSM.balanceOf(acc) == initial_xc_ksm_balances[i]
+        assert abs(wst_balance_after.return_value - wst_balance) <= err_wei
 
     # Make sure claimForcefullyUnbonded() is unavaliable yet
     with brownie.reverts("WITHDRAWAL: INSUFFICIENT_BALANCE"):
@@ -155,8 +204,21 @@ def test_forced_unbond(
             acc = accounts[i]
             lido.claimForcefullyUnbonded({"from": acc})
 
+    # Wait remaining eras for manually created unbonding chunks to mature
+    while relay.era < loss_era + n_eras_to_unbond:
+        relay.new_era()
+
+    # Step 10. Claim manually unbonded funds
+    k = 0;
+    for i in range(n_wst_holders, n_wst_holders + n_redeemers):
+        acc = accounts[i]
+        lido.claimUnbonded({"from": acc})
+        assert abs(vKSM.balanceOf(acc) - initial_xc_ksm_balances[i]
+                   - expected_diffs[k]) <= err_wei
+        k += 1
+
     # Step 11. Wait for forced unbonding chunks to mature
-    for _ in range(n_eras_to_unbond):
+    while relay.era < forced_unbond_era + n_eras_to_unbond:
         relay.new_era()
 
     # Confirm that wrap / unwrap works correctly for wst token holders
@@ -164,20 +226,24 @@ def test_forced_unbond(
         acc = accounts[i]
         wst_balance = wstKSM.balanceOf(acc)
         unwrapped_st_ksm = wstKSM.unwrap(wst_balance, {"from": acc})
-        assert lido.balanceOf(acc) == unwrapped_st_ksm.return_value
+        assert abs(lido.balanceOf(acc) - unwrapped_st_ksm.return_value) <= err_wei
 
         lido.approve(wstKSM, unwrapped_st_ksm.return_value, {"from": acc})
         wst_balance_after = wstKSM.wrap(unwrapped_st_ksm.return_value, {"from": acc})
-        assert wst_balance_after.return_value == wst_balance
+        assert abs(wst_balance_after.return_value - wst_balance) <= err_wei
 
     # Step 12. Claim forcefully unbonded funds of stKSM holders
     for i in range(n_wst_holders + n_redeemers, n_accounts):
         acc = accounts[i]
         lido.claimForcefullyUnbonded({"from": acc})
-        assert vKSM.balanceOf(acc) == initial_xc_ksm_balances[i]
+        assert abs(vKSM.balanceOf(acc) - initial_xc_ksm_balances[i]
+                   - accrued_rewards[i] - received_losses[i]) <= err_wei
 
     # Confirm that only wstKSM hodlers' funds are remaining in Lido
-    assert lido.fundRaisedBalance() == n_wst_holders * deposit_amount
+    wst_holders_rewards = sum(accrued_rewards[:n_wst_holders])
+    wst_holders_losses = sum(received_losses[:n_wst_holders])
+    assert abs(lido.fundRaisedBalance() - n_wst_holders * deposit_amount
+               - wst_holders_rewards - wst_holders_losses) <= err_wei
 
     # Step 13. Claim forcefully unbonded funds of wstKSM holders
     for i in range(n_wst_holders):
@@ -185,7 +251,8 @@ def test_forced_unbond(
         wst_ksm_to_unwrap = wstKSM.balanceOf(acc)
         wstKSM.unwrap(wst_ksm_to_unwrap, {"from": acc})
         lido.claimForcefullyUnbonded({"from": acc})
-        assert vKSM.balanceOf(acc) == initial_xc_ksm_balances[i]
+        assert abs(vKSM.balanceOf(acc) - initial_xc_ksm_balances[i]
+                   - accrued_rewards[i] - received_losses[i]) <= err_wei
 
     # Step 14. Confirm that no funds remained in Lido
-    assert lido.fundRaisedBalance() == 0
+    assert lido.fundRaisedBalance() <= err_wei
