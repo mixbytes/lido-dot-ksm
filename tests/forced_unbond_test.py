@@ -112,7 +112,7 @@ def test_forced_unbond(
     for i in range(n_wst_holders):
         balance_before[i] = wstKSM.getStKSMByWstKSM(wstKSM.balanceOf(accounts[i]))
 
-    relay.new_era([reward_amount] * len(relay.ledgers))
+    relay.new_era([reward_amount] * len(relay.ledgers), ignore_chill=True)
 
     balance_after = list(map(lambda u: lido.balanceOf(u), accounts))
     for i in range(n_wst_holders):
@@ -165,7 +165,7 @@ def test_forced_unbond(
     ))
 
     loss_amount = loss_rate * lido.totalSupply()
-    relay.new_era([loss_amount])
+    relay.new_era([loss_amount], ignore_chill=True)
     loss_era = relay.era
 
     balance_after_loss = list(map(lambda u: lido.balanceOf(u), accounts))
