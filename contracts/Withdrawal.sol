@@ -65,6 +65,8 @@ contract Withdrawal is Initializable {
     // max amount of requests in parallel
     uint16 internal constant MAX_REQUESTS = 20;
 
+    // total shares for batch
+    uint256 public batchShares;
 
     modifier onlyLido() {
         require(msg.sender == address(stKSM), "WITHDRAWAL: CALLER_NOT_LIDO");
@@ -133,13 +135,14 @@ contract Withdrawal is Initializable {
             uint256 batchKSMPoolShares = getKSMPoolShares(batchVirtualXcKSMAmount);
 
             // NOTE: batch total shares = batch xcKSM amount, because 1 share = 1 xcKSM
-            WithdrawalQueue.Batch memory newBatch = WithdrawalQueue.Batch(batchVirtualXcKSMAmount, batchKSMPoolShares);
+            WithdrawalQueue.Batch memory newBatch = WithdrawalQueue.Batch(batchShares, batchKSMPoolShares);
             uint256 newId = queue.push(newBatch);
 
             totalVirtualXcKSMAmount += batchVirtualXcKSMAmount;
             totalXcKSMPoolShares += batchKSMPoolShares;
 
             batchVirtualXcKSMAmount = 0;
+            batchShares = 0;
 
             emit ElementAdded(newId);
         }
@@ -184,9 +187,12 @@ contract Withdrawal is Initializable {
     function redeem(address _from, uint256 _amount) external onlyLido {
         // NOTE: user share in batch = user stKSM balance in specific batch
         require(userRequests[_from].length < MAX_REQUESTS, "WITHDRAWAL: REQUEST_CAP_EXCEEDED");
+        uint256 userShares = _getBatchShares(_amount);
+        batchShares += userShares;
+
         batchVirtualXcKSMAmount += _amount;
 
-        Request memory req = Request(_amount, queue.nextId());
+        Request memory req = Request(userShares, queue.nextId());
         userRequests[_from].push(req);
 
         emit RedeemRequestAdded(_from, req.share, req.batchId);
@@ -243,6 +249,15 @@ contract Withdrawal is Initializable {
     * @param _losses user address for claiming
     */
     function ditributeLosses(uint256 _losses) external onlyLido {
+        if (batchVirtualXcKSMAmount > 0) {
+            uint256 XCKSMBalance = xcKSM.balanceOf(address(this));
+            uint256 virtualBalance = 
+                totalVirtualXcKSMAmount + batchVirtualXcKSMAmount - (XCKSMBalance - pendingForClaiming);
+
+            uint256 lossesForCurrentBatch = _losses * batchVirtualXcKSMAmount / virtualBalance;
+            batchVirtualXcKSMAmount -= lossesForCurrentBatch;
+            _losses -= lossesForCurrentBatch;
+        }
         totalVirtualXcKSMAmount -= _losses;
         emit LossesDistributed(_losses);
     }
@@ -282,15 +297,14 @@ contract Withdrawal is Initializable {
             else {
                 // NOTE: This means that batch not added to queue currently
                 if (batchVirtualXcKSMAmount > 0) {
-                    batchKSMPrice = (10**stKSM.decimals() * getKSMPoolShares(batchVirtualXcKSMAmount) * totalVirtualXcKSMAmount) / 
-                                    (batchVirtualXcKSMAmount * totalXcKSMPoolShares);
+                    batchKSMPrice = batchVirtualXcKSMAmount * 10**stKSM.decimals() / batchShares;
                 }
             }
         }
         else {
-            // NOTE: This means that we have only one batch that no in the pool (batch share price == 10**stKSM.decimals())
+            // NOTE: This means that we have only one batch that no in the pool
             if (batchVirtualXcKSMAmount > 0) {
-                batchKSMPrice = 10**stKSM.decimals();
+                batchKSMPrice = batchVirtualXcKSMAmount * 10**stKSM.decimals() / batchShares;
             }
         }
         return batchKSMPrice;
@@ -303,6 +317,17 @@ contract Withdrawal is Initializable {
     function getKSMPoolShares(uint256 _amount) internal view returns (uint256) {
         if (totalVirtualXcKSMAmount > 0) {
             return _amount * totalXcKSMPoolShares / totalVirtualXcKSMAmount;
+        }
+        return _amount;
+    }
+
+        /**
+    * @notice Function return shares of current batch for user
+    * @param _amount amount of stKSM which user wants to redeem
+    */
+    function _getBatchShares(uint256 _amount) internal view returns (uint256) {
+        if (batchVirtualXcKSMAmount > 0) {
+            return _amount * batchShares / batchVirtualXcKSMAmount;
         }
         return _amount;
     }

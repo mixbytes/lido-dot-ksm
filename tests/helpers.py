@@ -226,14 +226,19 @@ class RelayChain:
                         remove_idx = 0
                         upd_idx = -1
                         upd_val = 0
+
+                        loop_index = 0
                         for chunk in self.ledgers[i].unlocking_chunks:
                             if ((chunk[0] + rewards[i]) >= 0):
                                 upd_val = chunk[0] + rewards[i]
                                 rewards[i] = 0
-                                upd_idx = i
+                                upd_idx = loop_index
+                                break
                             else:
                                 rewards[i] += chunk[0]
                                 remove_idx += 1
+
+                            loop_index += 1
 
                         if (upd_idx >= 0):
                             self.ledgers[i].unlocking_chunks[upd_idx] = (upd_val, self.ledgers[i].unlocking_chunks[upd_idx][1])

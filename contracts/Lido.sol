@@ -676,6 +676,8 @@ contract Lido is stKSM, Initializable {
     function distributeLosses(uint256 _totalLosses, uint256 _ledgerBalance) external {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
+        uint256 _batchXcKSMBalance = IWithdrawal(WITHDRAWAL).batchVirtualXcKSMAmount();
+
         uint256 withdrawalBalance = IWithdrawal(WITHDRAWAL).totalBalanceForLosses();
         uint256 withdrawalPendingForClaiming = IWithdrawal(WITHDRAWAL).pendingForClaiming();
         uint256 withdrawalVKSMBalance = VKSM.balanceOf(WITHDRAWAL);
@@ -690,13 +692,21 @@ contract Lido is stKSM, Initializable {
         // lidoPart = _totalLosses * lido_xcKSM_balance / sum_xcKSM_balance
         uint256 lidoPart = (_totalLosses * fundRaisedBalance) / (fundRaisedBalance + virtualWithdrawalBalance);
 
+        uint256 lidoPartLedger = 
+            (_totalLosses * (fundRaisedBalance + _batchXcKSMBalance)) /
+            (fundRaisedBalance + virtualWithdrawalBalance);
+
         fundRaisedBalance -= lidoPart;
         if ((_totalLosses - lidoPart) > 0) {
-            IWithdrawal(WITHDRAWAL).ditributeLosses(_totalLosses - lidoPart);
+            uint256 losses = _totalLosses - lidoPart;
+            // NOTE: bufferedRedeems shoud be reduced because of losses distribution 
+            // bufferedRedeems === batchVirtualXcKSMAmount in withdrawal
+            bufferedRedeems -= losses * bufferedRedeems / virtualWithdrawalBalance;
+            IWithdrawal(WITHDRAWAL).ditributeLosses(losses);
         }
 
         // edge case when loss can be more than stake
-        ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= lidoPart ? lidoPart : ledgerStake[msg.sender];
+        ledgerStake[msg.sender] -= ledgerStake[msg.sender] >= lidoPartLedger ? lidoPartLedger : ledgerStake[msg.sender];
         ledgerBorrow[msg.sender] -= _totalLosses;
 
         emit Losses(msg.sender, _totalLosses, _ledgerBalance);

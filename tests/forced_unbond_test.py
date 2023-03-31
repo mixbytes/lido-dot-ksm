@@ -43,7 +43,7 @@ def test_forced_unbond(
 
     precision = 10 ** lido.decimals()
     deposit_amount = 20 * precision
-    reward_amount = math.pi * precision
+    reward_amount = math.floor(math.pi * precision)
     loss_rate = -0.1 / len(relay.ledgers)
 
     n_eras_to_unbond = 32
@@ -164,8 +164,10 @@ def test_forced_unbond(
         accounts[n_wst_holders : n_wst_holders + n_redeemers]
     ))
 
-    loss_amount = loss_rate * lido.totalSupply()
-    relay.new_era([loss_amount], ignore_chill=True)
+    loss_amount = math.floor(loss_rate * lido.totalSupply())
+
+    relay.new_era([loss_amount] * len(relay.ledgers), ignore_chill=True)
+
     loss_era = relay.era
 
     balance_after_loss = list(map(lambda u: lido.balanceOf(u), accounts))
@@ -256,4 +258,4 @@ def test_forced_unbond(
                    - accrued_rewards[i] - received_losses[i]) <= err_wei
 
     # Step 14. Confirm that no funds remained in Lido
-    assert lido.fundRaisedBalance() <= err_wei
+    assert lido.fundRaisedBalance() < err_wei
