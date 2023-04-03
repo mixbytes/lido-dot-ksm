@@ -524,7 +524,8 @@ contract Controller is Initializable {
             hex2,
             amount.scaleCompactUint(),
             hex"0000000001",
-            uint256(weight).scaleCompactUint()
+            uint256(weight).scaleCompactUint(),
+            hex"00"
         );
     }
 }
