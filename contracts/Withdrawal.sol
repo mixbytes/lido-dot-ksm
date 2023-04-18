@@ -251,12 +251,22 @@ contract Withdrawal is Initializable {
     function ditributeLosses(uint256 _losses) external onlyLido {
         if (batchVirtualXcKSMAmount > 0) {
             uint256 XCKSMBalance = xcKSM.balanceOf(address(this));
-            uint256 virtualBalance = 
-                totalVirtualXcKSMAmount + batchVirtualXcKSMAmount - (XCKSMBalance - pendingForClaiming);
+            if (XCKSMBalance - pendingForClaiming <= totalVirtualXcKSMAmount) {
+                // NOTE: protection from ddos
+                uint256 virtualBalance = 
+                    totalVirtualXcKSMAmount + batchVirtualXcKSMAmount - (XCKSMBalance - pendingForClaiming);
 
-            uint256 lossesForCurrentBatch = _losses * batchVirtualXcKSMAmount / virtualBalance;
-            batchVirtualXcKSMAmount -= lossesForCurrentBatch;
-            _losses -= lossesForCurrentBatch;
+                uint256 lossesForCurrentBatch = _losses * batchVirtualXcKSMAmount / virtualBalance;
+                batchVirtualXcKSMAmount -= lossesForCurrentBatch;
+                _losses -= lossesForCurrentBatch;
+            } else {
+                // NOTE: If a malicious user sends funds to the contract then we distribute losses betwwen batch and total
+                uint256 lossesForCurrentBatch = _losses * batchVirtualXcKSMAmount / 
+                    (batchVirtualXcKSMAmount + totalVirtualXcKSMAmount);
+
+                batchVirtualXcKSMAmount -= lossesForCurrentBatch;
+                _losses -= lossesForCurrentBatch;
+            }
         }
         totalVirtualXcKSMAmount -= _losses;
         emit LossesDistributed(_losses);

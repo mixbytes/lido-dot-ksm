@@ -395,23 +395,17 @@ contract LidoUnbond is stKSM, Initializable {
     }
 
     /**
-    * @notice Sets bufferedRedeems value in a forced manner, allowed to call only by ROLE_BEACON_MANAGER
-    * @dev used to start forced unbond proccess by assigning bufferedRedeems with
-    *      the value of the fundRaisedBalance
-    * @param _bufferedRedeems - new bufferedRedeems value
-    */
-    function setBufferedRedeems(uint256 _bufferedRedeems) external redeemDisabled auth(ROLE_BEACON_MANAGER) {
-        require(_bufferedRedeems <= fundRaisedBalance, "LIDO: VALUE_TOO_BIG");
-        bufferedRedeems = _bufferedRedeems;
-    }
-
-    /**
-    * @notice Sets isUnbondForced flag, allowed to call only by ROLE_BEACON_MANAGER
+    * @notice Sets isUnbondForced flag and bufferedRedeems value in a forced manner, 
+    * @notice allowed to call only by ROLE_BEACON_MANAGER
     * @dev used to indicate the start of the forced unbond proccess
     * @param _isUnbondForced - new isUnbondForced value
+    * @param _bufferedRedeems - new bufferedRedeems value
     */
-    function setIsUnbondForced(bool _isUnbondForced) external redeemDisabled auth(ROLE_BEACON_MANAGER) {
+    function setUnbondForcedStarted(bool _isUnbondForced, uint256 _bufferedRedeems) external redeemDisabled auth(ROLE_BEACON_MANAGER) {
+        require(_bufferedRedeems <= fundRaisedBalance, "LIDO: VALUE_TOO_BIG");
+
         isUnbondForced = _isUnbondForced;
+        bufferedRedeems = _bufferedRedeems;
     }
 
     /**
@@ -886,7 +880,8 @@ contract LidoUnbond is stKSM, Initializable {
         uint256 targetStake = 0;
 
         {
-            if (isUnbondForced && isRedeemDisabled && bufferedRedeems == fundRaisedBalance) {
+            if (isUnbondForced && isRedeemDisabled) {
+                require(bufferedRedeems == fundRaisedBalance, "LIDO: BUFFERED_REDEEMS_SET_INCORRECTLY");
                 targetStake = 0;
             } else {
                 targetStake = getTotalPooledKSM() / ledgersLength;

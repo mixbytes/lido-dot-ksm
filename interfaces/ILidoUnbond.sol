@@ -44,11 +44,9 @@ interface ILidoUnbond {
 
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 
-    function setIsRedeemEnabled(bool) external;
+    function setIsRedeemDisabled(bool) external;
 
-    function setBufferedRedeems(uint256) external;
-
-    function setIsUnbondForced(bool) external;
+    function setUnbondForcedStarted(bool, uint256) external;
 
     function claimForcefullyUnbonded() external;
 }
