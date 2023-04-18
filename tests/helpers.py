@@ -208,11 +208,11 @@ class RelayChain:
                 else:
                     self._process_call(name, event)
 
-    def new_era(self, rewards=[], blocked_quorum=[]):
+    def new_era(self, rewards=[], blocked_quorum=[], ignore_chill=False):
         self.era += 1
         self.chain.sleep(6 * 60 * 60)
         for i in range(len(self.ledgers)):
-            if i < len(rewards) and self.ledgers[i].status != 'Chill':
+            if i < len(rewards) and (self.ledgers[i].status != 'Chill' or ignore_chill):
                 self.total_rewards += rewards[i]
                 if (rewards[i] >= 0):
                     self.ledgers[i].active_balance += rewards[i]
@@ -226,14 +226,19 @@ class RelayChain:
                         remove_idx = 0
                         upd_idx = -1
                         upd_val = 0
+
+                        loop_index = 0
                         for chunk in self.ledgers[i].unlocking_chunks:
                             if ((chunk[0] + rewards[i]) >= 0):
                                 upd_val = chunk[0] + rewards[i]
                                 rewards[i] = 0
-                                upd_idx = i
+                                upd_idx = loop_index
+                                break
                             else:
                                 rewards[i] += chunk[0]
                                 remove_idx += 1
+
+                            loop_index += 1
 
                         if (upd_idx >= 0):
                             self.ledgers[i].unlocking_chunks[upd_idx] = (upd_val, self.ledgers[i].unlocking_chunks[upd_idx][1])
@@ -247,7 +252,7 @@ class RelayChain:
                 if (len(blocked_quorum) > i):
                     if (blocked_quorum[i] and j == 1):
                         send_report = False
-                        
+
                 if send_report:
                     tx = self.oracle_master.reportRelay(self.era, self.ledgers[i].get_report_data(), {'from': self.accounts[j]})
                     tx.info()

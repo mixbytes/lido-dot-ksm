@@ -187,6 +187,15 @@ contract Ledger {
     }
 
     /**
+    * @notice Declare no desire to nominate. Will take effect at the beginning of the next era.
+    * @dev Method spawns xcm call to relaychain.
+    */
+    function chill() external auth(ROLE_LEDGER_MANAGER) {
+        require(status != Types.LedgerStatus.Idle, "LEDGER: ALREADY_IDLE");
+        CONTROLLER.chill();
+    }
+
+    /**
     * @notice Provide portion of relaychain data about current ledger, allowed to call only by oracle contract
     * @dev Basically, ledger can obtain data from any source, but for now it allowed to recieve only from oracle.
            Method perform calculation of current state based on report data and saved state and expose

@@ -16,7 +16,7 @@ import "../interfaces/IWithdrawal.sol";
 import "./stKSM.sol";
 
 
-contract Lido is stKSM, Initializable {
+contract LidoUnbond is stKSM, Initializable {
     using SafeCast for uint256;
 
     // Records a deposit made by a user
@@ -192,9 +192,26 @@ contract Lido is stKSM, Initializable {
     // Token decimals
     uint8 internal _decimals;
 
+    // Flag indicating redeem availability
+    bool private isRedeemDisabled;
+
+    // Flag indicating if unbond is forced
+    bool private isUnbondForced;
+
     // Allow function calls only from member with specific role
     modifier auth(bytes32 role) {
         require(IAuthManager(AUTH_MANAGER).has(role, msg.sender), "LIDO: UNAUTHORIZED");
+        _;
+    }
+
+    // Allow call to redeem only when it's enabled
+    modifier redeemEnabled() {
+        require(!isRedeemDisabled, "LIDO: REDEEM_DISABLED");
+        _;
+    }
+
+    modifier redeemDisabled() {
+        require(isRedeemDisabled, "LIDO: REDEEM_ENABLED");
         _;
     }
 
@@ -370,6 +387,28 @@ contract Lido is stKSM, Initializable {
     }
 
     /**
+    * @notice Sets isRedeemDisabled flag, allowed to call only by ROLE_BEACON_MANAGER
+    * @param _isRedeemDisabled - new value for the isRedeemDisabled flag
+    */
+    function setIsRedeemDisabled(bool _isRedeemDisabled) external auth(ROLE_BEACON_MANAGER) {
+        isRedeemDisabled = _isRedeemDisabled;
+    }
+
+    /**
+    * @notice Sets isUnbondForced flag and bufferedRedeems value in a forced manner, 
+    * @notice allowed to call only by ROLE_BEACON_MANAGER
+    * @dev used to indicate the start of the forced unbond proccess
+    * @param _isUnbondForced - new isUnbondForced value
+    * @param _bufferedRedeems - new bufferedRedeems value
+    */
+    function setUnbondForcedStarted(bool _isUnbondForced, uint256 _bufferedRedeems) external redeemDisabled auth(ROLE_BEACON_MANAGER) {
+        require(_bufferedRedeems <= fundRaisedBalance, "LIDO: VALUE_TOO_BIG");
+
+        isUnbondForced = _isUnbondForced;
+        bufferedRedeems = _bufferedRedeems;
+    }
+
+    /**
     * @notice Return unbonded tokens amount for user
     * @param _holder - user account for whom need to calculate unbonding
     * @return waiting - amount of tokens which are not unbonded yet
@@ -389,7 +428,7 @@ contract Lido is stKSM, Initializable {
         for (uint i = 0; i < enabledLedgers.length + disabledLedgers.length; i++) {
             address ledgerAddr = i < enabledLedgers.length ?
                 enabledLedgers[i] : disabledLedgers[i - enabledLedgers.length];
-                
+
             _stashes[i] = bytes32(ILedger(ledgerAddr).stashAccount());
         }
 
@@ -462,7 +501,7 @@ contract Lido is stKSM, Initializable {
         require(enabledLedgers.length + disabledLedgers.length < MAX_LEDGERS_AMOUNT, "LIDO: LEDGERS_POOL_LIMIT");
         require(ledgerByStash[_stashAccount] == address(0), "LIDO: STASH_ALREADY_EXISTS");
 
-        address ledger = ILedgerFactory(LEDGER_FACTORY).createLedger( 
+        address ledger = ILedgerFactory(LEDGER_FACTORY).createLedger(
             _stashAccount,
             _controllerAccount,
             address(VKSM),
@@ -512,39 +551,6 @@ contract Lido is stKSM, Initializable {
         require(pausedledgers[_ledgerAddress], "LIDO: LEDGER_NOT_PAUSED");
         delete pausedledgers[_ledgerAddress];
         emit LedgerResumed(_ledgerAddress);
-    }
-
-    /**
-    * @notice Remove ledger, allowed to call only by ROLE_LEDGER_MANAGER
-    * @dev That method cannot be executed for running ledger, so need to drain funds
-    * @param _ledgerAddress - target ledger address
-    */
-    function removeLedger(address _ledgerAddress) external auth(ROLE_LEDGER_MANAGER) {
-        require(ledgerByAddress[_ledgerAddress], "LIDO: LEDGER_NOT_FOUND");
-        require(ledgerStake[_ledgerAddress] == 0, "LIDO: LEDGER_HAS_NON_ZERO_STAKE");
-        // uint256 ledgerIdx = _findDisabledLedger(_ledgerAddress);
-        uint256 ledgerIdx = _findLedger(_ledgerAddress, false);
-        require(ledgerIdx != type(uint256).max, "LIDO: LEDGER_NOT_DISABLED");
-
-        ILedger ledger = ILedger(_ledgerAddress);
-        require(ledger.isEmpty(), "LIDO: LEDGER_IS_NOT_EMPTY");
-
-        address lastLedger = disabledLedgers[disabledLedgers.length - 1];
-        disabledLedgers[ledgerIdx] = lastLedger;
-        disabledLedgers.pop();
-
-        delete ledgerByAddress[_ledgerAddress];
-        delete ledgerByStash[ledger.stashAccount()];
-
-        if (pausedledgers[_ledgerAddress]) {
-            delete pausedledgers[_ledgerAddress];
-        }
-
-        IOracleMaster(ORACLE_MASTER).removeLedger(_ledgerAddress);
-
-        IController(CONTROLLER).deleteSubAccount(_ledgerAddress);
-
-        emit LedgerRemove(_ledgerAddress);
     }
 
     /**
@@ -612,7 +618,7 @@ contract Lido is stKSM, Initializable {
               User can have up to 20 redeem requests in parallel.
     * @param _amount - amount of stKSM tokens to be redeemed
     */
-    function redeem(uint256 _amount) external whenNotPaused {
+    function redeem(uint256 _amount) external whenNotPaused redeemEnabled {
         uint256 _shares = getSharesByPooledKSM(_amount);
         require(_shares > 0, "LIDO: AMOUNT_TOO_LOW");
         require(_shares <= _sharesOf(msg.sender), "LIDO: REDEEM_AMOUNT_EXCEEDS_BALANCE");
@@ -637,6 +643,23 @@ contract Lido is stKSM, Initializable {
     function claimUnbonded() external whenNotPaused {
         uint256 amount = IWithdrawal(WITHDRAWAL).claim(msg.sender);
         emit Claimed(msg.sender, amount);
+    }
+
+    /**
+    * @notice Claim all vKSM tokens which were forcefully unbonded. Burns stKSM shares
+    */
+    function claimForcefullyUnbonded() external whenNotPaused {
+        require(isUnbondForced, "LIDO: UNBOND_NOT_FORCED");
+
+        uint256 sharesToBurn = _sharesOf(msg.sender);
+        require(sharesToBurn > 0, "LIDO: NOTHING_TO_CLAIM");
+
+        uint256 tokensToClaim = getPooledKSMByShares(sharesToBurn);
+        fundRaisedBalance -= tokensToClaim;
+
+        _burnShares(msg.sender, sharesToBurn);
+        IWithdrawal(WITHDRAWAL).claimForcefullyUnbonded(msg.sender, tokensToClaim);
+        emit Claimed(msg.sender, tokensToClaim);
     }
 
     /**
@@ -721,9 +744,7 @@ contract Lido is stKSM, Initializable {
         require(ledgerByAddress[msg.sender], "LIDO: NOT_FROM_LEDGER");
 
         if (_excess > 0) { // some donations
-            fundRaisedBalance += _excess; //just distribute it as rewards
-            bufferedDeposits += _excess;
-            VKSM.transferFrom(msg.sender, address(this), _excess);
+            VKSM.transferFrom(msg.sender, treasury, _excess);
         }
 
         ledgerBorrow[msg.sender] -= _amount;
@@ -759,7 +780,7 @@ contract Lido is stKSM, Initializable {
     function _softRebalanceStakes() internal {
         uint256 totalStakeExcess = 0;
         for (uint256 i = 0; i < enabledLedgers.length + disabledLedgers.length; ++i) {
-            address ledgerAddr = i < enabledLedgers.length ? 
+            address ledgerAddr = i < enabledLedgers.length ?
                 enabledLedgers[i] : disabledLedgers[i - enabledLedgers.length];
 
             // consider an incorrect case when our records about the ledger are wrong:
@@ -856,9 +877,15 @@ contract Lido is stKSM, Initializable {
         int256 activeDiffsSum = 0;
         int256 totalChange = 0;
         int256 preciseDiffSum = 0;
+        uint256 targetStake = 0;
 
         {
-            uint256 targetStake = getTotalPooledKSM() / ledgersLength;
+            if (isUnbondForced && isRedeemDisabled) {
+                require(bufferedRedeems == fundRaisedBalance, "LIDO: BUFFERED_REDEEMS_SET_INCORRECTLY");
+                targetStake = 0;
+            } else {
+                targetStake = getTotalPooledKSM() / ledgersLength;
+            }
             int256 diff = 0;
             for (uint256 i = 0; i < ledgersLength; ++i) {
                 ledgersCache[i] = enabledLedgers[i];
@@ -925,8 +952,8 @@ contract Lido is stKSM, Initializable {
                 // NOTE: and new deposits increase ledger stake
                 ledgerStake[ledgersCache[i]] > ledgerStakePrevious[i]
                 ) {
-                    freeToTransferFunds += 
-                        ledgerStake[ledgersCache[i]] > updatedLedgerBorrow ? 
+                    freeToTransferFunds +=
+                        ledgerStake[ledgersCache[i]] > updatedLedgerBorrow ?
                         updatedLedgerBorrow - ledgerStakePrevious[i] :
                         ledgerStake[ledgersCache[i]] - ledgerStakePrevious[i];
             }

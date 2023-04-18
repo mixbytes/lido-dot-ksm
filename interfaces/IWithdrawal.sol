@@ -5,6 +5,9 @@ interface IWithdrawal {
     // total virtual xcKSM amount on contract
     function totalVirtualXcKSMAmount() external returns (uint256);
 
+    // stKSM(xcKSM) virtual amount for batch
+    function batchVirtualXcKSMAmount() external returns (uint256);
+
     // Set stKSM contract address, allowed to only once
     function setStKSM(address _stKSM) external;
 
@@ -29,4 +32,6 @@ interface IWithdrawal {
 
     // Check available for claim xcKSM balance for user
     function getRedeemStatus(address _holder) external view returns(uint256 _waiting, uint256 _available);
+
+    function claimForcefullyUnbonded(address _holder, uint256 _amount) external;
 }

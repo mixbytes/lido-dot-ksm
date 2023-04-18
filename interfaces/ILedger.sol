@@ -19,6 +19,8 @@ interface ILedger {
 
     function nominate(bytes32[] calldata validators) external;
 
+    function chill() external;
+
     function status() external view returns (Types.LedgerStatus);
 
     function isEmpty() external view returns (bool);
